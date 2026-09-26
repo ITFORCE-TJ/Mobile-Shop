@@ -13,7 +13,7 @@ export const Select = React.forwardRef<HTMLSelectElement, React.SelectHTMLAttrib
       <select
         ref={ref}
         className={cn(
-          'rounded-lg bg-surface border border-border px-3 text-fg-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50 transition-colors',
+          'rounded-xl bg-surface border border-border px-3 text-fg-muted focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent disabled:opacity-50 transition-colors',
           !hasCustomHeight && 'min-h-11',
           !hasCustomPy && 'py-2',
           !hasCustomText && 'text-sm',
@@ -46,7 +46,7 @@ export const ToggleRow: React.FC<ToggleRowProps> = ({ checked, onChange, label, 
     disabled={disabled}
     onClick={() => onChange(!checked)}
     className={cn(
-      'w-full flex items-center justify-between gap-3 rounded-lg border px-3 py-3 text-left transition-colors disabled:opacity-50',
+      'w-full flex items-center justify-between gap-3 rounded-xl border px-3 py-3 text-left transition-colors disabled:opacity-50',
       checked ? 'border-accent bg-accent/10' : 'border-border bg-surface'
     )}
   >

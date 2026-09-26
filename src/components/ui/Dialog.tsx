@@ -55,7 +55,7 @@ export const Dialog: React.FC<DialogProps> = ({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'dialog-panel relative w-full min-h-0 flex flex-col bg-surface border-t md:border border-border rounded-t-2xl md:rounded-2xl overflow-auto overscroll-contain shadow-2xl z-10',
+          'dialog-panel relative w-full min-h-0 flex flex-col bg-surface border-t md:border border-border rounded-t-2xl md:rounded-2xl overflow-hidden overscroll-contain shadow-2xl z-10',
           MAX_WIDTH_CLASSES[maxWidth]
         )}
       >
@@ -63,8 +63,8 @@ export const Dialog: React.FC<DialogProps> = ({
 
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold text-fg-muted truncate">{title}</h2>
-            {subtitle && <p className="text-xs text-fg-subtle truncate mt-0.5">{subtitle}</p>}
+            <h2 className="text-base font-semibold text-fg leading-snug">{title}</h2>
+            {subtitle && <p className="text-xs text-fg-subtle mt-1">{subtitle}</p>}
           </div>
           {dismissable && <IconButton icon={X} aria-label="Закрыть" onClick={onClose} size="sm" />}
         </div>

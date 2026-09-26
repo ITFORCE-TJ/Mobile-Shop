@@ -1,4 +1,5 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
+import { ActionMenu } from '../ui/ActionMenu';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -347,7 +348,7 @@ export const ExpensesPage: React.FC = () => {
   }
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
       <div className="border-b border-border bg-bg shrink-0">
@@ -479,8 +480,10 @@ export const ExpensesPage: React.FC = () => {
                         {exp.status === 'UNPAID' && (
                           <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
                         )}
-                        <IconButton icon={Edit2} size="sm" aria-label="Редактировать расход" onClick={() => handleStartEdit(exp)} />
-                        <IconButton icon={Trash2} tone="danger" size="sm" aria-label="Удалить расход" onClick={() => setDeletingId(exp.id)} />
+                        <ActionMenu label="Действия с расходом" actions={[
+                          { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                          { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                        ]} />
                       </div>
                     )}
                   </div>

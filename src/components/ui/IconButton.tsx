@@ -28,8 +28,8 @@ export const IconButton: React.FC<IconButtonProps> = ({
     <button
       type="button"
       className={cn(
-        'inline-flex items-center justify-center shrink-0 rounded-lg transition-colors active:scale-95',
-        size === 'md' ? 'w-11 h-11' : 'w-9 h-9',
+        'inline-flex items-center justify-center shrink-0 rounded-xl transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:opacity-50 disabled:cursor-not-allowed active:scale-95',
+        size === 'md' ? 'w-11 h-11' : 'w-11 h-11 md:w-9 md:h-9',
         TONE_CLASSES[tone],
         className
       )}

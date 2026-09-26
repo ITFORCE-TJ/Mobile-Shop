@@ -262,7 +262,7 @@ export const SalePage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted relative">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted relative">
       <StatusBanner message={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
 
       {/* Filter bar */}
@@ -439,6 +439,10 @@ export const SalePage: React.FC = () => {
         maxWidth="lg"
         footer={
           <div className="w-full grid grid-cols-2 gap-2">
+            <div className="col-span-2 flex items-center justify-between pb-2 text-sm">
+              <span className="text-fg-muted">К оплате</span>
+              <strong className="text-lg tabular-nums text-accent">{totalTjs.toLocaleString()} TJS</strong>
+            </div>
             <Button
               variant="secondary"
               size="lg"

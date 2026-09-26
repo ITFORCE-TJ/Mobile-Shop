@@ -272,7 +272,7 @@ export const ExchangePage: React.FC = () => {
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
       <form onSubmit={handleSubmitExchange} className="flex-1 flex flex-col overflow-hidden">
@@ -284,7 +284,7 @@ export const ExchangePage: React.FC = () => {
               <div className="w-6 h-6 rounded-lg bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
                 1
               </div>
-              <h3 className="text-xs md:text-sm font-bold uppercase tracking-wide text-fg-muted">СДАВАЕМОЕ УСТРОЙСТВО (КЛИЕНТ)</h3>
+              <h3 className="text-xs md:text-sm font-bold tracking-wide text-fg-muted">Сдаваемое устройство (клиент)</h3>
             </div>
 
             {/* Receipt / IMEI search bar */}
@@ -307,7 +307,7 @@ export const ExchangePage: React.FC = () => {
                     disabled={!receiptSearch.trim()}
                     className="px-4 py-2 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg transition-colors"
                   >
-                    НАЙТИ
+                    Найти
                   </button>
                   <button
                     type="button"
@@ -354,7 +354,7 @@ export const ExchangePage: React.FC = () => {
                 </button>
 
                 <div>
-                  <span className="text-[10px] text-accent uppercase font-bold tracking-wider block">ПРИНИМАЕМЫЙ АППАРАТ</span>
+                  <span className="text-[10px] text-accent font-bold tracking-wider block">Принимаемый аппарат</span>
                   <h4 className="text-sm font-bold text-fg-muted mt-0.5">
                     {selectedOldDevice.brand} {selectedOldDevice.model}
                   </h4>
@@ -368,8 +368,8 @@ export const ExchangePage: React.FC = () => {
 
                 <div className="pt-3 border-t border-border space-y-3">
                   <div>
-                    <label className="block text-xs font-bold uppercase text-accent mb-1">
-                      ОЦЕНОЧНАЯ ЗАЧЕТНАЯ СТОИМОСТЬ (TJS):
+                    <label className="block text-xs font-bold text-accent mb-1">
+                      Оценочная зачетная стоимость (TJS):
                     </label>
                     <div className="relative">
                       <input step="0.01"
@@ -394,7 +394,7 @@ export const ExchangePage: React.FC = () => {
               <div className="w-6 h-6 rounded-lg bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
                 2
               </div>
-              <h3 className="text-xs md:text-sm font-bold uppercase tracking-wide text-fg-muted">ВЫДАВАЕМОЕ УСТРОЙСТВО (СО СКЛАДА)</h3>
+              <h3 className="text-xs md:text-sm font-bold tracking-wide text-fg-muted">Выдаваемое устройство (со склада)</h3>
             </div>
 
             {replacementDevice ? (
@@ -412,7 +412,7 @@ export const ExchangePage: React.FC = () => {
                 </button>
 
                 <div>
-                  <span className="text-[10px] text-accent uppercase font-bold tracking-wider block">ВЫДАВАЕМЫЙ АППАРАТ</span>
+                  <span className="text-[10px] text-accent font-bold tracking-wider block">Выдаваемый аппарат</span>
                   <h4 className="text-sm font-bold text-fg-muted mt-0.5">
                     {replacementDevice.brand} {replacementDevice.model}
                   </h4>
@@ -426,8 +426,8 @@ export const ExchangePage: React.FC = () => {
 
                 <div className="pt-3 border-t border-border space-y-2">
                   <div className="flex items-center justify-between">
-                    <label className="block text-xs font-bold uppercase text-accent">
-                      ЦЕНА ПРОДАЖИ (TJS):
+                    <label className="block text-xs font-bold text-accent">
+                      Цена продажи (TJS):
                     </label>
                   </div>
                   <div className="relative">
@@ -503,8 +503,8 @@ export const ExchangePage: React.FC = () => {
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <div className="flex items-center space-x-2">
                 <Banknote className="w-4.5 h-4.5 text-accent" />
-                <h4 className="text-xs md:text-sm font-bold uppercase text-fg-muted">
-                  РАСЧЕТ РАЗНИЦЫ ОБМЕНА
+                <h4 className="text-xs md:text-sm font-bold text-fg-muted">
+                  Расчет разницы обмена
                 </h4>
               </div>
               <div className="text-xs flex items-center space-x-3">
@@ -530,8 +530,8 @@ export const ExchangePage: React.FC = () => {
                 <div className="flex items-start space-x-2.5">
                   <AlertCircle className="w-5 h-5 text-accent shrink-0 mt-0.5" />
                   <div>
-                    <p className="text-xs font-bold text-accent uppercase tracking-wide">
-                      ТРЕБУЕТСЯ ДОПЛАТА ОТ КЛИЕНТА
+                    <p className="text-xs font-bold text-accent tracking-wide">
+                      Требуется доплата от клиента
                     </p>
                     <p className="text-xs text-fg-muted mt-0.5">
                       Клиенту необходимо доплатить <strong className="text-accent">{differenceTjs.toLocaleString()} TJS</strong>.
@@ -547,7 +547,7 @@ export const ExchangePage: React.FC = () => {
                         key={method}
                         type="button"
                         onClick={() => setExchangePaymentMethod(method)}
-                        className={`px-3 py-1.5 rounded-lg text-xs font-bold uppercase transition-colors ${
+                        className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
                           exchangePaymentMethod === method ? 'bg-accent text-accent-fg' : 'text-fg-muted hover:text-fg'
                         }`}
                       >
@@ -560,8 +560,8 @@ export const ExchangePage: React.FC = () => {
                   {exchangePaymentMethod === 'CASH' && (
                     <div className="flex items-center space-x-3 bg-surface-raised p-2 rounded-xl border border-border">
                       <div>
-                        <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-0.5">
-                          ВНЕСЕНО КЛИЕНТОМ:
+                        <label className="block text-[10px] font-bold text-fg-subtle mb-0.5">
+                          Внесено клиентом:
                         </label>
                         <div className="relative">
                           <input step="0.01"
@@ -577,7 +577,7 @@ export const ExchangePage: React.FC = () => {
                       </div>
                       {givenCashTjs && (parseFloat(givenCashTjs) || 0) > differenceTjs && (
                         <div>
-                          <span className="block text-[10px] uppercase font-bold text-fg-subtle mb-0.5">СДАЧА:</span>
+                          <span className="block text-[10px] font-bold text-fg-subtle mb-0.5">Сдача:</span>
                           <span className="text-xs font-bold text-warning">
                             {((parseFloat(givenCashTjs) || 0) - differenceTjs).toLocaleString()} TJS
                           </span>
@@ -591,8 +591,8 @@ export const ExchangePage: React.FC = () => {
               <div className="p-3.5 rounded-xl bg-warning/15 border border-warning/30 flex items-center space-x-2.5">
                 <AlertCircle className="w-5 h-5 text-warning shrink-0" />
                 <div>
-                  <p className="text-xs font-bold text-warning uppercase tracking-wide">
-                    ВОЗВРАТ РАЗНИЦЫ КЛИЕНТУ
+                  <p className="text-xs font-bold text-warning tracking-wide">
+                    Возврат разницы клиенту
                   </p>
                   <p className="text-xs text-fg-muted mt-0.5">
                     Сдаваемое устройство дороже. Выплатите клиенту из кассы: <strong className="text-warning">{Math.abs(differenceTjs).toLocaleString()} TJS</strong>.
@@ -604,8 +604,8 @@ export const ExchangePage: React.FC = () => {
         )}
 
         {/* Action Bottom Bar */}
-        <div className="p-3.5 bg-surface border-t border-border flex items-center justify-between shrink-0">
-          <div className="text-xs font-medium text-fg-muted flex items-center space-x-2">
+        <div className="p-3.5 bg-surface border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center justify-between shrink-0">
+          <div className="text-xs font-medium text-fg-muted flex flex-wrap items-center gap-2">
             <span>Новый: <strong className="text-accent">{newPriceTjs} TJS</strong></span>
             <span>·</span>
             <span>Зачет: <strong className="text-accent">{exchangeInValueTjs} TJS</strong></span>
@@ -621,10 +621,10 @@ export const ExchangePage: React.FC = () => {
               !selectedOldDevice || !replacementDevice || exchangeInValueTjs <= 0 || newPriceTjs <= 0 || isSubmitting ||
               (differenceTjs > 0 && exchangePaymentMethod === 'CASH' && (parseFloat(givenCashTjs) || 0) < differenceTjs)
             }
-            className="px-5 py-2.5 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg uppercase tracking-wider flex items-center space-x-2 transition-all shadow-xs"
+            className="px-5 py-2.5 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg tracking-wider flex items-center space-x-2 transition-all shadow-xs"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
-            <span>{isSubmitting ? 'ПРОВЕДЕНИЕ…' : 'ПРОВЕСТИ ОБМЕН'}</span>
+            <span>{isSubmitting ? 'Проведение…' : 'Подтвердить обмен'}</span>
           </button>
         </div>
       </form>

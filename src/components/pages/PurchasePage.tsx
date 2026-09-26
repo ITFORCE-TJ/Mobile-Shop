@@ -591,7 +591,7 @@ export const PurchasePage: React.FC = () => {
   // =========================================================================
   if (viewMode === 'list') {
     return (
-      <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+      <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
         {/* Search & Filters Bar */}
         <div className="p-3 border-b border-border bg-surface space-y-3 shrink-0">
           <div className="flex items-center gap-2">
@@ -633,7 +633,7 @@ export const PurchasePage: React.FC = () => {
               className="shrink-0 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-xs whitespace-nowrap"
             >
               <Plus className="w-4 h-4" />
-              <span>НОВЫЙ ПРИХОД</span>
+              <span>Новый приход</span>
             </button>
           </div>
 
@@ -704,12 +704,12 @@ export const PurchasePage: React.FC = () => {
                         </span>
                         {(inv.totalAmountUsd === 0 || inv.invoiceNumber.includes('BONUS')) && (
                           <span className="text-[10px] px-2 py-0.5 rounded-md font-medium bg-highlight/20 text-highlight border border-highlight/40">
-                            🎁 ПОДАРОК ($0)
+                            🎁 Подарок ($0)
                           </span>
                         )}
                         {isJustSaved && (
-                          <span className="text-[9px] bg-accent text-accent-fg px-1.5 py-0.2 rounded font-bold uppercase">
-                            НОВОЕ
+                          <span className="text-[9px] bg-accent text-accent-fg px-1.5 py-0.2 rounded font-bold ">
+                            Новое
                           </span>
                         )}
                       </div>
@@ -839,17 +839,17 @@ export const PurchasePage: React.FC = () => {
               {/* Financial Breakdown */}
               <div className="p-3 bg-surface-raised border-b border-border grid grid-cols-3 gap-2 text-center text-xs font-mono">
                 <div className="bg-surface p-2.5 rounded-xl border border-border">
-                  <span className="text-[10px] text-fg-subtle block font-semibold uppercase">СУММА НАКЛАДНОЙ</span>
+                  <span className="text-[10px] text-fg-subtle block font-semibold ">Сумма накладной</span>
                   <strong className={selectedInvoice.totalAmountUsd === 0 ? "text-highlight font-bold" : "text-fg-muted font-bold"}>
                     {selectedInvoice.totalAmountUsd === 0 ? '$0 (БОНУС)' : `$${(selectedInvoice.totalAmountUsd || 0).toLocaleString()}`}
                   </strong>
                 </div>
                 <div className="bg-surface p-2.5 rounded-xl border border-border">
-                  <span className="text-[10px] text-fg-subtle block font-semibold uppercase">ОПЛАЧЕНО</span>
+                  <span className="text-[10px] text-fg-subtle block font-semibold ">Оплачено</span>
                   <strong className="text-accent font-bold">${(selectedInvoice.paidAmountUsd || 0).toLocaleString()}</strong>
                 </div>
                 <div className="bg-surface p-2.5 rounded-xl border border-border">
-                  <span className="text-[10px] text-fg-subtle block font-semibold uppercase">ОСТАТОК ДОЛГА</span>
+                  <span className="text-[10px] text-fg-subtle block font-semibold ">Остаток долга</span>
                   <strong className="text-danger font-bold">${(selectedInvoice.remainingAmountUsd || 0).toLocaleString()}</strong>
                 </div>
               </div>
@@ -873,7 +873,7 @@ export const PurchasePage: React.FC = () => {
                         <span className="text-fg-subtle text-[11px]">{dev.ram ? `${dev.ram} • ` : ''}{dev.storage} • {dev.color}</span>
                         {(dev.purchaseCostUsd === 0 || dev.isBonus) && (
                           <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-highlight/20 text-highlight border border-highlight/40 font-medium">
-                            🎁 ПОДАРОК ($0)
+                            🎁 Подарок ($0)
                           </span>
                         )}
                       </div>
@@ -976,9 +976,9 @@ export const PurchasePage: React.FC = () => {
               <div className="p-3 border-t border-border bg-surface flex justify-end shrink-0">
                 <button
                   onClick={() => setSelectedInvoiceId(null)}
-                  className="px-4 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted transition-colors font-mono uppercase"
+                  className="px-4 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted transition-colors font-mono "
                 >
-                  ЗАКРЫТЬ
+                  Закрыть
                 </button>
               </div>
             </div>
@@ -990,7 +990,7 @@ export const PurchasePage: React.FC = () => {
           <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 p-4 backdrop-blur-sm">
             <div className="w-full max-w-md rounded-2xl bg-surface border border-border shadow-2xl p-5 space-y-4 font-mono">
               <div className="flex items-center justify-between border-b border-border pb-3">
-                <h3 className="text-xs font-bold text-fg-muted uppercase">РЕДАКТИРОВАНИЕ НАКЛАДНОЙ</h3>
+                <h3 className="text-xs font-bold text-fg-muted ">Редактирование накладной</h3>
                 <button
                   type="button"
                   onClick={() => setEditingInvoiceModal(null)}
@@ -1002,7 +1002,7 @@ export const PurchasePage: React.FC = () => {
 
               <form onSubmit={handleSaveEditInvoiceModal} className="space-y-3 text-xs">
                 <div>
-                  <label className="block text-fg-subtle text-[10px] uppercase mb-1">НОМЕР НАКЛАДНОЙ</label>
+                  <label className="block text-fg-subtle text-[10px] mb-1">Номер накладной</label>
                   <input
                     type="text"
                     required
@@ -1013,7 +1013,7 @@ export const PurchasePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle text-[10px] uppercase mb-1">ДАТА НАКЛАДНОЙ</label>
+                  <label className="block text-fg-subtle text-[10px] mb-1">Дата накладной</label>
                   <input
                     type="date"
                     required
@@ -1024,7 +1024,7 @@ export const PurchasePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle text-[10px] uppercase mb-1">СУММА НАКЛАДНОЙ ($)</label>
+                  <label className="block text-fg-subtle text-[10px] mb-1">Сумма накладной ($)</label>
                   <input
                     type="number"
                     step="0.01"
@@ -1043,7 +1043,7 @@ export const PurchasePage: React.FC = () => {
                     onClick={() => setEditingInvoiceModal(null)}
                     className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg-muted font-bold disabled:opacity-50"
                   >
-                    ОТМЕНА
+                    Отмена
                   </button>
                   <button
                     type="submit"
@@ -1066,7 +1066,7 @@ export const PurchasePage: React.FC = () => {
   // VIEW: NEW PURCHASE FORM (ФОРМА НОВОГО ПРИХОДА)
   // =========================================================================
   return (
-    <div className="flex-1 flex flex-col h-full overflow-y-auto bg-bg text-fg-muted min-h-0">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-y-auto bg-bg text-fg-muted min-h-0">
       <form onSubmit={handleSubmitPurchase} className="flex-1 flex flex-col min-h-full">
         {/* Top Header with Back Button */}
         <div className="p-3.5 sm:p-4 border-b border-border bg-surface space-y-3 shrink-0">
@@ -1081,11 +1081,11 @@ export const PurchasePage: React.FC = () => {
                 className="flex items-center space-x-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-fg-muted hover:text-fg-muted text-xs font-bold transition-colors border border-border"
               >
                 <ArrowLeft className="w-3.5 h-3.5" />
-                <span>СПИСОК ПРИХОДОВ</span>
+                <span>Список приходов</span>
               </button>
               <span className="text-fg-subtle">/</span>
-              <h3 className="text-xs font-bold text-fg-muted uppercase tracking-wider">
-                НОВЫЙ ПРИХОД ТОВАРОВ
+              <h3 className="text-xs font-bold text-fg-muted tracking-wider">
+                Новый приход товаров
               </h3>
             </div>
           </div>
@@ -1170,7 +1170,7 @@ export const PurchasePage: React.FC = () => {
               className="rounded-xl border border-border bg-surface shadow-xs p-3.5 sm:p-4 space-y-3 relative"
             >
               <div className="flex items-center justify-between border-b border-border pb-2">
-                <span className="text-xs font-bold text-fg-muted uppercase tracking-wider font-mono">
+                <span className="text-xs font-bold text-fg-muted tracking-wider font-mono">
                   Позиция #{groupIdx + 1}
                 </span>
 
@@ -1384,7 +1384,7 @@ export const PurchasePage: React.FC = () => {
             className="w-full py-2.5 rounded-xl border border-dashed border-border hover:border-accent bg-surface-raised hover:bg-surface text-fg-muted hover:text-accent text-xs font-mono font-bold flex items-center justify-center space-x-2 transition-colors"
           >
             <Plus className="w-4 h-4" />
-            <span>ДОБАВИТЬ ЕЩЕ МОДЕЛЬ / ПОЗИЦИЮ В НАКЛАДНУЮ</span>
+            <span>Добавить модель</span>
           </button>
         </div>
 
@@ -1404,9 +1404,9 @@ export const PurchasePage: React.FC = () => {
             </div>
           )}
 
-          <div className="flex items-center space-x-3 w-full sm:w-auto justify-end">
-            <div className="text-right mr-2">
-              <span className="text-[10px] text-fg-subtle block uppercase font-medium">ИТОГОВАЯ СУММА НАКЛАДНОЙ:</span>
+          <div className="flex flex-wrap items-center gap-2 w-full sm:w-auto justify-end">
+            <div className="text-left mr-auto sm:mr-2">
+              <span className="text-[10px] text-fg-subtle block font-medium">Итого</span>
               <span className="text-base font-bold text-accent font-mono">
                 ${totalFormUsd.toLocaleString()}
               </span>
@@ -1430,7 +1430,7 @@ export const PurchasePage: React.FC = () => {
               className="px-5 py-2 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 disabled:cursor-not-allowed text-xs font-bold text-accent-fg shadow-xs transition-colors flex items-center space-x-1.5"
             >
               <FileText className="w-4 h-4" />
-              <span>ПРОСМОТРЕТЬ ЧЕК</span>
+              <span>Просмотреть чек</span>
             </button>
           </div>
         </div>
@@ -1445,7 +1445,7 @@ export const PurchasePage: React.FC = () => {
                 <div className="p-2 rounded-lg bg-accent/15 text-accent border border-accent/30">
                   <FileText className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-bold text-fg-muted uppercase">ЧЕК ПРИХОДА — ПРОВЕРЬТЕ ПЕРЕД СОХРАНЕНИЕМ</h3>
+                <h3 className="text-sm font-bold text-fg-muted ">Чек прихода — проверьте перед сохранением</h3>
               </div>
               <button
                 type="button"
@@ -1460,19 +1460,19 @@ export const PurchasePage: React.FC = () => {
             <div className="p-4 space-y-3 overflow-y-auto text-xs">
               <div className="grid grid-cols-2 gap-3 p-3 rounded-xl bg-surface-raised border border-border">
                 <div>
-                  <span className="block text-[10px] uppercase text-fg-subtle">Поставщик</span>
+                  <span className="block text-[10px] text-fg-subtle">Поставщик</span>
                   <span className="font-bold text-fg-muted">{suppliers.find(s => s.id === previewInvoice.supplierId)?.name || '—'}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase text-fg-subtle">Накладная</span>
+                  <span className="block text-[10px] text-fg-subtle">Накладная</span>
                   <span className="font-bold text-fg-muted">{previewInvoice.invoiceNumber}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase text-fg-subtle">Дата</span>
+                  <span className="block text-[10px] text-fg-subtle">Дата</span>
                   <span className="font-bold text-fg-muted">{previewInvoice.date}</span>
                 </div>
                 <div>
-                  <span className="block text-[10px] uppercase text-fg-subtle">Назначение</span>
+                  <span className="block text-[10px] text-fg-subtle">Назначение</span>
                   <span className="font-bold text-fg-muted">
                     {previewInvoice.isStorePurchase
                       ? (stores.find(s => s.id === previewInvoice.storeId)?.name || 'Магазин')
@@ -1511,7 +1511,7 @@ export const PurchasePage: React.FC = () => {
                 onClick={() => setPreviewInvoice(null)}
                 className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg-muted font-bold disabled:opacity-50"
               >
-                ИЗМЕНИТЬ
+                Изменить
               </button>
               <button
                 type="button"
@@ -1536,7 +1536,7 @@ export const PurchasePage: React.FC = () => {
                 <div className="p-2 rounded-lg bg-accent/15 text-accent border border-accent/30">
                   <Edit2 className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-bold text-fg-muted uppercase">РЕДАКТИРОВАТЬ НАКЛАДНУЮ</h3>
+                <h3 className="text-sm font-bold text-fg-muted ">Редактировать накладную</h3>
               </div>
               <button onClick={() => setEditingInvoiceModal(null)} className="p-1 rounded text-fg-subtle hover:text-fg-muted">
                 <X className="w-4 h-4" />
@@ -1545,7 +1545,7 @@ export const PurchasePage: React.FC = () => {
 
             <form onSubmit={handleSaveEditInvoiceModal} className="space-y-3 text-xs">
               <div>
-                <label className="block text-fg-subtle text-[10px] uppercase mb-1">НОМЕР НАКЛАДНОЙ</label>
+                <label className="block text-fg-subtle text-[10px] mb-1">Номер накладной</label>
                 <input
                   type="text"
                   required
@@ -1556,7 +1556,7 @@ export const PurchasePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-fg-subtle text-[10px] uppercase mb-1">ДАТА НАКЛАДНОЙ</label>
+                <label className="block text-fg-subtle text-[10px] mb-1">Дата накладной</label>
                 <input
                   type="date"
                   required
@@ -1567,7 +1567,7 @@ export const PurchasePage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-fg-subtle text-[10px] uppercase mb-1">СУММА НАКЛАДНОЙ ($)</label>
+                <label className="block text-fg-subtle text-[10px] mb-1">Сумма накладной ($)</label>
                 <input
                   type="number"
                   step="0.01"
@@ -1586,7 +1586,7 @@ export const PurchasePage: React.FC = () => {
                   onClick={() => setEditingInvoiceModal(null)}
                   className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg-muted font-bold disabled:opacity-50"
                 >
-                  ОТМЕНА
+                  Отмена
                 </button>
                 <button
                   type="submit"
@@ -1659,14 +1659,14 @@ export const PurchasePage: React.FC = () => {
                   type="button"
                   disabled={isSavingSupplier}
                   onClick={() => setIsAddSupplierOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted disabled:opacity-50"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
                   disabled={isSavingSupplier}
-                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg disabled:opacity-60 flex items-center justify-center gap-1.5"
                 >
                   {isSavingSupplier && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                   {isSavingSupplier ? 'СОХРАНЕНИЕ…' : 'ДОБАВИТЬ'}

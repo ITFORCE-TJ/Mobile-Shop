@@ -198,7 +198,7 @@ export const SalesHistoryPage: React.FC = () => {
   const canRefund = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
       <div className="p-3 border-b border-border bg-bg space-y-2.5 shrink-0">
@@ -345,7 +345,7 @@ export const SalesHistoryPage: React.FC = () => {
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-fg-muted uppercase tracking-wide">Товары в чеке</p>
+              <p className="text-xs font-semibold text-fg-muted tracking-wide">Товары в чеке</p>
               <div className="divide-y divide-border border border-border rounded-lg bg-surface">
                 {selectedSale.items.map((item, i) => (
                   <div key={i} className="p-3 flex items-center justify-between gap-2">
@@ -367,7 +367,7 @@ export const SalesHistoryPage: React.FC = () => {
 
             {selectedSale.exchangeEvents && selectedSale.exchangeEvents.length > 0 && (
               <div className="space-y-2">
-                <p className="text-xs font-semibold text-accent uppercase tracking-wide">История обменов</p>
+                <p className="text-xs font-semibold text-accent tracking-wide">История обменов</p>
                 <div className="p-3 bg-accent/10 border border-accent/30 rounded-lg space-y-2 text-sm">
                   {selectedSale.exchangeEvents.map((ev, i) => (
                     <div key={i} className="border-b border-accent/20 pb-2 last:border-b-0 last:pb-0">
@@ -385,38 +385,38 @@ export const SalesHistoryPage: React.FC = () => {
 
             <div className="bg-surface p-3 rounded-lg border border-border space-y-1.5 text-sm">
               <div className="flex justify-between">
-                <span className="text-fg-subtle text-xs uppercase">Способ оплаты</span>
+                <span className="text-fg-subtle text-xs ">Способ оплаты</span>
                 <span className="font-semibold text-fg-muted">
                   {selectedSale.paymentMethod === 'CASH' ? 'Наличные' : selectedSale.paymentMethod === 'CARD' ? 'Карта' : selectedSale.paymentMethod === 'DEBT' ? 'В долг' : 'Смешанная'}
                 </span>
               </div>
               {selectedSale.cashAmountTjs > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-fg-subtle uppercase">Наличными</span>
+                  <span className="text-fg-subtle ">Наличными</span>
                   <span className="text-fg-muted">{selectedSale.cashAmountTjs.toLocaleString()} TJS</span>
                 </div>
               )}
               {selectedSale.cardAmountTjs > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-fg-subtle uppercase">Картой</span>
+                  <span className="text-fg-subtle ">Картой</span>
                   <span className="text-fg-muted">{selectedSale.cardAmountTjs.toLocaleString()} TJS</span>
                 </div>
               )}
               {(selectedSale.debtAmountTjs ?? 0) > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-danger uppercase">Остаток долга</span>
+                  <span className="text-danger ">Остаток долга</span>
                   <span className="text-danger font-semibold">{(selectedSale.debtAmountTjs ?? 0).toLocaleString()} TJS</span>
                 </div>
               )}
               <div className="flex justify-between pt-2 border-t border-border font-semibold">
-                <span className="text-fg-muted uppercase text-xs">Итого</span>
+                <span className="text-fg-muted text-xs">Итого</span>
                 <span className="text-accent text-base">{selectedSale.totalTjs.toLocaleString()} TJS</span>
               </div>
             </div>
 
             {selectedSale.status === 'REFUNDED' && (
               <div className="bg-danger/10 border border-danger/30 p-3 rounded-lg space-y-1.5 text-sm">
-                <p className="text-xs font-semibold text-danger uppercase tracking-wide">
+                <p className="text-xs font-semibold text-danger tracking-wide">
                   Возврат {selectedSale.refundedAt ? `от ${new Date(selectedSale.refundedAt).toLocaleString('ru-RU')}` : ''}
                 </p>
                 {selectedSale.refundReason && (
@@ -424,12 +424,12 @@ export const SalesHistoryPage: React.FC = () => {
                 )}
                 {(selectedSale.penaltyFeeTjs ?? 0) > 0 && (
                   <div className="flex justify-between text-xs">
-                    <span className="text-fg-subtle uppercase">Штраф удержан</span>
+                    <span className="text-fg-subtle ">Штраф удержан</span>
                     <span className="text-warning font-semibold">{(selectedSale.penaltyFeeTjs ?? 0).toLocaleString()} TJS</span>
                   </div>
                 )}
                 <div className="flex justify-between pt-1.5 border-t border-danger/20 font-semibold">
-                  <span className="text-fg-muted uppercase text-xs">Возвращено клиенту</span>
+                  <span className="text-fg-muted text-xs">Возвращено клиенту</span>
                   <span className="text-danger text-base">
                     {(selectedSale.actualRefundAmountTjs ?? selectedSale.totalTjs).toLocaleString()} TJS
                   </span>

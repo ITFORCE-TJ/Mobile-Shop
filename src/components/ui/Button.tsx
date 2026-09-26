@@ -42,8 +42,9 @@ export const Button: React.FC<ButtonProps> = ({
     <button
       type="button"
       disabled={disabled || loading}
+      aria-busy={loading || undefined}
       className={cn(
-        'inline-flex items-center justify-center rounded-lg font-semibold transition-colors select-none active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100',
+        'inline-flex items-center justify-center rounded-xl font-semibold transition-colors select-none focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2 focus-visible:ring-offset-surface active:scale-[0.98] disabled:cursor-not-allowed disabled:active:scale-100',
         VARIANT_CLASSES[variant],
         SIZE_CLASSES[size],
         fullWidth && 'w-full',

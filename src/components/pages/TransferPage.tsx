@@ -218,7 +218,7 @@ export const TransferPage: React.FC = () => {
   const pendingCount = visibleTransfers.filter((t: TransferRequest) => t.status === 'PENDING_APPROVAL').length;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
 
@@ -240,7 +240,7 @@ export const TransferPage: React.FC = () => {
       <div className="flex border-b border-border bg-surface px-3 sm:px-4 pt-2 text-xs shrink-0">
         <button
           onClick={() => setActiveTab('create')}
-          className={`pb-2.5 px-3 transition-colors border-b-2 font-bold uppercase tracking-wider bg-transparent ${
+          className={`pb-2.5 px-3 transition-colors border-b-2 font-bold tracking-wider bg-transparent ${
             activeTab === 'create'
               ? 'border-accent text-accent'
               : 'border-transparent text-fg-muted hover:text-fg'
@@ -251,7 +251,7 @@ export const TransferPage: React.FC = () => {
 
         <button
           onClick={() => setActiveTab('list')}
-          className={`pb-2.5 px-3 transition-colors border-b-2 flex items-center space-x-2 font-bold uppercase tracking-wider ${
+          className={`pb-2.5 px-3 transition-colors border-b-2 flex items-center space-x-2 font-bold tracking-wider ${
             activeTab === 'list'
               ? 'border-accent text-accent'
               : 'border-transparent text-fg-muted hover:text-fg'
@@ -274,7 +274,7 @@ export const TransferPage: React.FC = () => {
             <div className="p-3 sm:p-4 border-b border-border bg-surface shrink-0">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold">Откуда (Отправитель):</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Откуда (Отправитель):</label>
                   {isSeller ? (
                     mainWarehouse && mainWarehouse.id !== currentUser?.storeId ? (
                       <select
@@ -308,7 +308,7 @@ export const TransferPage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold">Куда (Получатель):</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Куда (Получатель):</label>
                   {isSeller && mainWarehouse && fromLocationId === mainWarehouse.id ? (
                     <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
                       <StoreIcon className="w-4 h-4 text-accent" />
@@ -363,7 +363,7 @@ export const TransferPage: React.FC = () => {
               </div>
 
               {availableDevicesAtFromLocation.length === 0 ? (
-                <div className="p-12 text-center text-fg-muted text-xs uppercase tracking-wider">
+                <div className="p-12 text-center text-fg-muted text-xs tracking-wider">
                   Нет доступных устройств в локации «{fromStoreName}»
                 </div>
               ) : (
@@ -427,9 +427,9 @@ export const TransferPage: React.FC = () => {
 
                   <button
                     onClick={handleOpenConfirmModal}
-                    className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg font-bold text-xs uppercase tracking-wider flex items-center space-x-1.5 transition-all shadow-xs"
+                    className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg font-bold text-xs tracking-wider flex items-center space-x-1.5 transition-all shadow-xs"
                   >
-                    <span>ОФОРМИТЬ</span>
+                    <span>Оформить</span>
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
@@ -456,7 +456,7 @@ export const TransferPage: React.FC = () => {
             )}
 
             {visibleTransfers.length === 0 ? (
-              <div className="p-12 text-center text-fg-muted text-xs uppercase tracking-wider">
+              <div className="p-12 text-center text-fg-muted text-xs tracking-wider">
                 История перемещений пуста
               </div>
             ) : (
@@ -466,7 +466,7 @@ export const TransferPage: React.FC = () => {
                     <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border pb-2.5">
                       <div className="flex items-center space-x-2">
                         <span className="font-bold text-fg-muted">Перемещение #{tr.id.slice(-6)}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase border ${
+                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold border ${
                           tr.status === 'APPROVED' ? 'bg-accent/15 text-accent border-accent/30' :
                           tr.status === 'PENDING_APPROVAL' ? 'bg-warning/15 text-warning border-warning/30' :
                           'bg-danger/15 text-danger border-danger/30'
@@ -486,7 +486,7 @@ export const TransferPage: React.FC = () => {
                     </div>
 
                     <div className="p-2.5 rounded-xl bg-surface-raised border border-border space-y-1">
-                      <span className="text-[10px] text-fg-subtle uppercase block">Передаваемые устройства ({(tr.deviceIds || []).length} шт.):</span>
+                      <span className="text-[10px] text-fg-subtle block">Передаваемые устройства ({(tr.deviceIds || []).length} шт.):</span>
                       {(tr.deviceModels || []).map((mod, idx) => (
                         <div key={idx} className="flex items-center justify-between text-xs text-fg-muted">
                           <span>{tr.deviceBrands?.[idx] ? `${tr.deviceBrands[idx]} ${mod}` : mod}</span>
@@ -528,7 +528,7 @@ export const TransferPage: React.FC = () => {
       {confirmTransferModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
           <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-4 text-xs">
-            <h3 className="text-sm font-bold uppercase text-fg-muted border-b border-border pb-3">ПОДТВЕРЖДЕНИЕ ПЕРЕМЕЩЕНИЯ</h3>
+            <h3 className="text-sm font-bold text-fg-muted border-b border-border pb-3">Подтверждение перемещения</h3>
 
             <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-1">
               <p className="text-fg-muted">Откуда: <strong className="text-accent">{fromStoreName}</strong></p>
@@ -541,15 +541,15 @@ export const TransferPage: React.FC = () => {
                 type="button"
                 disabled={isSubmittingTransfer}
                 onClick={() => setConfirmTransferModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
+                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted disabled:opacity-50"
               >
-                ОТМЕНА
+                Отмена
               </button>
               <button
                 type="button"
                 disabled={isSubmittingTransfer}
                 onClick={handleExecuteTransfer}
-                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
                 {isSubmittingTransfer && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
                 {isSubmittingTransfer ? 'ОФОРМЛЕНИЕ…' : 'ПОДТВЕРДИТЬ'}
