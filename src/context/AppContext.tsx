@@ -1,4 +1,6 @@
 import { fetchAllPages } from '../api/pagination';
+import { getBusinessDateKey } from '../utils/businessDate';
+import { hasCurrentDailyRate } from '../utils/dailyRatePrompt';
 import { refreshAfterMutation } from '../utils/refreshAfterMutation';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
 import { User, Store, Device, Sale, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, RepairTicket, RepairStatus, TransferRequest, AuditLogEntry, DailyRate, PageId, PaymentMethod, ExpenseCategory, ThemeMode } from '../types';
@@ -319,6 +321,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [isInitialLoading, setIsInitialLoading] = useState(true);
 
   const [isRateModalOpen, setIsRateModalOpen] = useState(false);
+  const manualRateEdit = useRef(false);
+  const confirmedRateDay = useRef<string | null>(null);
+  const rateWriteRevision = useRef(0);
   const [isScannerOpen, setIsScannerOpen] = useState(false);
   const [scannerCallback, setScannerCallback] = useState<((code: string) => void) | null>(null);
 
@@ -352,23 +357,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const toggleTheme = () => setThemeState((prev) => (prev === 'dark' ? 'light' : 'dark'));
 
   const checkRatePrompt = useCallback((rate: DailyRate | null) => {
-    const isRateSet = !!(rate && rate.rate && Number(rate.rate) > 0);
-    if (!isRateSet) {
-      setIsRateModalOpen(true);
-      useUIStore.getState().setDailyRateModalOpen(true);
-    } else {
-      setIsRateModalOpen(false);
-      useUIStore.getState().setDailyRateModalOpen(false);
-    }
+    const today = getBusinessDateKey();
+    if (hasCurrentDailyRate(rate)) confirmedRateDay.current = today;
+    // A background refresh must neither reopen today's prompt nor close an editor
+    // deliberately opened from Settings.
+    if (manualRateEdit.current) return;
+    const role = useAuthStore.getState().currentUser?.role;
+    const shouldOpen = (role === 'ADMIN' || role === 'PARTNER') && confirmedRateDay.current !== today;
+    setIsRateModalOpen(shouldOpen);
+    useUIStore.getState().setDailyRateModalOpen(shouldOpen);
   }, []);
 
-  // Keep local currentUser mirrored to the auth store and evaluate rate prompt on session start
+  // Do not treat the initial null state as a missing rate: wait for the server.
+  useEffect(() => { setCurrentUserState(authUser); }, [authUser]);
   useEffect(() => {
-    setCurrentUserState(authUser);
-    if (authUser) {
-      checkRatePrompt(todayRate);
-    }
-  }, [authUser, todayRate, checkRatePrompt]);
+    manualRateEdit.current = false;
+    setIsRateModalOpen(false);
+    useUIStore.getState().setDailyRateModalOpen(false);
+  }, [authUser?.id]);
 
   // ---- Data fetching: the API/Postgres is the single source of truth ----
   const namesRef = useRef(buildNameLookup([]));
@@ -605,12 +611,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   }), [coalesceFetch]);
 
   const fetchExchangeRate = useCallback(() => coalesceFetch('exchangeRate', async () => {
+    const revision = rateWriteRevision.current;
     const raw = await apiClient<any>('/exchange-rate/today');
     const mapped = mapDailyRate(raw);
+    if (revision !== rateWriteRevision.current) return mapped;
     setTodayRateState(mapped);
     checkRatePrompt(mapped);
     return mapped;
   }), [coalesceFetch, checkRatePrompt]);
+
+  useEffect(() => {
+    if (!authToken) return;
+    let day = getBusinessDateKey();
+    const checkDay = () => {
+      const today = getBusinessDateKey();
+      if (today === day) return;
+      fetchExchangeRate().then(() => { day = today; }).catch(error => console.error('Daily rate refresh failed', error));
+    };
+    const timer = setInterval(checkDay, 30000);
+    window.addEventListener('focus', checkDay);
+    document.addEventListener('visibilitychange', checkDay);
+    return () => { clearInterval(timer); window.removeEventListener('focus', checkDay); document.removeEventListener('visibilitychange', checkDay); };
+  }, [authToken, fetchExchangeRate]);
 
   const refetchInFlight = useRef<Promise<void> | null>(null);
   const refetchAll = useCallback(() => {
@@ -825,10 +847,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const setDailyRate: AppContextType['setDailyRate'] = async (rate) => {
     try {
-      await apiClient('/exchange-rate/today', { method: 'POST', body: JSON.stringify({ rate }) });
+      const saved = await apiClient<any>('/exchange-rate/today', { method: 'POST', body: JSON.stringify({ rate }) });
+      rateWriteRevision.current += 1;
+      const mapped = mapDailyRate(saved);
+      setTodayRateState(mapped);
+      if (hasCurrentDailyRate(mapped)) confirmedRateDay.current = getBusinessDateKey();
+      manualRateEdit.current = false;
       setIsRateModalOpen(false);
       useUIStore.getState().setDailyRateModalOpen(false);
-      await fetchExchangeRate();
       return { success: true };
     } catch (err) {
       return { success: false, message: errorMessage(err, 'Не удалось установить курс') };
@@ -1423,6 +1449,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const openDailyRateModal = () => {
+    const role = useAuthStore.getState().currentUser?.role;
+    if (role !== 'ADMIN' && role !== 'PARTNER') return;
+    manualRateEdit.current = true;
     setIsRateModalOpen(true);
     useUIStore.getState().setDailyRateModalOpen(true);
   };
@@ -1431,6 +1460,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // sets both isRateModalOpen and the UI store's flag, so dismissing it without saving must
   // clear both too, or the modal stays stuck open (isOpen is an OR of the two).
   const closeDailyRateModal = () => {
+    manualRateEdit.current = false;
     setIsRateModalOpen(false);
     useUIStore.getState().setDailyRateModalOpen(false);
   };

@@ -4,7 +4,7 @@ import { DollarSign, Clock } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { FormField } from '../ui/FormField';
-import { getBusinessDateKey } from '../../utils/businessDate';
+import { hasCurrentDailyRate } from '../../utils/dailyRatePrompt';
 
 interface DailyRateModalProps {
   isOpen: boolean;
@@ -17,7 +17,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
   // Only ADMIN/PARTNER can actually set the rate (server-enforced) — a SELLER can't act
   // on this, so blocking them behind a non-dismissable modal would be a dead end.
   const canSetRate = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
-  const isMandatory = !hasRate && canSetRate;
+  const isMandatory = !hasCurrentDailyRate(todayRate) && canSetRate;
 
   const [rateInput, setRateInput] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
@@ -77,8 +77,8 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
       open={isOpen}
       onClose={() => onClose?.()}
       dismissable={!isMandatory}
-      title={hasRate ? "Изменение курса доллара" : "Установка курса доллара"}
-      subtitle={isMandatory ? 'Первоначальная настройка — установите курс для начала работы' : todayRate?.rate ? `Текущий курс: ${Number(todayRate.rate).toFixed(2)} TJS` : undefined}
+      title={isMandatory ? 'Курс доллара на сегодня' : 'Изменение курса доллара'}
+      subtitle={isMandatory ? 'Установите курс на новый день' : todayRate?.rate ? `Текущий курс: ${Number(todayRate.rate).toFixed(2)} TJS` : undefined}
       maxWidth="sm"
       footer={
         <>
