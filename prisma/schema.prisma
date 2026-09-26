@@ -178,6 +178,7 @@ model User {
   notifications Notification[]
   ownerProfile  Owner?
   sessions      AuthSession[]
+  payrollPayouts PayrollPayout[]
 
   @@map("users")
 }
@@ -630,6 +631,7 @@ model RepairStatusHistory {
 }
 
 model Expense {
+  payrollPayout PayrollPayout?
   id                   String    @id @default(uuid())
   category             String
   amountTjs            Decimal   @db.Decimal(14, 2)
@@ -661,6 +663,21 @@ model Expense {
   @@index([createdAt])
   @@index([employeeId])
   @@map("expenses")
+}
+
+model PayrollPayout {
+  expenseId          String   @id @map("expense_id")
+  employeeId         String   @map("employee_id")
+  month              String
+  grossTjs           Decimal  @map("gross_tjs") @db.Decimal(14, 2)
+  previousSalaryTjs   Decimal  @map("previous_salary_tjs") @db.Decimal(14, 2)
+  paidAdvancesTjs     Decimal  @map("paid_advances_tjs") @db.Decimal(14, 2)
+  createdAt          DateTime @default(now()) @map("created_at") @db.Timestamptz
+  expense            Expense  @relation(fields: [expenseId], references: [id], onDelete: Restrict)
+  employee           User     @relation(fields: [employeeId], references: [id], onDelete: Restrict)
+
+  @@index([employeeId, month], map: "payroll_payouts_employee_month_idx")
+  @@map("payroll_payouts")
 }
 
 model Owner {

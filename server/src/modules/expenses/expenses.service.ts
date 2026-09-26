@@ -8,6 +8,11 @@ import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction, cancelTransaction } from '../finance/financial-transaction.service';
 import { currentOwnerAllocations, readOwnerAllocations, replaceOwnerAllocations } from '../finance/owner-allocations';
 
+/** Employee lock serializes advances, salary payouts, payment, edits and cancellation. */
+export async function lockExpenseEmployee(tx: TransactionClient, expenseId: string) {
+  await tx.$queryRaw`SELECT u.id FROM users u JOIN expenses e ON e."employeeId" = u.id WHERE e.id = ${expenseId} FOR UPDATE OF u`;
+}
+
 interface CreateExpenseInput {
   category: string;
   amountTjs: MoneyInput;
@@ -24,6 +29,7 @@ interface CreateExpenseInput {
 
 /** Runs inside a caller-supplied transaction so repair-cost bookings share one atomic unit. */
 export async function createExpense(tx: TransactionClient, input: CreateExpenseInput) {
+  if (input.employeeId) await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.employeeId} FOR UPDATE`;
   const actor = await resolveActor(tx, input.createdByUserId);
   const amountTjs = requirePositiveMoney(input.amountTjs, 'Сумма расхода');
   const rate = await getRateForDate(new Date());
@@ -126,6 +132,7 @@ export async function createExpenseStandalone(input: CreateExpenseInput) {
 /** Pays an UNPAID expense in full from its store's cash register. */
 export async function payExpense(id: string, actorId: string, storeIdForBusinessExpense?: string) {
   return prisma.$transaction(async (tx) => {
+    await lockExpenseEmployee(tx, id);
     await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id} FOR UPDATE`;
     const existing = await tx.expense.findUnique({ where: { id } });
     if (!existing) throw new Error('Расход не найден');
@@ -209,10 +216,15 @@ export async function updateExpense(
   actorId: string
 ) {
   return prisma.$transaction(async (tx) => {
+    await lockExpenseEmployee(tx, id);
     await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id} FOR UPDATE`;
     const existing = await tx.expense.findUnique({ where: { id } });
     if (!existing) throw new Error('Расход не найден');
     if (existing.cancelledAt) throw new Error('Нельзя редактировать отменённый расход');
+    const payroll = await tx.$queryRaw<Array<{ expense_id: string }>>`SELECT expense_id FROM payroll_payouts WHERE expense_id = ${id}`;
+    if (payroll?.length && (input.amountTjs !== undefined || input.category !== undefined || input.storeId !== undefined)) {
+      throw new Error('Сумму и категорию расчётной выплаты нельзя менять. Отмените выплату и выполните новый расчёт зарплаты.');
+    }
 
     const actor = await resolveActor(tx, actorId);
     const rate = existing.exchangeRate || (await getRateForDate(new Date()));
@@ -329,6 +341,7 @@ export async function updateExpense(
 
 export async function deleteExpense(id: string, actorId: string) {
   return prisma.$transaction(async (tx) => {
+    await lockExpenseEmployee(tx, id);
     await tx.$queryRaw`SELECT id FROM expenses WHERE id = ${id} FOR UPDATE`;
     const existing = await tx.expense.findUnique({ where: { id } });
     if (!existing) throw new Error('Расход не найден');

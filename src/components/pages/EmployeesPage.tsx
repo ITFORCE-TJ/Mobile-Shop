@@ -1,3 +1,4 @@
+import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { decimal, moneyNumber } from '../../utils/money';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useEffect, useMemo } from 'react';
@@ -31,6 +32,7 @@ const ROLE_CONFIG: Record<Role, { label: string; bg: string; color: string; bord
 };
 
 export const EmployeesPage: React.FC = () => {
+  const dataRefreshRevision = useDataRefreshRevision();
   const {
     currentUser,
     users,
@@ -94,7 +96,7 @@ export const EmployeesPage: React.FC = () => {
       fetchExpensesRange({ period: 'SPECIFIC_MONTH', month: selectedPayrollMonth }),
     ]).catch((e) => { if (!cancelled) console.error('Failed to load payroll data', e); });
     return () => { cancelled = true; };
-  }, [selectedPayrollMonth, fetchSalesRange, fetchExpensesRange]);
+  }, [selectedPayrollMonth, fetchSalesRange, fetchExpensesRange, dataRefreshRevision]);
 
   useEffect(() => {
     if (!financialHistoryUser) return;
@@ -104,7 +106,7 @@ export const EmployeesPage: React.FC = () => {
       fetchExpensesRange({ employeeId: financialHistoryUser.id }),
     ]).catch((e) => { if (!cancelled) console.error('Failed to load employee financial history', e); });
     return () => { cancelled = true; };
-  }, [financialHistoryUser, fetchSalesRange, fetchExpensesRange]);
+  }, [financialHistoryUser, fetchSalesRange, fetchExpensesRange, dataRefreshRevision]);
   const [baseSalaryTjs, setBaseSalaryTjs] = useState<string>('');
   const [salesCommissionPercent, setSalesCommissionPercent] = useState<string>('');
 

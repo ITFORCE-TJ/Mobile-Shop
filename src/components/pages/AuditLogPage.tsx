@@ -126,7 +126,7 @@ export const AuditLogPage: React.FC = () => {
     }
   };
 
-  if (currentUser?.role !== 'ADMIN') return <div role="alert" className="p-6">??? ??????? ? ??????? ??????</div>;
+  if (currentUser?.role !== 'ADMIN') return <div role="alert" className="p-6">Нет доступа к журналу аудита</div>;
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">

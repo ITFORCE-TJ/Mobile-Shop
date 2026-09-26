@@ -44,10 +44,11 @@ export const NotificationsPage: React.FC = () => {
   const handleNotificationClick = (n: typeof notifications[0]) => {
     markNotificationAsRead(n.id);
     const target = n.linkPage || n.targetRoute || 'SALE';
-    const route = PAGE_ROUTES[target] || '/sale';
-    setActivePage(target as any);
+    const route = PAGE_ROUTES[target] || (Object.values(PAGE_ROUTES).includes(target) ? target : '/sale');
+    const pageId = Object.keys(PAGE_ROUTES).find(key => PAGE_ROUTES[key] === route) || 'SALE';
+    setActivePage(pageId as any);
 
-    if (target === 'TRANSFER' || n.targetType === 'TRANSFER_REQUEST') {
+    if (route === '/transfer' || n.targetType === 'TRANSFER_REQUEST') {
       navigate('/transfer', { state: { tab: 'list' } });
     } else {
       navigate(route);

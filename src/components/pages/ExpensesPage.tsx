@@ -1,3 +1,4 @@
+import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -65,6 +66,7 @@ function getCategoryIcon(key: string): React.ElementType {
 }
 
 export const ExpensesPage: React.FC = () => {
+  const dataRefreshRevision = useDataRefreshRevision();
   const { currentUser, expenses, fetchExpensesRange, stores, users, todayRate, createExpense, updateExpense, deleteExpense, payExpense, isInitialLoading, selectedStoreId: globalSelectedStoreId } = useAppFields('currentUser', 'expenses', 'fetchExpensesRange', 'stores', 'users', 'todayRate', 'createExpense', 'updateExpense', 'deleteExpense', 'payExpense', 'isInitialLoading', 'selectedStoreId');
 
   const isSeller = currentUser?.role === 'SELLER';
@@ -122,7 +124,7 @@ export const ExpensesPage: React.FC = () => {
       month: periodFilter === 'SPECIFIC_MONTH' ? selectedMonth : undefined,
     }).catch((e) => { if (!cancelled) console.error('Failed to load expenses for period', e); });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedMonth, fetchExpensesRange]);
+  }, [periodFilter, selectedMonth, fetchExpensesRange, dataRefreshRevision]);
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
     try {

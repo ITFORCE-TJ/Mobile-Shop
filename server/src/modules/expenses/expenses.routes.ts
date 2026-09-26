@@ -5,10 +5,23 @@ import { prisma } from '../../prisma/prisma.service';
 import { createExpenseStandalone, updateExpense, deleteExpense, payExpense } from './expenses.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import { dateRangeForPeriod, type ReportPeriod } from '../reports/reports.service';
+import { getPayrollSummary, paySalary } from './payroll.service';
 
 const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'];
 
 export function registerExpenseRoutes(app: Express) {
+  app.get('/api/payroll/:employeeId', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req, res, next) => {
+    try { res.json(await getPayrollSummary(req.params.employeeId, String(req.query.month || ''))); }
+    catch (error) { next(error); }
+  });
+  app.post('/api/payroll/:employeeId/payout', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const expense = await paySalary({ employeeId: req.params.employeeId, month: req.body?.month,
+        grossTjs: req.body?.grossTjs, note: req.body?.note, actorId: req.user!.userId });
+      RealtimeSyncGateway.broadcast('EXPENSE_CREATED', { expenseId: expense.id }, { storeIds: [expense.storeId!] });
+      res.status(201).json(expense);
+    } catch (error) { next(error); }
+  });
   app.get('/api/expenses', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
       const storeScopeId = req.user!.role === 'SELLER' ? req.user!.storeId ?? '__none__' : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;

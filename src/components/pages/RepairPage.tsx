@@ -1,3 +1,4 @@
+import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { sumMoney } from '../../utils/money';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -18,6 +19,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { MonthPicker } from '../ui/MonthPicker';
 
 export const RepairPage: React.FC = () => {
+  const dataRefreshRevision = useDataRefreshRevision();
   const {
     currentUser,
     repairs,
@@ -69,14 +71,14 @@ export const RepairPage: React.FC = () => {
   // merge it in. Guarded against a stale response overwriting a newer one on fast clicks.
   useEffect(() => {
     const thisMonth = getBusinessDateKey().substring(0, 7);
-    if (selectedMonth === thisMonth) return;
+
     let cancelled = false;
     fetchRepairsRange({
       period: selectedMonth === 'ALL' ? 'ALL' : 'SPECIFIC_MONTH',
       month: selectedMonth === 'ALL' ? undefined : selectedMonth,
     }).catch((e) => { if (!cancelled) console.error('Failed to load repairs for period', e); });
     return () => { cancelled = true; };
-  }, [selectedMonth, fetchRepairsRange]);
+  }, [selectedMonth, fetchRepairsRange, dataRefreshRevision]);
 
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without

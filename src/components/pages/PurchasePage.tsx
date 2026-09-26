@@ -1,3 +1,4 @@
+import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { decimal, moneyNumber, sumMoney } from '../../utils/money';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -61,6 +62,7 @@ interface PurchasePreviewData {
 }
 
 export const PurchasePage: React.FC = () => {
+  const dataRefreshRevision = useDataRefreshRevision();
   const {
     currentUser,
     suppliers,
@@ -160,7 +162,7 @@ export const PurchasePage: React.FC = () => {
       month: periodFilter === 'SPECIFIC_MONTH' ? selectedMonth : undefined,
     }).catch((e) => { if (!cancelled) console.error('Failed to load invoices for period', e); });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedMonth, fetchInvoicesRange]);
+  }, [periodFilter, selectedMonth, fetchInvoicesRange, dataRefreshRevision]);
 
   // Form states
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(suppliers[0]?.id || '');

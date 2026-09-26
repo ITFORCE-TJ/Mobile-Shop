@@ -227,6 +227,7 @@ interface AppContextType {
     storeId?: string;
   }) => Promise<{ success: boolean; message?: string }>;
 
+  paySalary: (params: { employeeId: string; month: string; grossTjs: number; note?: string }) => Promise<{ success: boolean; message?: string; amountTjs?: number }>;
   createExpense: (params: {
     category: ExpenseCategory;
     amountTjs: number;
@@ -661,6 +662,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         if (fetcher === fetchOwnerTransactions) await load(fetchOwners);
         await fetcher();
         loadedModules.current.add(fetcher);
+        window.dispatchEvent(new Event('business-data-refreshed'));
       });
       pendingModules.current.set(fetcher, task);
       const clear = () => { if (pendingModules.current.get(fetcher) === task) pendingModules.current.delete(fetcher); };
@@ -750,7 +752,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     if (pendingFullRefetch.current) {
       pendingFullRefetch.current = false;
       pendingRealtimeTasks.current.clear();
-      refetchAll().catch((e) => console.error('Realtime resync failed', e));
+      refetchAll().catch((e) => console.error('Realtime resync failed', e))
+        .finally(() => window.dispatchEvent(new Event('business-data-refreshed')));
       return;
     }
     const deferred = new Set<() => Promise<unknown>>(Object.values(pageFetchers));
@@ -769,7 +772,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return true;
     });
     pendingRealtimeTasks.current.clear();
-    Promise.all(tasks.map((t) => t())).catch((e) => console.error('Realtime resync failed', e));
+    Promise.allSettled(tasks.map((t) => t())).then(results => {
+      for (const result of results) if (result.status === 'rejected') console.error('Realtime resync failed', result.reason);
+      window.dispatchEvent(new Event('business-data-refreshed'));
+    });
   }, [refetchAll, pageFetchers, fetcherKeyMap]);
 
   useRealtimeSync(authToken, (type: string) => {
@@ -1193,6 +1199,15 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
+  const paySalary: AppContextType['paySalary'] = async ({ employeeId, ...params }) => {
+    try {
+      const expense = await apiClient<{ amountTjs: number }>(`/payroll/${employeeId}/payout`, { method: 'POST', body: JSON.stringify(params) });
+      markLocalMutation(['expenses', 'stores', 'owners']);
+      await refreshAfterMutation([fetchExpenses(), fetchStores(), fetchOwners()]);
+      return { success: true, amountTjs: expense.amountTjs };
+    } catch (err) { return { success: false, message: errorMessage(err, 'Не удалось выплатить зарплату') }; }
+  };
+
   const createExpense: AppContextType['createExpense'] = async ({ category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance }) => {
     try {
       await apiClient('/expenses', {
@@ -1555,6 +1570,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         paySupplier,
         paySupplierInvoice,
         createExpense,
+        paySalary,
         updateExpense,
         deleteExpense,
         payExpense,

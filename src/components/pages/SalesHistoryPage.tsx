@@ -1,3 +1,4 @@
+import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
@@ -27,6 +28,7 @@ import { getBusinessDateKey } from '../../utils/businessDate';
 type DialogView = 'details' | 'refund' | 'pick-exchange' | 'pick-repair';
 
 export const SalesHistoryPage: React.FC = () => {
+  const dataRefreshRevision = useDataRefreshRevision();
   const navigate = useNavigate();
   const {
     currentUser,
@@ -78,7 +80,7 @@ export const SalesHistoryPage: React.FC = () => {
       storeId: activeStoreId && activeStoreId !== 'all' ? activeStoreId : undefined,
     }).catch((e) => { if (!cancelled) console.error('Failed to load sales for period', e); });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedMonth, activeStoreId, fetchSalesRange]);
+  }, [periodFilter, selectedMonth, activeStoreId, fetchSalesRange, dataRefreshRevision]);
 
   const filteredSales = useMemo(() => {
     const todayStr = getBusinessDateKey();

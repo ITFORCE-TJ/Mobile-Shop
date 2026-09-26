@@ -3,6 +3,13 @@ import { authenticateJwt, type AuthenticatedRequest } from '../../auth/auth.midd
 import { prisma } from '../../prisma/prisma.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 
+const notificationScope = (user: NonNullable<AuthenticatedRequest['user']>) => ({
+  AND: [
+    { OR: [{ targetUserId: null }, { targetUserId: user.userId }] },
+    { OR: [{ targetRole: null }, { targetRole: user.role }] },
+  ],
+});
+
 export function registerNotificationRoutes(app: Express) {
   app.get('/api/notifications', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
@@ -15,7 +22,7 @@ export function registerNotificationRoutes(app: Express) {
       const notifications = await prisma.notification.findMany({
         where: {
           AND: [
-            { OR: [{ targetUserId: user.userId }, { targetRole: user.role }, { AND: [{ targetUserId: null }, { targetRole: null }] }] },
+            notificationScope(user),
             { OR: [{ resolved: false }, { createdAt: { gte: oneDayAgo } }] },
           ],
         },
@@ -30,7 +37,7 @@ export function registerNotificationRoutes(app: Express) {
 
   app.patch('/api/notifications/:id/read', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const scope = { OR: [{ targetUserId: req.user!.userId }, { targetRole: req.user!.role }, { AND: [{ targetUserId: null }, { targetRole: null }] }] };
+      const scope = notificationScope(req.user!);
       const result = await prisma.notification.updateMany({
         where: { id: req.params.id, ...scope },
         data: { read: true, readAt: new Date() },
@@ -47,7 +54,7 @@ export function registerNotificationRoutes(app: Express) {
     try {
       const user = req.user!;
       await prisma.notification.updateMany({
-        where: { OR: [{ targetUserId: user.userId }, { targetRole: user.role }, { AND: [{ targetUserId: null }, { targetRole: null }] }] },
+        where: notificationScope(user),
         data: { read: true, readAt: new Date() },
       });
       res.json({ success: true });
@@ -58,7 +65,7 @@ export function registerNotificationRoutes(app: Express) {
 
   app.patch('/api/notifications/:id/resolve', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const scope = { OR: [{ targetUserId: req.user!.userId }, { targetRole: req.user!.role }, { AND: [{ targetUserId: null }, { targetRole: null }] }] };
+      const scope = notificationScope(req.user!);
       const result = await prisma.notification.updateMany({
         where: { id: req.params.id, ...scope },
         data: { resolved: true, read: true, resolvedAt: new Date(), readAt: new Date() },

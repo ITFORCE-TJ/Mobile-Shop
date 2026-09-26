@@ -34,6 +34,10 @@ try {
   token = (await api('POST', '/auth/login', { login: 'admin', password: 'admin123' })).data.token;
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 10 })).status, 200);
   assert.equal((await api('POST', '/stores/store-siyoma/adjust-cash', { newBalanceTjs: 10000, reason: 'Test fixture' })).status, 200);
+  const adjustment = await db.financialTransaction.findFirstOrThrow({ where: { sourceType: 'STORE_ADJUSTMENT', sourceId: 'store-siyoma' } });
+  assert(adjustment.amountTjs.eq(10000));
+  assert.equal(adjustment.direction, 'IN');
+  assert.equal(adjustment.type, 'ADJUSTMENT');
   const cash = async () => (await db.store.findUniqueOrThrow({ where: { id: 'store-siyoma' } })).cashBalanceTjs.toString();
   const expense = { category: 'OTHER', amountTjs: '12.34', storeId: 'store-siyoma', paidFromCashRegister: true };
   const retries = await Promise.all([api('POST', '/expenses', expense, 'same-expense'), api('POST', '/expenses', expense, 'same-expense')]);
@@ -145,6 +149,12 @@ try {
   }
   assert.equal(seen.size, await db.auditLog.count());
   pass('cursor history returns all records beyond 500 with tied timestamps');
+  await db.notification.create({ data: { id: 'scoped-notification', title: 'Private', message: 'Test', targetUserId: 'user-partner', targetRole: 'ADMIN' } });
+  assert(!(await api('GET', '/notifications')).data.some((n: any) => n.id === 'scoped-notification'));
+  assert.equal((await api('PATCH', '/notifications/scoped-notification/read')).status, 404);
+  await api('POST', '/notifications/read-all');
+  assert.equal((await db.notification.findUniqueOrThrow({ where: { id: 'scoped-notification' } })).read, false);
+  pass('notification recipient and role restrictions are both enforced');
   token = (await api('POST', '/auth/login', { login: 'partner', password: 'partner123' })).data.token;
   assert.equal((await purchase('FORBIDDEN', [{ imei: '350000000000021' }])).status, 403);
   pass('main warehouse purchase permission enforced on backend');
