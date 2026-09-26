@@ -137,7 +137,6 @@ export const PurchasePage: React.FC = () => {
 
   // List search & filters
   const [searchQuery, setSearchQuery] = useState('');
-  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'SPECIFIC_MONTH' | 'ALL'>('SPECIFIC_MONTH');
   const [selectedMonth, setSelectedMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
   const [selectedSupplierFilter, setSelectedSupplierFilter] = useState<string>('all');
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -158,11 +157,11 @@ export const PurchasePage: React.FC = () => {
   useEffect(() => {
     let cancelled = false;
     fetchInvoicesRange({
-      period: periodFilter,
-      month: periodFilter === 'SPECIFIC_MONTH' ? selectedMonth : undefined,
+      period: 'SPECIFIC_MONTH',
+      month: selectedMonth,
     }).catch((e) => { if (!cancelled) console.error('Failed to load invoices for period', e); });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedMonth, fetchInvoicesRange, dataRefreshRevision]);
+  }, [selectedMonth, fetchInvoicesRange, dataRefreshRevision]);
 
   // Form states
   const [selectedSupplierId, setSelectedSupplierId] = useState<string>(suppliers[0]?.id || '');
@@ -290,16 +289,11 @@ export const PurchasePage: React.FC = () => {
 
   // Filtered list of purchase invoices
   const filteredInvoices = useMemo(() => {
-    const todayStr = getBusinessDateKey();
-
     return (supplierInvoices || []).filter((inv) => {
       // 1. Period filter
       const invDateStr = getBusinessDateKey(new Date(inv.date));
       const rawDateStr = typeof inv.date === 'string' ? inv.date : '';
-      if (periodFilter === 'TODAY' && invDateStr !== todayStr && !rawDateStr.startsWith(todayStr)) {
-        return false;
-      }
-      if (periodFilter === 'SPECIFIC_MONTH' && !invDateStr.startsWith(selectedMonth) && !rawDateStr.startsWith(selectedMonth)) {
+      if (!invDateStr.startsWith(selectedMonth) && !rawDateStr.startsWith(selectedMonth)) {
         return false;
       }
 
@@ -332,7 +326,7 @@ export const PurchasePage: React.FC = () => {
 
       return true;
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  }, [supplierInvoices, devices, periodFilter, selectedMonth, selectedSupplierFilter, searchQuery]);
+  }, [supplierInvoices, devices, selectedMonth, selectedSupplierFilter, searchQuery]);
 
   // Scan finder to locate purchase
   const handleScanFinder = () => {
@@ -645,43 +639,11 @@ export const PurchasePage: React.FC = () => {
 
           {/* Period selector & Supplier Filter */}
           <div className="flex flex-wrap items-center gap-1.5 text-xs">
-            <button
-              type="button"
-              onClick={() => setPeriodFilter('TODAY')}
-              className={`shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold uppercase transition-colors ${
-                periodFilter === 'TODAY'
-                  ? 'border-accent bg-accent/10 text-accent shadow-xs'
-                  : 'border-border bg-surface text-fg-muted hover:text-fg'
-              }`}
-            >
-              Сегодня
-            </button>
-
             <MonthPicker
               value={selectedMonth}
-              onOpen={() => setPeriodFilter('SPECIFIC_MONTH')}
-              onChange={(v) => {
-                setSelectedMonth(v);
-                setPeriodFilter('SPECIFIC_MONTH');
-              }}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-semibold transition-colors bg-surface focus:outline-none ${
-                periodFilter === 'SPECIFIC_MONTH'
-                  ? 'border-accent text-accent font-bold shadow-xs'
-                  : 'border-border text-fg-muted hover:border-fg-subtle'
-              }`}
+              onChange={setSelectedMonth}
+              className="px-3 py-1.5 rounded-xl border border-accent text-accent text-xs font-semibold bg-surface focus:outline-none"
             />
-
-            <button
-              type="button"
-              onClick={() => setPeriodFilter('ALL')}
-              className={`shrink-0 px-3 py-1.5 rounded-xl border text-xs font-bold uppercase transition-colors ${
-                periodFilter === 'ALL'
-                  ? 'border-accent bg-accent/10 text-accent shadow-xs'
-                  : 'border-border bg-surface text-fg-muted hover:text-fg'
-              }`}
-            >
-              Все приходы
-            </button>
 
             <select
               value={selectedSupplierFilter}

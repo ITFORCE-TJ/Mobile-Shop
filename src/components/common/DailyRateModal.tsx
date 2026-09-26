@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { DollarSign, Clock } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
@@ -22,6 +22,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
   const [rateInput, setRateInput] = useState<string>('');
   const [error, setError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const savingRef = useRef(false);
 
   useEffect(() => {
     if (isOpen) {
@@ -31,18 +32,23 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
   }, [isOpen, todayRate]);
 
   const handleSubmit = async () => {
-    const val = parseFloat(rateInput.replace(',', '.'));
-    if (isNaN(val) || val <= 0) {
+    if (savingRef.current) return;
+    const val = Number(rateInput.trim().replace(',', '.'));
+    if (!Number.isFinite(val) || val <= 0) {
       setError('Введите корректный курс (например, 9.50)');
       return;
     }
+    savingRef.current = true;
     setIsSaving(true);
-    const res = await setDailyRate(val);
-    setIsSaving(false);
-    if (res.success) {
-      onClose?.();
-    } else {
-      setError(res.message || 'Не удалось установить курс');
+    try {
+      const res = await setDailyRate(val);
+      if (res.success) onClose?.();
+      else setError(res.message || 'Не удалось установить курс');
+    } catch {
+      setError('Не удалось сохранить курс. Проверьте соединение и повторите.');
+    } finally {
+      savingRef.current = false;
+      setIsSaving(false);
     }
   };
 
@@ -76,14 +82,14 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
     <Dialog
       open={isOpen}
       onClose={() => onClose?.()}
-      dismissable={!isMandatory}
+      dismissable={!isMandatory && !isSaving}
       title={isMandatory ? 'Курс доллара на сегодня' : 'Изменение курса доллара'}
       subtitle={isMandatory ? 'Установите курс на новый день' : todayRate?.rate ? `Текущий курс: ${Number(todayRate.rate).toFixed(2)} TJS` : undefined}
       maxWidth="sm"
       footer={
         <>
           {!isMandatory && onClose && (
-            <Button variant="secondary" onClick={onClose}>
+            <Button variant="secondary" disabled={isSaving} onClick={onClose}>
               Отмена
             </Button>
           )}
@@ -94,25 +100,35 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
       }
     >
       <div className="space-y-4">
-        <FormField label="1 USD =" required error={error ?? undefined}>
+        <div className="flex items-center gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-4">
+          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent"><DollarSign className="h-6 w-6" /></div>
+          <div><p className="text-lg font-bold text-fg">1 доллар США</p><p className="text-xs text-fg-muted">Укажите стоимость в сомони</p></div>
+        </div>
+        <FormField label="Курс USD → TJS" required error={error ?? undefined}>
           <div className="relative">
             <input
-              type="number"
-              step="0.01"
-              min="0.1"
+              type="text"
+              inputMode="decimal"
+              disabled={isSaving}
+              aria-invalid={!!error}
               value={rateInput}
               onChange={(e) => {
                 setRateInput(e.target.value);
                 setError(null);
               }}
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
+              onFocus={(e) => e.target.select()}
               autoFocus={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
               placeholder="например, 9.50"
-              className="w-full h-14 rounded-lg bg-bg border border-accent/50 px-4 text-xl font-bold text-accent focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+              className="w-full h-16 rounded-xl bg-bg border border-accent/50 pl-4 pr-16 text-3xl font-bold tabular-nums text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-fg-subtle uppercase">TJS</span>
           </div>
         </FormField>
+        <div className="flex items-start gap-2 rounded-xl bg-bg p-3 text-xs leading-relaxed text-fg-muted">
+          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <p>После сохранения окно не появится до следующего дня. Изменить курс можно в настройках.</p>
+        </div>
       </div>
     </Dialog>
   );

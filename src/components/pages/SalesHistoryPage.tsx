@@ -42,22 +42,10 @@ export const SalesHistoryPage: React.FC = () => {
     selectedStoreId: globalSelectedStoreId
   } = useAppFields('currentUser', 'sales', 'fetchSalesRange', 'stores', 'openScanner', 'setActivePage', 'processRefund', 'isInitialLoading', 'selectedStoreId');
 
-  // Defaults to "all" for ADMIN/PARTNER or "today"
-  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'SPECIFIC_MONTH' | 'ALL'>('ALL');
+  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'SPECIFIC_MONTH'>('TODAY');
   const [selectedMonth, setSelectedMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
-
   const retailStores = useMemo(() => stores.filter((s) => !s.isMainWarehouse), [stores]);
 
-  // Defaults to whichever store is currently active on the POS Terminal page, or 'all' for admin/partner
-  const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
-    if (currentUser?.storeId) {
-      return currentUser.storeId;
-    }
-    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
-      return globalSelectedStoreId;
-    }
-    return 'all';
-  });
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedSaleId, setSelectedSaleId] = useState<string | null>(null);
   const [dialogView, setDialogView] = useState<DialogView>('details');
@@ -69,7 +57,7 @@ export const SalesHistoryPage: React.FC = () => {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
 
-  const activeStoreId = currentUser?.role === 'SELLER' ? (currentUser.storeId || '') : selectedStoreId;
+  const activeStoreId = currentUser?.role === 'SELLER' ? (currentUser.storeId || '') : (retailStores.some(s => s.id === globalSelectedStoreId) ? globalSelectedStoreId : (retailStores[0]?.id || ''));
 
   // Always fetch for the active scope so sales history is never stale or empty
   useEffect(() => {
@@ -221,11 +209,10 @@ export const SalesHistoryPage: React.FC = () => {
           placeholder="Номер чека / IMEI / модель / продавец..."
         />
 
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="flex items-center gap-1.5 min-w-0 w-full">
             <FilterPillGroup
               options={[
-                { value: 'ALL', label: 'Все' },
                 { value: 'TODAY', label: 'Сегодня' },
               ]}
               value={periodFilter === 'SPECIFIC_MONTH' ? '' : periodFilter}
@@ -234,6 +221,7 @@ export const SalesHistoryPage: React.FC = () => {
 
             <MonthPicker
               value={selectedMonth}
+              onOpen={() => setPeriodFilter('SPECIFIC_MONTH')}
               onChange={(v) => {
                 setSelectedMonth(v);
                 setPeriodFilter('SPECIFIC_MONTH');
@@ -243,21 +231,10 @@ export const SalesHistoryPage: React.FC = () => {
               }`}
             />
 
-            {currentUser?.role !== 'SELLER' && retailStores.length > 0 ? (
-              <Select
-                value={activeStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="h-9 px-3 pr-8 text-xs font-semibold w-auto shrink-0 cursor-pointer"
-              >
-                <option value="all">Все магазины</option>
-                {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-              </Select>
-            ) : (
-              <span className="h-9 px-3 rounded-lg border border-border bg-surface text-xs font-semibold text-fg-muted flex items-center gap-1.5 shrink-0">
-                <Store className="w-3.5 h-3.5 text-accent shrink-0" />
-                <span>{stores.find(s => s.id === activeStoreId)?.name || currentUser?.storeName || 'Все магазины'}</span>
-              </span>
-            )}
+            <span className="h-9 px-2 rounded-lg border border-border bg-surface text-xs font-semibold text-fg-muted flex items-center gap-1.5 min-w-0 flex-1" title={stores.find(s => s.id === activeStoreId)?.name}>
+              <Store className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="truncate">{stores.find(s => s.id === activeStoreId)?.name || currentUser?.storeName || 'Магазин не выбран'}</span>
+            </span>
           </div>
         </div>
       </div>
