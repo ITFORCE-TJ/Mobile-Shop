@@ -1302,9 +1302,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const ownerInvestment = async (ownerId: string, amountUsd: number, destination: string, note?: string): Promise<ActionResult> => {
     try {
-      await apiClient(`/owners/${ownerId}/investment`, { method: 'POST', body: JSON.stringify({ amountUsd, destination, note }) });
+      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/investment`, { method: 'POST', body: JSON.stringify({ amountUsd, destination, note }) });
+      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
       markLocalMutation(['owners', 'ownerTransactions', 'stores']);
-      await refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
+      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
       return { success: true };
     } catch (err) {
       return { success: false, message: errorMessage(err, 'Нет прав') };
@@ -1313,9 +1314,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const ownerCapitalWithdrawal = async (ownerId: string, amountUsd: number, source: string, note?: string): Promise<ActionResult> => {
     try {
-      await apiClient(`/owners/${ownerId}/withdrawal`, { method: 'POST', body: JSON.stringify({ amountUsd, source, note }) });
+      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/withdrawal`, { method: 'POST', body: JSON.stringify({ amountUsd, source, note }) });
+      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
       markLocalMutation(['owners', 'ownerTransactions', 'stores']);
-      await refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
+      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
       return { success: true };
     } catch (err) {
       return { success: false, message: errorMessage(err, 'Сумма изъятия превышает текущий капитал') };
@@ -1324,9 +1326,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const ownerProfitPayout = async (ownerId: string, amountUsd: number, source: string, note?: string): Promise<ActionResult> => {
     try {
-      await apiClient(`/owners/${ownerId}/payout`, { method: 'POST', body: JSON.stringify({ amountUsd, source, note }) });
+      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/payout`, { method: 'POST', body: JSON.stringify({ amountUsd, source, note }) });
+      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
       markLocalMutation(['owners', 'ownerTransactions', 'stores']);
-      await refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
+      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
       return { success: true };
     } catch (err) {
       return { success: false, message: errorMessage(err, 'Сумма выплаты превышает доступную прибыль') };
@@ -1335,9 +1338,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const ownerReinvest = async (ownerId: string, amountUsd: number, note?: string): Promise<ActionResult> => {
     try {
-      await apiClient(`/owners/${ownerId}/reinvest`, { method: 'POST', body: JSON.stringify({ amountUsd, note }) });
+      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/reinvest`, { method: 'POST', body: JSON.stringify({ amountUsd, note }) });
+      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
       markLocalMutation(['owners', 'ownerTransactions']);
-      await refreshAfterMutation([fetchOwners(), fetchOwnerTransactions()]);
+      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions()]);
       return { success: true };
     } catch (err) {
       return { success: false, message: errorMessage(err, 'Сумма реинвестирования превышает доступную прибыль') };

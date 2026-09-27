@@ -3,7 +3,7 @@ import { webcrypto } from 'node:crypto';
 const auth = vi.hoisted(() => ({ token: 'test-token', currentUser: { id: 'test-user' }, logout: vi.fn() }));
 vi.mock('../stores/useAuthStore', () => ({ useAuthStore: { getState: () => auth } }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }));
-import { apiClient } from './client';
+import { apiClient, REQUEST_TIMEOUT_MS } from './client';
 
 describe('mutation retry protocol', () => {
   beforeEach(() => {
@@ -13,7 +13,33 @@ describe('mutation retry protocol', () => {
     vi.stubGlobal('sessionStorage', { getItem: (k: string) => storage.get(k), setItem: (k: string, v: string) => storage.set(k, v), removeItem: (k: string) => storage.delete(k) });
     vi.stubGlobal('window', { dispatchEvent: vi.fn() });
   });
-  afterEach(() => vi.unstubAllGlobals());
+  afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); });
+  it('stops waiting for a stalled read', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('fetch', vi.fn((_url, options) => new Promise((_resolve, reject) => {
+      options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')));
+    })));
+    const result = expect(apiClient('/owners')).rejects.toThrow('Сервер не ответил вовремя');
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await result;
+  });
+  it('releases a timed-out mutation and preserves its retry key', async () => {
+    vi.useFakeTimers();
+    vi.stubGlobal('crypto', { getRandomValues: webcrypto.getRandomValues.bind(webcrypto) });
+    const keys: string[] = [];
+    vi.stubGlobal('fetch', vi.fn((_url, options) => {
+      keys.push(new Headers(options.headers).get('Idempotency-Key')!);
+      if (keys.length > 1) return Promise.resolve(new Response('{"id":"saved"}'));
+      return new Promise((_resolve, reject) => options.signal.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError'))));
+    }));
+    const options = { method: 'POST', body: '{"amountUsd":3}' };
+    const result = expect(apiClient('/owners/test/investment', options)).rejects.toThrow('Результат операции пока неизвестен');
+    await vi.advanceTimersByTimeAsync(REQUEST_TIMEOUT_MS);
+    await result;
+    await expect(apiClient('/owners/test/investment', options)).resolves.toEqual({ id: 'saved' });
+    expect(keys).toHaveLength(2);
+    expect(keys[0]).toBe(keys[1]);
+  });
   it('coalesces simultaneous submissions and sends an idempotency key', async () => {
     const fetcher = vi.fn(async () => new Response(JSON.stringify({ id: 'one' })));
     vi.stubGlobal('fetch', fetcher);

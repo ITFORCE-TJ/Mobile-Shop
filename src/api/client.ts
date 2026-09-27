@@ -5,6 +5,7 @@ import { requireNativeUrl } from '../services/nativeConfig';
 const API_BASE_URL = import.meta.env.VITE_API_URL || '/api';
 const pendingMutations = new Map<string, Promise<unknown>>();
 const pendingKeys = new Map<string, string>();
+export const REQUEST_TIMEOUT_MS = 45_000;
 
 export async function apiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const mutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase()) && !endpoint.startsWith('/auth/');
@@ -56,10 +57,21 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ? `${API_BASE_URL.replace(/\/$/, '')}${cleanEndpoint}`
     : `${API_BASE_URL}${cleanEndpoint}`;
 
+  const controller = new AbortController();
+  let timedOut = false;
+  const cancel = () => controller.abort();
+  if (options.signal?.aborted) cancel();
+  else options.signal?.addEventListener('abort', cancel, { once: true });
+  const timeout = setTimeout(() => {
+    timedOut = true;
+    controller.abort();
+  }, REQUEST_TIMEOUT_MS);
+
   try {
     const response = await fetch(url, {
       ...options,
       headers,
+      signal: controller.signal,
     });
 
     if (token !== useAuthStore.getState().token) {
@@ -79,9 +91,18 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
 
     return await response.json();
   } catch (err: any) {
+    if (timedOut) {
+      const mutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase());
+      throw new Error(mutation
+        ? 'Сервер не ответил вовремя. Результат операции пока неизвестен. Проверьте историю перед новой операцией; повтор с теми же данными защищён от дублирования.'
+        : 'Сервер не ответил вовремя. Не удалось обновить данные.');
+    }
     if (err.name === 'TypeError' || err.message?.includes('Failed to fetch')) {
       throw new Error('Сервер API недоступен. Запустите бэкенд: npm run server');
     }
     throw err;
+  } finally {
+    clearTimeout(timeout);
+    options.signal?.removeEventListener('abort', cancel);
   }
 }
