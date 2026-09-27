@@ -45,7 +45,7 @@ export const Combobox: React.FC<ComboboxProps> = ({ value, onChange, options, pl
   const filtered = query ? options.filter((o) => o.toLowerCase().includes(query)) : options;
 
   return (
-    <div className="relative" ref={containerRef}>
+    <div className="app-combobox relative" ref={containerRef}>
       <input
         type="text"
         required={required}

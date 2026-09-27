@@ -396,7 +396,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                 <div className="flex items-center justify-between pb-1.5 border-b border-border">
                   <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
                     <Users className="w-3.5 h-3.5 text-accent" />
-                    <span>Партнёры: текущие доли и начисленный остаток</span>
+                    <span>Партнёры: начисленный остаток</span>
                   </h4>
                   <button
                     type="button"
@@ -411,13 +411,12 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                 </div>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-0.5">
                   {owners.map((owner) => {
-                    const percent = owner.profitSharePercent || 0;
                     return (
                       <div key={owner.id} className="p-2.5 rounded-lg bg-surface-raised border border-border flex items-center justify-between gap-2">
                         <div className="min-w-0">
-                          <p className="text-xs font-bold text-fg-muted truncate">{owner.name} ({percent}%)</p>
+                          <p className="text-xs font-bold text-fg-muted truncate">{owner.name}</p>
                           <p className="text-[11px] text-fg-subtle truncate">
-                            Текущая доля; начисления учитывают долю на дату операции
+                            Начисления по операциям
                           </p>
                         </div>
                         <div className="text-right shrink-0">
@@ -477,7 +476,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                         <th className="py-2 px-3 text-right">Выручка</th>
                         <th className="py-2 px-3 text-right">Себестоимость</th>
                         <th className="py-2 px-3 text-right">Прибыль</th>
-                        <th className="py-2 px-3 text-right">Маржа</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border">
@@ -488,7 +486,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           <td className="py-2 px-3 text-right text-fg-muted">{usd(m.revenueUsd)}</td>
                           <td className="py-2 px-3 text-right text-fg-subtle">{usd(m.cogsUsd)}</td>
                           <td className={`py-2 px-3 text-right font-bold ${m.profitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(m.profitUsd)}</td>
-                          <td className="py-2 px-3 text-right text-fg-muted">{m.revenueUsd > 0 ? ((m.profitUsd / m.revenueUsd) * 100).toFixed(1) : '0.0'}%</td>
                         </tr>
                       ))}
                     </tbody>
@@ -503,7 +500,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
 
             {data.storeBreakdown.map((store) => {
               const expanded = expandedStoreId === store.storeId;
-              const margin = store.revenueUsd > 0 ? ((store.profitUsd / store.revenueUsd) * 100).toFixed(1) : '0.0';
               return (
                 <div key={store.storeId} className="rounded-xl bg-surface border border-border overflow-hidden">
                   <button
@@ -525,7 +521,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                   <div className="px-3.5 pb-3.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2.5">
                     <Metric label="Выручка" value={usd(store.revenueUsd)} sub={tjs(store.revenueTjs)} />
                     <Metric label="Себестоимость" value={usd(store.cogsUsd)} sub={`${store.unitsSold} шт продано`} />
-                    <Metric label="Прибыль с продаж" value={signedUsd(store.profitUsd)} sub={`маржа ${margin}%`} tone={store.profitUsd >= 0 ? 'accent' : 'danger'} />
+                    <Metric label="Прибыль с продаж" value={signedUsd(store.profitUsd)} tone={store.profitUsd >= 0 ? 'accent' : 'danger'} />
                     <Metric
                       label="Расходы"
                       value={`−${usd(store.expensesUsd)}`}
