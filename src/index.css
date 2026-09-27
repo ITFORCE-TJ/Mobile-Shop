@@ -384,6 +384,15 @@ body {
   padding-bottom: max(1rem, var(--sa-bottom));
 }
 
+/* Keep the navigation's space, but hide all of it (including the raised POS)
+   while either a shared dialog or a legacy page modal is open. */
+html[data-modal-open] .app-bottom-nav,
+html.native-scanner-active .app-bottom-nav,
+body:has(.fixed.inset-0.z-50) .app-bottom-nav {
+  visibility: hidden;
+  pointer-events: none;
+}
+
 /* Consistent touch targets in daily operations; compact desktop tables stay intact. */
 .work-screen :is(input:not([type="checkbox"]):not([type="radio"]), select),
 .dialog-panel :is(input:not([type="checkbox"]):not([type="radio"]), select) {

@@ -26,7 +26,8 @@ export function isValidImei(value: string): boolean {
 export function extractImeis(raw: string): string[] {
   const compact = raw.trim().replace(/[\s-]/g, '');
   if (/^\d{15}$/.test(compact)) return isValidImei(compact) ? [compact] : [];
-  const found = raw.match(/(?<!\d)\d{15}(?!\d)/g) ?? [];
+  // Avoid lookbehind: iOS 15.x–16.3 cannot parse it, even before scanning starts.
+  const found = (raw.match(/\d+/g) ?? []).filter(value => value.length === 15);
   return [...new Set(found.filter(isValidImei))];
 }
 

@@ -68,6 +68,7 @@ export const ScannerModal: React.FC = () => {
   const { isScannerOpen, scannerCallback, closeScanner } = useAppFields('isScannerOpen', 'scannerCallback', 'closeScanner');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
+  const stopCameraRef = useRef<() => void>(() => {});
   const pendingScanRef = useRef({ code: '', matches: 0, seenAt: 0 });
   const scanLockedRef = useRef(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -85,6 +86,8 @@ export const ScannerModal: React.FC = () => {
     const trimmed = code.trim();
     if (!trimmed || scanLockedRef.current) return;
     scanLockedRef.current = true;
+    // Release the camera before delivering the code or waiting for React cleanup.
+    stopCameraRef.current();
     soundEffects.playAddToCartSuccess();
     try {
       scannerCallback?.(trimmed);
@@ -181,6 +184,17 @@ export const ScannerModal: React.FC = () => {
     let cancelled = false;
     let timer = 0;
     let stream: MediaStream | null = null;
+    const stopCamera = () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      stream?.getTracks().forEach((track) => track.stop());
+      if (trackRef.current && stream?.getVideoTracks().includes(trackRef.current)) trackRef.current = null;
+      if (stream && videoRef.current?.srcObject === stream) {
+        videoRef.current.pause();
+        videoRef.current.srcObject = null;
+      }
+    };
+    stopCameraRef.current = stopCamera;
     scanLockedRef.current = false;
     pendingScanRef.current = { code: '', matches: 0, seenAt: 0 };
 
@@ -238,7 +252,7 @@ export const ScannerModal: React.FC = () => {
     const startPromise = cameraRelease.then(async () => {
       if (cancelled) return;
       stream = await openCamera();
-      if (cancelled) return;
+      if (cancelled) { stopCamera(); return; }
       const track = stream.getVideoTracks()[0] ?? null;
       trackRef.current = track;
       const video = videoRef.current;
@@ -283,13 +297,8 @@ export const ScannerModal: React.FC = () => {
     });
 
     return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-      cameraRelease = startPromise.then(() => {
-        stream?.getTracks().forEach((track) => track.stop());
-        if (trackRef.current && stream?.getVideoTracks().includes(trackRef.current)) trackRef.current = null;
-        if (videoRef.current?.srcObject === stream) videoRef.current.srcObject = null;
-      });
+      stopCamera();
+      cameraRelease = startPromise.then(stopCamera);
     };
   }, [isScannerOpen]);
 
@@ -298,6 +307,7 @@ export const ScannerModal: React.FC = () => {
       open={isScannerOpen}
       onClose={closeScanner}
       title="Сканирование IMEI"
+      subtitle="Наведите на IMEI — после распознавания камера закроется"
       maxWidth="sm"
     >
       <div className="space-y-3">
