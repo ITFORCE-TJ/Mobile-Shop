@@ -110,6 +110,10 @@ export const Drawer: React.FC = () => {
   if (!drawerOpen) return null;
 
   const userRole = currentUser?.role || 'SELLER';
+  const bottomNavPages: PageId[] = [
+    'INVENTORY', 'SALES_HISTORY', 'SALE',
+    userRole === 'ADMIN' || userRole === 'PARTNER' ? 'PURCHASE' : 'EXCHANGE',
+  ];
   // `resolved` tracks whether an actionable notification has been handled, not whether
   // the user has seen it — informational notifications are created already resolved.
   const unreadNotifs = notifications.filter(n => !n.read).length;
@@ -149,7 +153,7 @@ export const Drawer: React.FC = () => {
       {/* Vertical List of Menu Items */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
         {NAV_GROUPS.map((group, gIdx) => {
-          const visibleItems = group.items.filter(item => item.roles.includes(userRole));
+          const visibleItems = group.items.filter(item => item.roles.includes(userRole) && !bottomNavPages.includes(item.id));
           if (visibleItems.length === 0) return null;
 
           return (
