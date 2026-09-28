@@ -90,6 +90,10 @@
     textarea {
       font-size: 16px !important;
     }
+    select,
+    .app-combobox input {
+      font-size: var(--choice-font-size) !important;
+    }
   }
 
   /* Simple, flat design overrides (ultra-minimal Loyverse POS UI) */
@@ -395,7 +399,7 @@ body:has(.fixed.inset-0.z-50) .app-bottom-nav {
 
 /* Consistent touch targets in daily operations; compact desktop tables stay intact. */
 :root {
-  --choice-font-size: 16px;
+  --choice-font-size: 12px;
 }
 
 /* Native selects and editable suggestion lists share one size across all pages.

@@ -19,7 +19,6 @@ import {
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
-import { Select } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
 import { Badge } from '../ui/Badge';
@@ -266,31 +265,41 @@ export const SalePage: React.FC = () => {
       <StatusBanner message={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
 
       {/* Filter bar */}
-      <div className="p-3 border-b border-border bg-bg space-y-2.5 shrink-0">
+      <div className="p-2.5 md:p-3 border-b border-border bg-bg space-y-2 shrink-0">
         <div className="flex items-center justify-between gap-2">
-          {isAdmin ? (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-fg-muted shrink-0">
-                <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
-                Точка:
-              </span>
-              <Select value={effectiveStoreId} onChange={(e) => setSelectedStoreId(e.target.value)} className="w-auto min-w-36 py-1 h-8 text-xs">
-                {selectableStores.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </Select>
+          <div className="flex items-center gap-1.5 min-w-0">
+            {/* Block 1: Label badge */}
+            <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-surface-raised border border-border text-xs font-medium text-fg-muted shrink-0 shadow-2xs box-border">
+              <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span>Точка:</span>
             </div>
-          ) : (
-            <div className="flex items-center gap-1.5 min-w-0">
-              <span className="flex items-center gap-1.5 text-xs font-medium text-fg-muted shrink-0">
-                <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
-                Точка:
-              </span>
-              <span className="text-xs font-semibold text-accent px-2 py-0.5 rounded bg-surface-raised border border-border truncate">
+
+            {/* Block 2: Store selection / display */}
+            {isAdmin ? (
+              <div className="relative inline-flex items-center h-8 rounded-lg bg-surface border border-border hover:border-accent/40 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent transition-colors shadow-2xs box-border min-w-0">
+                <select
+                  value={effectiveStoreId}
+                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  className="h-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 cursor-pointer pl-2.5 pr-7 text-xs font-semibold text-fg-muted appearance-none max-w-52 sm:max-w-64 truncate py-0 leading-none m-0"
+                >
+                  {selectableStores.map(s => (
+                    <option key={s.id} value={s.id} className="bg-surface text-fg-muted">
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle pointer-events-none" />
+              </div>
+            ) : (
+              <div className="inline-flex items-center h-8 px-2.5 rounded-lg bg-surface border border-border text-xs font-semibold text-accent truncate shadow-2xs box-border max-w-52 sm:max-w-64">
                 {activeStoreName}
-              </span>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
+
+          <span className="text-[11px] text-fg-subtle tabular-nums font-medium">
+            В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
+          </span>
         </div>
 
         <SearchBar
