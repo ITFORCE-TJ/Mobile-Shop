@@ -93,7 +93,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
               Отмена
             </Button>
           )}
-          <Button variant="primary" fullWidth leftIcon={DollarSign} loading={isSaving} onClick={handleSubmit}>
+          <Button variant="primary" fullWidth loading={isSaving} onClick={handleSubmit}>
             Сохранить курс
           </Button>
         </>
@@ -102,7 +102,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
       <div className="space-y-4">
         <div className="flex items-center gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-4">
           <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent"><DollarSign className="h-6 w-6" /></div>
-          <div><p className="text-lg font-bold text-fg">1 доллар США</p><p className="text-xs text-fg-muted">Укажите стоимость в сомони</p></div>
+          <div><p className="text-lg font-bold text-fg">1 USD → TJS</p><p className="text-xs text-fg-muted">Стоимость одного доллара в сомони</p></div>
         </div>
         <FormField label="Курс USD → TJS" required error={error ?? undefined}>
           <div className="relative">
@@ -119,7 +119,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               onFocus={(e) => e.target.select()}
               autoFocus={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
-              placeholder="например, 9.50"
+              placeholder="9.50"
               className="w-full h-16 rounded-xl bg-bg border border-accent/50 pl-4 pr-16 text-3xl font-bold tabular-nums text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-fg-subtle uppercase">TJS</span>
@@ -127,7 +127,7 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
         </FormField>
         <div className="flex items-start gap-2 rounded-xl bg-bg p-3 text-xs leading-relaxed text-fg-muted">
           <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <p>После сохранения окно не появится до следующего дня. Изменить курс можно в настройках.</p>
+          <p>Курс на сегодня. После сохранения изменить его можно в настройках.</p>
         </div>
       </div>
     </Dialog>

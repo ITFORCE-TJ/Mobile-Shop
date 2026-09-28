@@ -1,3 +1,4 @@
+import { ActionMenu } from '../ui/ActionMenu';
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { decimal, moneyNumber } from '../../utils/money';
 import { getBusinessDateKey } from '../../utils/businessDate';
@@ -492,7 +493,7 @@ export const EmployeesPage: React.FC = () => {
     return (
             <div
               key={u.id}
-              className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 shadow-xs relative overflow-hidden group ${
+              className={`p-5 rounded-2xl border transition-colors flex flex-col justify-between space-y-3 shadow-xs relative overflow-hidden group ${
                 u.isActive 
                   ? 'bg-surface border-border hover:border-accent/40 shadow-xs' 
                   : 'bg-surface/60 border-border/60 opacity-75'
@@ -510,51 +511,33 @@ export const EmployeesPage: React.FC = () => {
                   </div>
 
                   <div className="min-w-0">
-                    <h4 className="text-sm font-bold text-fg-muted truncate group-hover:text-accent transition-colors">
+                    <h4 className="text-base font-semibold text-fg truncate">
                       {u.name}
                     </h4>
-                    <span className={`inline-block text-[10px] px-2 py-0.5 rounded font-medium border mt-1 ${roleConf.bg} ${roleConf.color} ${roleConf.border}`}>
+                    <span className={`inline-block text-xs px-2 py-0.5 rounded font-medium border mt-1 ${roleConf.bg} ${roleConf.color} ${roleConf.border}`}>
                       {roleConf.label}
                     </span>
                   </div>
                 </div>
 
-                <div className="flex items-center space-x-1 shrink-0">
-                  <button
-                    hidden={currentUser?.role !== 'ADMIN'}
-                    onClick={() => handleOpenEdit(u)}
-                    className="p-2 rounded-xl bg-surface-raised hover:bg-surface text-fg-subtle hover:text-fg-muted border border-border transition-colors"
-                    title="Редактировать сотрудника"
-                  >
-                    <Edit2 className="w-3.5 h-3.5" />
-                  </button>
-                  {currentUser?.role === 'ADMIN' && currentUser.id !== u.id && (
-                    <button
-                      onClick={() => handleDeleteUserClick(u)}
-                      className="p-2 rounded-xl bg-surface-raised hover:bg-danger/20 text-fg-subtle hover:text-danger border border-border transition-colors"
-                      title="Удалить сотрудника"
-                    >
-                      <Trash2 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                </div>
+                {currentUser?.role === 'ADMIN' && (
+                  <ActionMenu label={`Действия: ${u.name}`} actions={[
+                    { label: 'Редактировать сотрудника', icon: Edit2, onSelect: () => handleOpenEdit(u) },
+                    ...(currentUser.id !== u.id ? [{ label: 'Удалить сотрудника', icon: Trash2, danger: true, onSelect: () => handleDeleteUserClick(u) }] : []),
+                  ]} />
+                )}
               </div>
 
               {/* Card Details: Login, Password, PIN, Store, Status */}
-              <div className="space-y-2 text-xs bg-bg p-3 rounded-lg border border-border">
+              <div className="space-y-3 text-xs bg-bg p-3.5 rounded-xl">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-fg-subtle uppercase">ЛОГИН:</span>
-                  <strong className="text-fg-muted font-mono font-semibold">{u.login}</strong>
+                  <span className="text-xs text-fg-subtle ">Логин</span>
+                  <strong className="text-fg-muted tabular-nums font-semibold">{u.login}</strong>
                 </div>
 
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-fg-subtle uppercase">ПАРОЛЬ ВХОДА:</span>
-                  <strong className="text-fg-muted text-xs font-mono">••••••••</strong>
-                </div>
-
-                <div className="flex items-center justify-between">
-                  <span className="text-[10px] text-fg-subtle uppercase">ТОЧКА ПРОДАЖИ:</span>
-                  <span className="text-fg-subtle font-mono text-[11px] truncate max-w-35 text-right">
+                  <span className="text-xs text-fg-subtle ">Магазин</span>
+                  <span className="text-fg-subtle tabular-nums text-xs truncate max-w-35 text-right">
                     {(() => {
                       const resolvedStoreName = u.storeName || (u.storeId ? stores.find(s => s.id === u.storeId)?.name : undefined);
                       if (resolvedStoreName) {
@@ -581,26 +564,26 @@ export const EmployeesPage: React.FC = () => {
                   const commPct = u.salesCommissionPercent || 0;
 
                   return (
-                    <div className="pt-2 border-t border-border space-y-1.5 text-[11px]">
+                    <div className="pt-2 border-t border-border space-y-1.5 text-xs">
                       {u.role === 'SELLER' && (
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-fg-subtle">ОКЛАД / КОМИССИЯ:</span>
-                          <span className="font-mono text-accent font-semibold">
+                          <span className="text-xs text-fg-subtle">Оклад / комиссия</span>
+                          <span className="tabular-nums text-accent font-semibold">
                             {baseSal > 0 ? `${baseSal.toLocaleString()} TJS` : 'Без оклада'} {commPct > 0 ? `(+${commPct}%)` : ''}
                           </span>
                         </div>
                       )}
                       {u.role === 'SELLER' && (
                         <div className="flex items-center justify-between">
-                          <span className="text-[10px] text-fg-subtle">ПРОДАЖИ:</span>
-                          <span className="font-mono text-fg-muted font-bold">
+                          <span className="text-xs text-fg-subtle">Продажи</span>
+                          <span className="tabular-nums text-fg-muted font-bold">
                             {salesRevTjs.toLocaleString()} TJS ({unitsSold} шт)
                           </span>
                         </div>
                       )}
                       <div className="flex items-center justify-between">
-                        <span className="text-[10px] text-fg-subtle">АВАНСЫ / ВЫЧЕТЫ:</span>
-                        <span className={`font-mono font-bold ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
+                        <span className="text-xs text-fg-subtle">Авансы / вычеты</span>
+                        <span className={`tabular-nums font-bold ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
                           {totalAdvances.toLocaleString()} TJS
                         </span>
                       </div>
@@ -609,14 +592,14 @@ export const EmployeesPage: React.FC = () => {
                 })()}
 
                 <div className="flex items-center justify-between pt-1 border-t border-border">
-                  <span className="text-[10px] text-fg-subtle uppercase">СТАТУС:</span>
+                  <span className="text-xs text-fg-subtle ">Статус</span>
                   {u.isActive ? (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20 font-medium flex items-center space-x-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                    <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20 font-medium flex items-center space-x-1">
+                      <span className="w-1.5 h-1.5 rounded-full bg-accent" />
                       <span>Активен</span>
                     </span>
                   ) : (
-                    <span className="text-[10px] px-2 py-0.5 rounded bg-danger/15 text-danger border border-danger/30 font-medium">
+                    <span className="text-xs px-2 py-0.5 rounded bg-danger/15 text-danger border border-danger/30 font-medium">
                       Заблокирован
                     </span>
                   )}
@@ -625,7 +608,7 @@ export const EmployeesPage: React.FC = () => {
 
               {/* Action Buttons: Advance, Salary Payout, Financial History */}
               <div className="space-y-1.5 pt-1">
-                <div className="grid grid-cols-3 gap-1">
+                <div className="grid grid-cols-3 gap-2">
                   <button
                     type="button"
                     onClick={() => {
@@ -633,10 +616,10 @@ export const EmployeesPage: React.FC = () => {
                       setAdvanceAmountInput('');
                       setAdvanceNoteInput('');
                     }}
-                    className="py-1.5 px-1.5 rounded-lg bg-warning/10 hover:bg-warning/20 text-warning border border-warning/30 text-[10px] font-bold flex items-center justify-center space-x-1 transition-colors"
+                    className="min-h-11 py-2 px-2 rounded-xl bg-surface hover:bg-surface-raised text-fg-muted border border-border text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
                   >
                     <Plus className="w-3 h-3" />
-                    <span>АВАНС</span>
+                    <span>Аванс</span>
                   </button>
                   <button
                     type="button"
@@ -654,73 +637,54 @@ export const EmployeesPage: React.FC = () => {
                       setPayoutNote('');
                       setDeductAdvancesChecked(true);
                     }}
-                    className="py-1.5 px-1.5 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/30 text-[10px] font-bold flex items-center justify-center space-x-1 transition-colors"
+                    className="min-h-11 py-2 px-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent border border-accent/20 text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
                   >
                     <DollarSign className="w-3 h-3" />
-                    <span>ЗАРПЛАТА</span>
+                    <span>Зарплата</span>
                   </button>
                   <button
                     type="button"
                     onClick={() => setFinancialHistoryUser(u)}
-                    className="py-1.5 px-1.5 rounded-lg bg-info/10 hover:bg-info/20 text-info border border-info/30 text-[10px] font-bold flex items-center justify-center space-x-1 transition-colors"
+                    className="min-h-11 py-2 px-2 rounded-xl bg-surface hover:bg-surface-raised text-fg-muted border border-border text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
                     title="Финансовая история выплат и авансов"
                   >
                     <Receipt className="w-3 h-3" />
-                    <span>ИСТОРИЯ</span>
+                    <span>История</span>
                   </button>
                 </div>
 
-                <div className="flex space-x-1.5">
-                  <button
-                    hidden={currentUser?.role !== 'ADMIN'}
-                    onClick={() => handleOpenEdit(u)}
-                    className="flex-1 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-[11px] font-bold text-fg-muted hover:text-accent flex items-center justify-center space-x-1 transition-colors"
-                  >
-                    <Edit2 className="w-3 h-3 text-accent" />
-                    <span>ИЗМЕНИТЬ</span>
-                  </button>
-                  {currentUser?.role === 'ADMIN' && currentUser.id !== u.id && (
-                    <button
-                      onClick={() => handleDeleteUserClick(u)}
-                      className="py-1.5 px-2.5 rounded-lg bg-danger/10 hover:bg-danger/20 border border-danger/30 text-[11px] text-danger hover:text-danger flex items-center justify-center transition-colors"
-                      title="Удалить сотрудника"
-                    >
-                      <Trash2 className="w-3 h-3" />
-                    </button>
-                  )}
-                </div>
               </div>
             </div>
     );
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       {/* Header Bar */}
-      <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
+      <div className="p-4 md:px-6 border-b border-border bg-surface flex flex-wrap gap-3 items-center justify-between shrink-0">
         <div>
-          <h3 className="text-xs sm:text-sm font-bold text-fg-muted flex items-center space-x-2 uppercase">
+          <h3 className="text-xs sm:text-sm font-bold text-fg-muted flex items-center space-x-2 ">
             <Users className="w-4 h-4 text-accent" />
             <span>Сотрудники и оклады</span>
           </h3>
         </div>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
           <button
             onClick={() => setIsPayrollReportModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-warning/10 hover:bg-warning/20 border border-warning/30 text-warning text-xs font-bold transition-colors"
+            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-surface hover:bg-surface-raised border border-border text-fg-muted text-xs font-semibold transition-colors"
             title="Ежемесячная ведомость зарплат продавцов"
           >
-            <Briefcase className="w-4 h-4 text-warning" />
-            <span className="hidden md:inline">ЗАРПЛАТНЫЙ ОТЧЕТ ПРОДАВЦОВ</span>
+            <Briefcase className="w-4 h-4" />
+            <span>Зарплатный отчёт</span>
           </button>
 
           <button
             hidden={currentUser?.role !== 'ADMIN'} onClick={handleOpenAdd}
-            className="px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase tracking-wider flex items-center space-x-1.5 transition-colors shadow-xs shrink-0"
+            className="px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg   flex items-center space-x-1.5 transition-colors shadow-xs shrink-0"
           >
             <Plus className="w-4 h-4" />
-            <span className="hidden sm:inline">ДОБАВИТЬ СОТРУДНИКА</span>
+            <span>Добавить сотрудника</span>
           </button>
         </div>
       </div>
@@ -735,30 +699,30 @@ export const EmployeesPage: React.FC = () => {
       )}
 
       {/* Users List: management (admin/partner) first, then sellers */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 bg-bg space-y-5">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg space-y-6">
         <div>
-          <h4 className="text-[11px] font-bold text-fg-subtle uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+          <h4 className="text-xs font-bold text-fg-subtle   mb-2.5 flex items-center gap-1.5">
             <Shield className="w-3.5 h-3.5 text-accent" />
             <span>Руководство ({managementUsers.length})</span>
           </h4>
           {managementUsers.length === 0 ? (
             <p className="text-xs text-fg-subtle">Нет сотрудников с этой ролью</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 auto-rows-max gap-3.5 sm:gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
               {managementUsers.map(renderUserCard)}
             </div>
           )}
         </div>
 
         <div>
-          <h4 className="text-[11px] font-bold text-fg-subtle uppercase tracking-wider mb-2.5 flex items-center gap-1.5">
+          <h4 className="text-xs font-bold text-fg-subtle   mb-2.5 flex items-center gap-1.5">
             <Users className="w-3.5 h-3.5 text-accent" />
             <span>Продавцы ({sellerUsers.length})</span>
           </h4>
           {sellerUsers.length === 0 ? (
             <p className="text-xs text-fg-subtle">Нет продавцов</p>
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 auto-rows-max gap-3.5 sm:gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
               {sellerUsers.map(renderUserCard)}
             </div>
           )}

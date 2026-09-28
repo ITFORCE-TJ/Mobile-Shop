@@ -421,6 +421,10 @@ app.use((error: any, req: Request, res: Response, _next: NextFunction) => {
   // every service for user-facing Russian messages) are safe to forward as-is below.
   const isPrismaError = error && typeof error === 'object' && typeof error.name === 'string' && error.name.startsWith('Prisma');
   if (isPrismaError) {
+    if (error.code === 'P2021' || error.code === 'P2022' || (error.code === 'P2010' && ['42P01', '42703'].includes(error.meta?.code))) {
+      res.status(503).json({ message: 'База данных не обновлена до версии приложения. Администратору нужно применить миграции базы данных.' });
+      return;
+    }
     if ((error as any).name === 'PrismaClientInitializationError' || (error as any).code === 'P1001' || String((error as any).message).includes("Can't reach database server")) {
       res.status(503).json({ message: 'Ошибка подключения к базе данных: PostgreSQL не запущен (порт 5435)' });
       return;

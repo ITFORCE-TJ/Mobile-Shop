@@ -109,6 +109,13 @@ try {
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 11 })).status, 200);
   for (const row of await db.ownerTransaction.findMany()) assert(row.exchangeRate.eq(10));
   pass('historical operations retain their original exchange rate');
+  const beforeLarge = await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } });
+  await ok('investment', 100000);
+  const afterLarge = await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } });
+  assert(afterLarge.capitalBalanceUsd.minus(beforeLarge.capitalBalanceUsd).eq(100000));
+  await ok('withdrawal', 100000);
+  assert((await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } })).capitalBalanceUsd.eq(beforeLarge.capitalBalanceUsd));
+  pass('100000 USD investment and withdrawal succeed with exact balances');
   console.log(`Capital audit: ${passed} groups passed`);
 } finally {
   if (server) await new Promise<void>(resolve => server!.close(() => resolve()));

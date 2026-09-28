@@ -1,3 +1,4 @@
+import { auditActionLabel, auditRoleLabel, auditDetailsLabel, auditDateLabel } from '../../utils/auditLabels';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -76,6 +77,8 @@ export const AuditLogPage: React.FC = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const matches =
+          (auditActionLabel(log.action || '').toLowerCase().includes(q)) ||
+          auditRoleLabel(log.userRole).toLowerCase().includes(q) ||
           (log.action && log.action.toLowerCase().includes(q)) ||
           (log.details && log.details.toLowerCase().includes(q)) ||
           (log.userName && log.userName.toLowerCase().includes(q)) ||
@@ -115,36 +118,36 @@ export const AuditLogPage: React.FC = () => {
 
   const getCategoryLabel = (category: string) => {
     switch (category) {
-      case 'SALE': return 'ПРОДАЖА';
-      case 'REFUND': return 'ВОЗВРАТ';
-      case 'EXCHANGE': return 'ОБМЕН';
-      case 'PURCHASE': return 'ПРИХОД';
-      case 'TRANSFER': return 'ПЕРЕМЕЩЕНИЕ';
-      case 'REPAIR': return 'РЕМОНТ';
-      case 'AUTH': return 'АВТОРИЗАЦИЯ';
-      default: return 'СИСТЕМНОЕ';
+      case 'SALE': return 'Продажа';
+      case 'REFUND': return 'Возврат';
+      case 'EXCHANGE': return 'Обмен';
+      case 'PURCHASE': return 'Приход';
+      case 'TRANSFER': return 'Перемещение';
+      case 'REPAIR': return 'Ремонт';
+      case 'AUTH': return 'Авторизация';
+      default: return 'Системное';
     }
   };
 
   if (currentUser?.role !== 'ADMIN') return <div role="alert" className="p-6">Нет доступа к журналу аудита</div>;
 
   return (
-    <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       {/* Header Bar */}
       <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between gap-3 shrink-0">
         <div>
           <div className="flex items-center space-x-2">
-            <ShieldCheck className="w-4 h-4 text-accent" />
+            <ShieldCheck className="w-5 h-5 text-accent" /><div><h2 className="text-base font-semibold text-fg">История действий</h2><p className="text-xs text-fg-subtle mt-1">Операции сотрудников и изменения в системе</p></div>
           </div>
         </div>
 
         <div className="flex items-center space-x-2">
           <span className="text-xs font-bold text-accent bg-accent/15 px-3 py-1 rounded-xl border border-accent/30">
-            {filteredLogs.length} событий
+            Событий: {filteredLogs.length}
           </span>
           <button
             type="button"
-            onClick={() => exportAuditLogsReport(filteredLogs)}
+            onClick={() => exportAuditLogsReport(filteredLogs.map(log => ({ ...log, action: auditActionLabel(log.action), userRole: auditRoleLabel(log.userRole), details: auditDetailsLabel(log.details || '') })))}
             disabled={filteredLogs.length === 0}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-muted text-xs font-bold transition-colors disabled:opacity-40"
           >
@@ -159,12 +162,12 @@ export const AuditLogPage: React.FC = () => {
         <div className="flex flex-wrap items-center justify-between gap-2.5">
           {/* Left: Date Selector & Sort Toggle */}
           <div className="flex flex-wrap items-center gap-2 text-xs">
-            <span className="text-xs text-fg-subtle font-semibold uppercase">ПЕРИОД:</span>
+            <span className="text-xs text-fg-subtle font-semibold ">Период:</span>
 
             <button
               type="button"
               onClick={() => setDateFilterMode('TODAY')}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold uppercase flex items-center space-x-1.5 transition-all ${
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold  flex items-center space-x-1.5 transition-all ${
                 dateFilterMode === 'TODAY'
                   ? 'border-accent text-accent bg-accent/15'
                   : 'border-border text-fg-muted hover:text-fg-muted bg-surface'
@@ -174,27 +177,30 @@ export const AuditLogPage: React.FC = () => {
               <span>Сегодня</span>
             </button>
 
-            <div className={`flex items-center space-x-1.5 rounded-xl border px-3 py-1 text-xs transition-all ${
+            <div className={`relative flex items-center space-x-1.5 rounded-xl border px-3 py-2 text-xs transition-all focus-within:ring-2 focus-within:ring-accent ${
               dateFilterMode === 'SPECIFIC'
                 ? 'border-accent bg-accent/15 text-accent'
                 : 'border-border bg-surface text-fg-muted'
             }`}>
-              <span className="text-[10px] uppercase font-semibold">Дата:</span>
+              <span className="text-[10px]  font-semibold">Дата:</span>
+              <span>{selectedDate ? selectedDate.split('-').reverse().join('.') : 'Выберите дату'}</span>
               <input
                 type="date"
+                lang="ru"
+                aria-label="Дата событий"
                 value={selectedDate}
                 onChange={(e) => {
                   setSelectedDate(e.target.value);
                   setDateFilterMode('SPECIFIC');
                 }}
-                className="bg-transparent text-fg-muted text-xs font-semibold focus:outline-none cursor-pointer"
+                className="absolute inset-0 h-full w-full opacity-0 cursor-pointer"
               />
             </div>
 
             <button
               type="button"
               onClick={() => setDateFilterMode('ALL')}
-              className={`px-3 py-1.5 rounded-xl border text-xs font-bold uppercase transition-all ${
+              className={`px-3 py-1.5 rounded-xl border text-xs font-bold  transition-all ${
                 dateFilterMode === 'ALL'
                   ? 'border-accent text-accent bg-accent/15'
                   : 'border-border text-fg-muted hover:text-fg-muted bg-surface'
@@ -207,7 +213,7 @@ export const AuditLogPage: React.FC = () => {
             <button
               type="button"
               onClick={() => setSortOrder(prev => prev === 'DESC' ? 'ASC' : 'DESC')}
-              className="px-3 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-raised text-fg-muted text-xs font-bold uppercase flex items-center space-x-1.5 transition-all ml-1"
+              className="px-3 py-1.5 rounded-xl border border-border bg-surface hover:bg-surface-raised text-fg-muted text-xs font-bold  flex items-center space-x-1.5 transition-all ml-1"
               title="Переключить порядок сортировки по дате"
             >
               {sortOrder === 'DESC' ? <ArrowDown className="w-3.5 h-3.5 text-accent" /> : <ArrowUp className="w-3.5 h-3.5 text-accent" />}
@@ -243,9 +249,9 @@ export const AuditLogPage: React.FC = () => {
               key={cat.id}
               type="button"
               onClick={() => setActiveCategoryFilter(cat.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold uppercase whitespace-nowrap transition-all ${
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold  whitespace-nowrap transition-all ${
                 activeCategoryFilter === cat.id
-                  ? 'bg-accent text-accent-fg shadow-xs scale-105'
+                  ? 'bg-accent text-accent-fg shadow-xs '
                   : 'bg-surface hover:bg-surface-raised text-fg-muted border border-border'
               }`}
             >
@@ -258,7 +264,7 @@ export const AuditLogPage: React.FC = () => {
       {/* Main Table / Event List */}
       <div className="flex-1 overflow-y-auto bg-bg p-3 sm:p-4">
         {filteredLogs.length === 0 ? (
-          <div className="p-12 text-center text-fg-muted text-xs uppercase tracking-wider font-semibold">
+          <div className="p-12 text-center text-fg-muted text-xs   font-semibold">
             События аудита за выбранный период не найдены
           </div>
         ) : (
@@ -271,17 +277,17 @@ export const AuditLogPage: React.FC = () => {
               return (
                 <div
                   key={log.id}
-                  className="p-3.5 rounded-xl bg-surface border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:border-fg-subtle transition-colors"
+                  className="p-4 rounded-2xl bg-surface border border-border flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:border-fg-subtle transition-colors"
                 >
                   <div className="flex items-start space-x-3 min-w-0 flex-1">
-                    <span className={`px-2.5 py-1 rounded-lg font-bold uppercase text-[10px] border shrink-0 mt-0.5 tracking-wider ${badgeStyle}`}>
+                    <span className={`px-2.5 py-1 rounded-lg font-bold  text-[10px] border shrink-0 mt-0.5  ${badgeStyle}`}>
                       {catLabel}
                     </span>
 
                     <div className="min-w-0 flex-1">
-                      <p className="font-bold text-fg-muted truncate">{log.action}</p>
+                      <p className="font-semibold text-sm text-fg">{auditActionLabel(log.action)}</p>
                       {log.details && (
-                        <p className="text-xs text-fg-muted mt-0.5 line-clamp-2">{log.details}</p>
+                        <p className="text-xs text-fg-muted mt-0.5 break-words">{auditDetailsLabel(log.details)}</p>
                       )}
                     </div>
                   </div>
@@ -289,11 +295,11 @@ export const AuditLogPage: React.FC = () => {
                   <div className="flex items-center justify-between sm:justify-end space-x-4 text-xs shrink-0 border-t sm:border-t-0 border-border pt-2 sm:pt-0">
                     <div className="text-left sm:text-right">
                       <span className="font-bold text-fg-muted block">{log.userName || 'Система'}</span>
-                      <span className="text-[10px] text-fg-subtle uppercase block">{log.userRole || 'SYSTEM'}</span>
+                      <span className="text-[10px] text-fg-subtle  block">{auditRoleLabel(log.userRole)}</span>
                     </div>
 
                     <div className="text-right text-fg-subtle text-[11px] font-medium">
-                      {new Date(log.timestamp).toLocaleString()}
+                      {auditDateLabel(log.timestamp)}
                     </div>
                   </div>
                 </div>

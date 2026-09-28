@@ -44,7 +44,7 @@ export const Dialog: React.FC<DialogProps> = ({
   if (!open) return null;
 
   return (
-    <ModalLayer variant="sheet" label={title} onClose={dismissable ? onClose : undefined}>
+    <ModalLayer variant="sheet" className="items-end justify-center md:items-center md:p-6" label={title} onClose={dismissable ? onClose : undefined}>
       <div
         className="absolute inset-0 bg-black/70 transition-opacity"
         onClick={dismissable ? onClose : undefined}
@@ -55,7 +55,7 @@ export const Dialog: React.FC<DialogProps> = ({
         aria-modal="true"
         aria-label={title}
         className={cn(
-          'dialog-panel relative w-full min-h-0 flex flex-col bg-surface border-t md:border border-border rounded-t-2xl md:rounded-2xl overflow-hidden overscroll-contain shadow-2xl z-10',
+          'dialog-panel relative w-full min-h-0 flex flex-col bg-surface border-t md:border border-border rounded-t-2xl md:rounded-2xl overflow-hidden overscroll-contain shadow-2xl outline-none z-10',
           MAX_WIDTH_CLASSES[maxWidth]
         )}
       >
