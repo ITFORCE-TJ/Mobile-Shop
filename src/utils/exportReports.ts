@@ -700,3 +700,113 @@ export function exportAuditLogsReport(logs: any[]) {
   const fileName = `otchet_audit_log_${new Date().toISOString().split('T')[0]}.csv`;
   downloadCsv(csvContent, fileName);
 }
+
+/** One sheet of a network/store report: a titled table with typed columns. */
+export interface ReportSheet {
+  name: string;
+  title: string;
+  columns: { header: string; width?: number; money?: boolean; percent?: boolean }[];
+  rows: (string | number)[][];
+  totalsRow?: (string | number)[];
+}
+
+/**
+ * Generic styled Excel export used by the network comparison («Рейтинг филиалов») and the
+ * per-store dashboard: every sheet gets the same title band, header row and money format.
+ */
+export async function exportReportSheets(input: { fileBaseName: string; subtitle: string; sheets: ReportSheet[]; generatedBy?: string }): Promise<void> {
+  const ExcelJS = (await import('exceljs')).default;
+  const workbook = new ExcelJS.Workbook();
+  workbook.creator = input.generatedBy || 'Mobile Shop';
+  workbook.created = new Date();
+
+  for (const sheetDef of input.sheets) {
+    const sheet = workbook.addWorksheet(sheetDef.name.slice(0, 31), { views: [{ state: 'frozen', ySplit: 3, showGridLines: false }] });
+    const lastColumn = String.fromCharCode(64 + Math.max(1, Math.min(sheetDef.columns.length, 26)));
+    sheet.mergeCells(`A1:${lastColumn}1`);
+    const title = sheet.getCell('A1');
+    title.value = sheetDef.title;
+    title.font = { name: 'Calibri', size: 14, bold: true, color: { argb: XLSX_WHITE } };
+    title.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLSX_DARK } };
+    sheet.getRow(1).height = 26;
+    sheet.mergeCells(`A2:${lastColumn}2`);
+    const subtitle = sheet.getCell('A2');
+    subtitle.value = input.subtitle;
+    subtitle.font = { name: 'Calibri', size: 10, color: { argb: XLSX_MUTED } };
+    subtitle.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLSX_LIGHT } };
+
+    const header = sheet.getRow(3);
+    sheetDef.columns.forEach((column, index) => {
+      const cell = header.getCell(index + 1);
+      cell.value = column.header;
+      cell.font = { bold: true, color: { argb: XLSX_WHITE } };
+      cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLSX_GREEN } };
+      cell.alignment = { vertical: 'middle', wrapText: true };
+      sheet.getColumn(index + 1).width = column.width ?? (index === 0 ? 26 : 16);
+    });
+    header.height = 30;
+
+    const writeRow = (values: (string | number)[], bold = false) => {
+      const row = sheet.addRow(values);
+      values.forEach((_, index) => {
+        const cell = row.getCell(index + 1);
+        const column = sheetDef.columns[index];
+        if (column?.money) cell.numFmt = XLSX_MONEY_FORMAT;
+        if (column?.percent) cell.numFmt = '0.0"%"';
+        cell.border = { bottom: { style: 'thin', color: { argb: XLSX_BORDER } } };
+        if (bold) {
+          cell.font = { bold: true };
+          cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: XLSX_LIGHT } };
+        }
+        if (typeof values[index] === 'number' && (values[index] as number) < 0 && column?.money) cell.font = { bold, color: { argb: XLSX_RED } };
+      });
+    };
+    sheetDef.rows.forEach((row) => writeRow(row));
+    if (sheetDef.totalsRow) writeRow(sheetDef.totalsRow, true);
+  }
+
+  const buffer = await workbook.xlsx.writeBuffer();
+  const date = new Date().toISOString().split('T')[0];
+  await downloadXlsx(buffer, `${safeFilePart(input.fileBaseName)}_${date}.xlsx`);
+}
+
+function escapeHtml(value: unknown): string {
+  return String(value ?? '').replace(/[&<>"']/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]!));
+}
+
+/** Opens a clean printable page (tables only, no app chrome) and triggers the print dialog. */
+export function printReportSheets(input: { title: string; subtitle: string; sheets: ReportSheet[] }): void {
+  const fmt = (value: string | number, column?: ReportSheet['columns'][number]) =>
+    typeof value === 'number'
+      ? column?.percent ? `${value.toLocaleString('ru-RU', { maximumFractionDigits: 1 })}%` : value.toLocaleString('ru-RU', { maximumFractionDigits: 2 })
+      : value;
+  const tables = input.sheets.map((sheet) => `
+    <h2>${escapeHtml(sheet.title)}</h2>
+    <table>
+      <thead><tr>${sheet.columns.map((c) => `<th>${escapeHtml(c.header)}</th>`).join('')}</tr></thead>
+      <tbody>
+        ${sheet.rows.map((row) => `<tr>${row.map((v, i) => `<td class="${typeof v === 'number' ? 'num' : ''}">${escapeHtml(fmt(v, sheet.columns[i]))}</td>`).join('')}</tr>`).join('')}
+        ${sheet.totalsRow ? `<tr class="total">${sheet.totalsRow.map((v, i) => `<td class="${typeof v === 'number' ? 'num' : ''}">${escapeHtml(fmt(v, sheet.columns[i]))}</td>`).join('')}</tr>` : ''}
+      </tbody>
+    </table>`).join('');
+  const win = window.open('', '_blank');
+  if (!win) {
+    window.alert('Разрешите всплывающие окна, чтобы распечатать отчёт.');
+    return;
+  }
+  win.document.write(`<!doctype html><html lang="ru"><head><meta charset="utf-8"><title>${escapeHtml(input.title)}</title>
+    <style>
+      body { font: 12px/1.4 system-ui, sans-serif; color: #0f172a; margin: 24px; }
+      h1 { font-size: 18px; margin: 0 0 4px; } p.sub { color: #64748b; margin: 0 0 16px; }
+      h2 { font-size: 14px; margin: 20px 0 6px; }
+      table { border-collapse: collapse; width: 100%; }
+      th, td { border-bottom: 1px solid #e2e8f0; padding: 4px 6px; text-align: left; }
+      th { background: #f1f5f9; font-size: 11px; }
+      td.num { text-align: right; font-variant-numeric: tabular-nums; }
+      tr.total td { font-weight: 700; background: #f8fafc; }
+    </style></head><body>
+    <h1>${escapeHtml(input.title)}</h1><p class="sub">${escapeHtml(input.subtitle)}</p>${tables}
+    <script>window.onload = () => { window.print(); };</script>
+    </body></html>`);
+  win.document.close();
+}

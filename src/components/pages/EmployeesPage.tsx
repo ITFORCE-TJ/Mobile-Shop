@@ -25,10 +25,12 @@ import {
   Loader2
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
+import { isStoreScoped } from '../../utils/roles';
 
 const ROLE_CONFIG: Record<Role, { label: string; bg: string; color: string; border: string }> = {
   ADMIN: { label: 'Администратор', bg: 'bg-accent/15', color: 'text-accent', border: 'border-accent/30' },
   PARTNER: { label: 'Партнер (Владелец)', bg: 'bg-info/15', color: 'text-info', border: 'border-info/30' },
+  STORE_MANAGER: { label: 'Управляющий магазином', bg: 'bg-warning/15', color: 'text-warning', border: 'border-warning/30' },
   SELLER: { label: 'Продавец-кассир', bg: 'bg-surface-raised', color: 'text-fg-subtle', border: 'border-border' }
 };
 
@@ -74,6 +76,8 @@ export const EmployeesPage: React.FC = () => {
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [role, setRole] = useState<Role>('SELLER');
+  // Sellers and store managers are both pinned to one store and paid salary/commission.
+  const isStoreRole = role === 'SELLER' || role === 'STORE_MANAGER';
   const [storeId, setStoreId] = useState<string>(stores[0]?.id || '');
   const [isActive, setIsActive] = useState(true);
 
@@ -272,16 +276,16 @@ export const EmployeesPage: React.FC = () => {
       return;
     }
 
-    if (role === 'SELLER' && (!storeId || !storeId.trim())) {
-      setStatusMessage({ type: 'error', text: 'Для продавца привязка к магазину обязательна (*)' });
+    if (isStoreRole && (!storeId || !storeId.trim())) {
+      setStatusMessage({ type: 'error', text: 'Для продавца и управляющего привязка к магазину обязательна (*)' });
       return;
     }
 
     // Salary/commission only apply to sellers — admins and partners are compensated
     // via profit share (Owners), not a salary, so their form fields are hidden and
     // any stale leftover values must never be persisted.
-    const baseSal = role === 'SELLER' ? parseFloat(baseSalaryTjs) || 0 : 0;
-    const commPct = role === 'SELLER' ? parseFloat(salesCommissionPercent) || 0 : 0;
+    const baseSal = isStoreRole ? parseFloat(baseSalaryTjs) || 0 : 0;
+    const commPct = isStoreRole ? parseFloat(salesCommissionPercent) || 0 : 0;
 
     setIsSubmitting(true);
     try {
@@ -292,7 +296,7 @@ export const EmployeesPage: React.FC = () => {
           login: login.trim(),
           passwordHash: password.trim() ? password.trim() : editingUser.passwordHash,
           role,
-          storeId: role === 'SELLER' ? storeId : undefined,
+          storeId: isStoreRole ? storeId : undefined,
           isActive,
           baseSalaryTjs: baseSal,
           salesCommissionPercent: commPct
@@ -310,7 +314,7 @@ export const EmployeesPage: React.FC = () => {
           login: login.trim(),
           passwordHash: password.trim(),
           role,
-          storeId: role === 'SELLER' ? storeId : undefined,
+          storeId: isStoreRole ? storeId : undefined,
           active: true,
           baseSalaryTjs: baseSal,
           salesCommissionPercent: commPct
@@ -426,7 +430,7 @@ export const EmployeesPage: React.FC = () => {
   const handleExportPayrollReport = () => {
     const headers = ['Сотрудник', 'Должность', 'Торговая точка', 'Оклад (TJS)', 'Выручка продаж (TJS)', 'Комиссия %', 'Начислено (TJS)', 'Взято авансов (TJS)', 'Выплачено ЗП (TJS)', 'Остаток к выплате (TJS)'];
     
-    const sellers = users.filter(u => (u.isActive ?? u.active) && u.role === 'SELLER');
+    const sellers = users.filter(u => (u.isActive ?? u.active) && isStoreScoped(u));
     const rows = sellers.map(u => {
       const uSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && s.date.startsWith(selectedPayrollMonth));
       const salesRev = uSales.reduce((acc, s) => acc + s.totalTjs, 0);
@@ -485,7 +489,7 @@ export const EmployeesPage: React.FC = () => {
   // share & full access vs. a store-scoped salary/commission role) that get their
   // own section instead of being interleaved in one undifferentiated list.
   const managementUsers = users.filter(u => u.role === 'ADMIN' || u.role === 'PARTNER');
-  const sellerUsers = users.filter(u => u.role === 'SELLER');
+  const sellerUsers = users.filter(u => isStoreScoped(u));
 
   const renderUserCard = (u: User) => {
     const roleConf = ROLE_CONFIG[u.role] || ROLE_CONFIG.SELLER;
@@ -548,7 +552,7 @@ export const EmployeesPage: React.FC = () => {
                           </span>
                         );
                       }
-                      if (u.role === 'SELLER') {
+                      if (isStoreScoped(u)) {
                         return <span className="text-danger font-medium">Магазин не привязан</span>;
                       }
                       return <span className="text-fg-muted">Все филиалы</span>;
@@ -565,7 +569,7 @@ export const EmployeesPage: React.FC = () => {
 
                   return (
                     <div className="pt-2 border-t border-border space-y-1.5 text-xs">
-                      {u.role === 'SELLER' && (
+                      {isStoreScoped(u) && (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-fg-subtle">Оклад / комиссия</span>
                           <span className="tabular-nums text-accent font-semibold">
@@ -573,7 +577,7 @@ export const EmployeesPage: React.FC = () => {
                           </span>
                         </div>
                       )}
-                      {u.role === 'SELLER' && (
+                      {isStoreScoped(u) && (
                         <div className="flex items-center justify-between">
                           <span className="text-xs text-fg-subtle">Продажи</span>
                           <span className="tabular-nums text-fg-muted font-bold">
@@ -810,13 +814,14 @@ export const EmployeesPage: React.FC = () => {
                     className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
                   >
                     <option value="SELLER">Продавец (ограничен своим магазином, без себестоимости)</option>
+                    <option value="STORE_MANAGER">Управляющий магазином (отчёты, расходы и касса только своей точки)</option>
                     <option value="PARTNER">Партнер (все магазины, финансы, отчеты)</option>
                     <option value="ADMIN">Администратор (полный доступ)</option>
                   </select>
                 )}
               </div>
 
-              {role === 'SELLER' && (
+              {isStoreRole && (
                 <div>
                   <label className="block text-warning text-[10px] uppercase mb-1 font-bold">
                     ПРИВЯЗКА К МАГАЗИНУ <span className="text-danger font-bold">* (ОБЯЗАТЕЛЬНО)</span>
@@ -837,7 +842,7 @@ export const EmployeesPage: React.FC = () => {
 
               {/* Salary & Commission Settings — sellers only; admins/partners are
                   compensated via profit share on the Owners page instead. */}
-              {role === 'SELLER' && (
+              {isStoreRole && (
                 <div className="grid grid-cols-2 gap-2.5 p-3 rounded-lg bg-surface-raised border border-border">
                   <div>
                     <label className="block text-accent text-[10px] uppercase mb-1 font-bold">ОКЛАД (TJS/МЕС)</label>
@@ -1190,7 +1195,7 @@ export const EmployeesPage: React.FC = () => {
                   <Receipt className="w-4 h-4 text-info" />
                   <span>ФИНАНСОВАЯ ИСТОРИЯ И ОПЕРАЦИИ: {financialHistoryUser.name}</span>
                 </h4>
-                <span className="text-[10px] text-fg-subtle">{financialHistoryUser.storeName || (financialHistoryUser.storeId ? stores.find(s => s.id === financialHistoryUser.storeId)?.name : undefined) || (financialHistoryUser.role === 'SELLER' ? 'Магазин не привязан' : 'Все филиалы')}</span>
+                <span className="text-[10px] text-fg-subtle">{financialHistoryUser.storeName || (financialHistoryUser.storeId ? stores.find(s => s.id === financialHistoryUser.storeId)?.name : undefined) || (isStoreScoped(financialHistoryUser) ? 'Магазин не привязан' : 'Все филиалы')}</span>
               </div>
               <button type="button" onClick={() => setFinancialHistoryUser(null)} className="text-fg-subtle hover:text-fg-muted">
                 <X className="w-4 h-4" />
@@ -1433,7 +1438,7 @@ export const EmployeesPage: React.FC = () => {
                 </thead>
                 <tbody className="divide-y divide-border text-[11px]">
                   {(() => {
-                    const activeSellers = users.filter(u => (u.isActive ?? u.active) && u.role === 'SELLER');
+                    const activeSellers = users.filter(u => (u.isActive ?? u.active) && isStoreScoped(u));
                     if (activeSellers.length === 0) {
                       return (
                         <tr>

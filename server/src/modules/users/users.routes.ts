@@ -24,8 +24,8 @@ export function registerUserRoutes(app: Express) {
         res.status(400).json({ message: 'login, password, name и role обязательны' });
         return;
       }
-      if (role === 'SELLER' && (!storeId || !String(storeId).trim())) {
-        res.status(400).json({ message: 'Для роли Продавец обязательна привязка к магазину' });
+      if ((role === 'SELLER' || role === 'STORE_MANAGER') && (!storeId || !String(storeId).trim())) {
+        res.status(400).json({ message: 'Для ролей Продавец и Управляющий обязательна привязка к магазину' });
         return;
       }
       const user = await UsersService.create({ login, password, name, role, storeId, baseSalaryTjs, salesCommissionPercent, createdByUserId: req.user!.userId });

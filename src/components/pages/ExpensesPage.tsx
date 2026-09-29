@@ -3,7 +3,8 @@ import { ActionMenu } from '../ui/ActionMenu';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
-import { Expense, ExpenseCategory } from '../../types';
+import { Expense, ExpenseCategory, Store } from '../../types';
+import { isStoreScoped } from '../../utils/roles';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { STANDARD_EXPENSE_CATEGORIES, LEGACY_EXPENSE_LABELS } from '../../utils/expenseCategories';
 import {
@@ -62,6 +63,13 @@ function getCategoryLabel(key: string, customCategories: CustomCategory[]): stri
   return LEGACY_EXPENSE_LABELS[key] || key || 'Прочие расходы';
 }
 
+/** Network-level expense: marked BUSINESS, or booked to the main warehouse (central safe). */
+function isNetworkExpense(expense: Expense, stores: Store[]): boolean {
+  if (expense.targetType === 'BUSINESS') return true;
+  if (!expense.storeId) return true;
+  return stores.some(s => s.id === expense.storeId && s.isMainWarehouse);
+}
+
 function getCategoryIcon(key: string): React.ElementType {
   return CATEGORY_ICONS[key] || Tag;
 }
@@ -71,6 +79,9 @@ export const ExpensesPage: React.FC = () => {
   const { currentUser, expenses, fetchExpensesRange, stores, users, todayRate, createExpense, updateExpense, deleteExpense, payExpense, isInitialLoading, selectedStoreId: globalSelectedStoreId } = useAppFields('currentUser', 'expenses', 'fetchExpensesRange', 'stores', 'users', 'todayRate', 'createExpense', 'updateExpense', 'deleteExpense', 'payExpense', 'isInitialLoading', 'selectedStoreId');
 
   const isSeller = currentUser?.role === 'SELLER';
+  // A store manager works with their own store's expenses only (enforced server-side too).
+  const isManager = currentUser?.role === 'STORE_MANAGER';
+  const isScoped = isStoreScoped(currentUser);
   const canAddCategory = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
 
   const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
@@ -95,6 +106,8 @@ export const ExpensesPage: React.FC = () => {
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [description, setDescription] = useState('');
   const [paidFromCashRegister, setPaidFromCashRegister] = useState(true);
+  // «Расход филиала» vs «Общесетевой расход» — see createExpense on the server.
+  const [expenseTarget, setExpenseTarget] = useState<'STORE' | 'BUSINESS'>('STORE');
 
   useEffect(() => {
     if (!storeId && retailStores.length > 0) setStoreId(retailStores[0].id);
@@ -111,6 +124,10 @@ export const ExpensesPage: React.FC = () => {
   const [selectedStoreFilter, setSelectedStoreFilter] = useState(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
+  // Follow the global store switcher in the TopBar.
+  useEffect(() => {
+    setSelectedStoreFilter(globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL');
+  }, [globalSelectedStoreId]);
 
   // `expenses` from context only holds a recent bounded window by default — the current
   // month (this page's own default filter) is always inside it, but "весь период" or an
@@ -200,7 +217,7 @@ export const ExpensesPage: React.FC = () => {
     if (!payingExpense || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const res = await payExpense(payingExpense.id, payingExpense.storeId ? undefined : payStoreId);
+      const res = await payExpense(payingExpense.id, payingExpense.storeId || isNetworkExpense(payingExpense, stores) ? undefined : payStoreId);
       if (res.success) {
         setStatus({ tone: 'success', text: `Расход оплачен: ${payingExpense.amountTjs.toLocaleString()} TJS списано из кассы` });
         setPayingExpense(null);
@@ -230,7 +247,8 @@ export const ExpensesPage: React.FC = () => {
       const res = await createExpense({
         category,
         amountTjs: val,
-        storeId: isSeller ? currentUser.storeId : storeId,
+        targetType: isScoped ? 'STORE' : expenseTarget,
+        storeId: isScoped ? currentUser?.storeId : expenseTarget === 'BUSINESS' ? undefined : storeId,
         description: description.trim(),
         paidFromCashRegister,
         employeeId: selectedEmployeeId || undefined,
@@ -243,8 +261,10 @@ export const ExpensesPage: React.FC = () => {
         setAmountTjs('');
         setDescription('');
         setSelectedEmployeeId('');
-        const paidNote = paidFromCashRegister ? 'оплачен из кассы' : 'записан как не оплаченный';
-        setStatus({ tone: 'success', text: `Расход на сумму ${val} TJS ${paidNote}${selectedEmp ? ` (зачислен сотруднику ${selectedEmp.name})` : ''}` });
+        const paidNote = paidFromCashRegister
+          ? (!isScoped && expenseTarget === 'BUSINESS' ? 'оплачен из центральной кассы' : 'оплачен из кассы')
+          : 'записан как не оплаченный';
+        setStatus({ tone: 'success', text: `${!isScoped && expenseTarget === 'BUSINESS' ? 'Общесетевой расход' : 'Расход'} на сумму ${val} TJS ${paidNote}${selectedEmp ? ` (зачислен сотруднику ${selectedEmp.name})` : ''}` });
       } else {
         setStatus({ tone: 'error', text: res.message || 'Ошибка проведения расхода' });
       }
@@ -287,8 +307,10 @@ export const ExpensesPage: React.FC = () => {
     const todayStr = getBusinessDateKey();
 
     return expenses.filter(e => {
-      if (isSeller && e.storeId !== currentUser.storeId) return false;
-      if (selectedStoreFilter !== 'ALL' && e.storeId !== selectedStoreFilter) return false;
+      if (isScoped && e.storeId !== currentUser?.storeId) return false;
+      if (selectedStoreFilter === 'NETWORK') {
+        if (!isNetworkExpense(e, stores)) return false;
+      } else if (selectedStoreFilter !== 'ALL' && e.storeId !== selectedStoreFilter) return false;
 
       const expDateStr = getBusinessDateKey(new Date(e.date));
       if (periodFilter === 'TODAY' && expDateStr !== todayStr) return false;
@@ -319,7 +341,7 @@ export const ExpensesPage: React.FC = () => {
 
       return true;
     }).sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-  }, [expenses, isSeller, currentUser, periodFilter, selectedMonth, selectedStoreFilter, selectedCategoryTab, searchQuery, customCategories]);
+  }, [expenses, isScoped, stores, currentUser, periodFilter, selectedMonth, selectedStoreFilter, selectedCategoryTab, searchQuery, customCategories]);
 
   const totalExpensesTjs = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amountTjs || 0), 0), [filteredExpenses]);
   // Each expense keeps the USD amount computed at its own day's exchange rate — summing those
@@ -337,12 +359,12 @@ export const ExpensesPage: React.FC = () => {
   const deletingExpense = deletingId ? expenses.find(e => e.id === deletingId) : undefined;
 
   const allCategoryOptions = [...STANDARD_CATEGORIES, ...customCategories];
-  const hasActiveFilters = periodFilter !== 'SPECIFIC_MONTH' || selectedStoreFilter !== 'ALL' || selectedCategoryTab !== 'ALL';
+  const hasActiveFilters = periodFilter !== 'SPECIFIC_MONTH' || (!isScoped && selectedStoreFilter !== 'ALL') || selectedCategoryTab !== 'ALL';
 
   if (isSeller) {
     return (
       <div className="flex-1 flex flex-col bg-bg">
-        <RestrictedAccess message="Раздел расходов доступен только администраторам и партнёрам." />
+        <RestrictedAccess message="Раздел расходов доступен администраторам, партнёрам и управляющим магазинов." />
       </div>
     );
   }
@@ -410,9 +432,10 @@ export const ExpensesPage: React.FC = () => {
                 />
               )}
 
-              {!isSeller && (
+              {!isScoped && (
                 <Select value={selectedStoreFilter} onChange={(e) => setSelectedStoreFilter(e.target.value)} className="h-9 px-3 pr-8 text-xs font-semibold w-auto shrink-0 cursor-pointer">
-                  <option value="ALL">Все филиалы</option>
+                  <option value="ALL">Все расходы</option>
+                  <option value="NETWORK">Общесетевые</option>
                   {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 </Select>
               )}
@@ -459,11 +482,12 @@ export const ExpensesPage: React.FC = () => {
                         : <Badge tone="success">Оплачено</Badge>}
                       {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && <Badge tone="neutral">Из кассы</Badge>}
                       {exp.employeeName && <Badge tone="accent">{exp.employeeName}</Badge>}
+                      {isNetworkExpense(exp, stores) && <Badge tone="info">Общесетевой</Badge>}
                     </div>
                     <p className="text-sm text-fg-muted mt-0.5">{exp.comment || exp.description || 'Операционный расход'}</p>
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-fg-subtle mt-1">
                       <StoreIcon className="w-3 h-3" />
-                      <span>{exp.storeName || 'Магазин'}</span>
+                      <span>{isNetworkExpense(exp, stores) ? 'Вся сеть' : exp.storeName || 'Магазин'}</span>
                       <span>·</span>
                       <Calendar className="w-3 h-3" />
                       <span>{formattedDate}</span>
@@ -475,7 +499,7 @@ export const ExpensesPage: React.FC = () => {
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold text-danger">-{(exp.amountTjs ?? 0).toLocaleString()} TJS</p>
                     <p className="text-xs text-fg-subtle">≈ -${costUsd.toLocaleString()}</p>
-                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER') && (
+                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER' || (isManager && !exp.employeeId && !isNetworkExpense(exp, stores))) && (
                       <div className="flex items-center gap-1 mt-1.5 justify-end">
                         {exp.status === 'UNPAID' && (
                           <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
@@ -530,14 +554,14 @@ export const ExpensesPage: React.FC = () => {
               className="w-full h-11 rounded-lg bg-bg border border-border px-3 text-sm font-semibold text-danger focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </FormField>
-          <FormField label="Точка / филиал">
+          {!isManager && !(editingExpense && isNetworkExpense(editingExpense, stores)) && <FormField label="Точка / филиал">
             <Select value={editStoreId} onChange={(e) => setEditStoreId(e.target.value)} className="w-full">
               {/* All stores, not just retail ones: a payroll expense (salary/advance for
                   an ADMIN/PARTNER) can legitimately be attributed to the main warehouse,
                   and the dropdown must include the record's actual current store. */}
               {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
             </Select>
-          </FormField>
+          </FormField>}
           <FormField label="Описание / примечание">
             <input
               type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
@@ -560,6 +584,21 @@ export const ExpensesPage: React.FC = () => {
         }
       >
         <form id="add-expense-form" onSubmit={handleAddExpense} className="space-y-3.5">
+          {!isScoped && (
+            <FormField label="Чей это расход" required>
+              <FilterPillGroup
+                options={[{ value: 'STORE', label: 'Расход филиала' }, { value: 'BUSINESS', label: 'Общесетевой расход' }]}
+                value={expenseTarget}
+                onChange={(v) => setExpenseTarget(v as 'STORE' | 'BUSINESS')}
+              />
+              <p className="text-xs text-fg-subtle mt-1.5">
+                {expenseTarget === 'STORE'
+                  ? 'Аренда точки, хозтовары, чай/кофе — списывается с кассы филиала и уменьшает чистую прибыль именно этого магазина.'
+                  : 'Общая реклама, бухгалтер, аренда склада — не привязан к магазину, списывается с центральной кассы и уменьшает только итоговую прибыль сети.'}
+              </p>
+            </FormField>
+          )}
+
           <FormField label="Категория расхода" required>
             <div className="flex items-center gap-2">
               <Select value={category} onChange={(e) => setCategory(e.target.value as ExpenseCategory)} className="w-full">
@@ -573,7 +612,7 @@ export const ExpensesPage: React.FC = () => {
             </div>
           </FormField>
 
-          {(category === 'EMPLOYEE_ADVANCE' || category === 'SALARY') && (
+          {!isManager && (category === 'EMPLOYEE_ADVANCE' || category === 'SALARY') && (
             <FormField label="Сотрудник (для удержания из ЗП)">
               <Select value={selectedEmployeeId} onChange={(e) => setSelectedEmployeeId(e.target.value)} className="w-full">
                 <option value="">— Выберите сотрудника —</option>
@@ -595,8 +634,8 @@ export const ExpensesPage: React.FC = () => {
             </div>
           </FormField>
 
-          {!isSeller && (
-            <FormField label="Филиал / склад" required>
+          {!isScoped && expenseTarget === 'STORE' && (
+            <FormField label="Филиал" required>
               <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full">
                 {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
@@ -614,7 +653,7 @@ export const ExpensesPage: React.FC = () => {
           <ToggleRow
             checked={paidFromCashRegister}
             onChange={setPaidFromCashRegister}
-            label="Списать сумму из наличной кассы"
+            label={!isScoped && expenseTarget === 'BUSINESS' ? 'Списать сумму из центральной кассы (главный склад)' : 'Списать сумму из наличной кассы филиала'}
           />
 
           <div className="flex items-center justify-between gap-2 px-0.5">
@@ -637,7 +676,7 @@ export const ExpensesPage: React.FC = () => {
         footer={
           <>
             <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setPayingExpense(null)}>Отмена</Button>
-            <Button variant="primary" fullWidth loading={isSubmitting} disabled={!payingExpense?.storeId && !payStoreId} onClick={handleConfirmPay}>Оплатить</Button>
+            <Button variant="primary" fullWidth loading={isSubmitting} disabled={!payingExpense?.storeId && !payStoreId && !(payingExpense && isNetworkExpense(payingExpense, stores))} onClick={handleConfirmPay}>Оплатить</Button>
           </>
         }
       >
@@ -646,7 +685,9 @@ export const ExpensesPage: React.FC = () => {
             <p className="text-sm text-fg-muted">
               {getCategoryLabel(payingExpense.category, customCategories)}: <span className="font-semibold text-danger">{payingExpense.amountTjs.toLocaleString()} TJS</span>
             </p>
-            {payingExpense.storeId ? (
+            {isNetworkExpense(payingExpense, stores) ? (
+              <p className="text-xs text-fg-subtle">Общесетевой расход — сумма будет списана из центральной кассы (главный склад).</p>
+            ) : payingExpense.storeId ? (
               <p className="text-xs text-fg-subtle">Сумма будет списана из кассы «{payingExpense.storeName || 'магазина'}».</p>
             ) : (
               <FormField label="Из какой кассы оплатить" required>

@@ -24,6 +24,7 @@ import { Dialog } from '../ui/Dialog';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 
 import { getBusinessDateKey } from '../../utils/businessDate';
+import { isStoreScoped } from '../../utils/roles';
 
 type DialogView = 'details' | 'refund' | 'pick-exchange' | 'pick-repair';
 
@@ -57,7 +58,7 @@ export const SalesHistoryPage: React.FC = () => {
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
 
-  const activeStoreId = currentUser?.role === 'SELLER' ? (currentUser.storeId || '') : (retailStores.some(s => s.id === globalSelectedStoreId) ? globalSelectedStoreId : (retailStores[0]?.id || ''));
+  const activeStoreId = isStoreScoped(currentUser) ? (currentUser?.storeId || '') : (retailStores.some(s => s.id === globalSelectedStoreId) ? globalSelectedStoreId : (retailStores[0]?.id || ''));
 
   // Always fetch for the active scope so sales history is never stale or empty
   useEffect(() => {
@@ -74,7 +75,7 @@ export const SalesHistoryPage: React.FC = () => {
     const todayStr = getBusinessDateKey();
 
     return sales.filter((sale) => {
-      if (currentUser?.role === 'SELLER' && sale.sellerId !== currentUser.id) return false;
+      if (currentUser?.role === 'SELLER' && sale.sellerId !== currentUser.id) return false; // a store manager sees the whole store
       if (activeStoreId && activeStoreId !== 'all' && sale.storeId !== activeStoreId) return false;
 
       const saleDateStr = getBusinessDateKey(new Date(sale.date));
@@ -195,7 +196,8 @@ export const SalesHistoryPage: React.FC = () => {
     }
   };
 
-  const canRefund = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  // A store manager refunds their own store's receipts (enforced server-side).
+  const canRefund = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER' || currentUser?.role === 'STORE_MANAGER';
 
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">

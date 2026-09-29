@@ -8,6 +8,12 @@ import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction, cancelTransaction } from '../finance/financial-transaction.service';
 import { currentOwnerAllocations, readOwnerAllocations, replaceOwnerAllocations } from '../finance/owner-allocations';
 
+async function findMainWarehouse(tx: TransactionClient) {
+  const mainWarehouse = await tx.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true } });
+  if (!mainWarehouse) throw new Error('Главный склад не найден в системе');
+  return mainWarehouse;
+}
+
 /** Employee lock serializes advances, salary payouts, payment, edits and cancellation. */
 export async function lockExpenseEmployee(tx: TransactionClient, expenseId: string) {
   await tx.$queryRaw`SELECT u.id FROM users u JOIN expenses e ON e."employeeId" = u.id WHERE e.id = ${expenseId} FOR UPDATE OF u`;
@@ -35,11 +41,23 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
   const rate = await getRateForDate(new Date());
   if (!rate) throw new Error('Сначала задайте курс валют на сегодня');
   const amountUsd = roundMoney(D(amountTjs).div(rate));
-  const resolvedTargetType = input.targetType || (input.storeId ? 'STORE' : 'BUSINESS');
+  let resolvedTargetType = input.targetType || (input.storeId ? 'STORE' : 'BUSINESS');
 
-  const store = input.storeId ? await tx.store.findUnique({ where: { id: input.storeId } }) : null;
+  // Two kinds of expense:
+  //  - STORE («Расход филиала»): booked to one retail store, paid from its cash register and
+  //    deducted from that store's net profit.
+  //  - BUSINESS («Общесетевой расход»): not tied to any retail store — booked to the main
+  //    warehouse (the network's central safe), paid from its cash and deducted only from the
+  //    network's total profit (reports treat main-warehouse expenses as network-level).
+  let targetStoreId = input.storeId;
+  if (resolvedTargetType === 'BUSINESS') {
+    targetStoreId = (await findMainWarehouse(tx)).id;
+  }
+  const store = targetStoreId ? await tx.store.findUnique({ where: { id: targetStoreId } }) : null;
+  // Anything booked to the main warehouse (e.g. payroll of central staff) is network-level.
+  if (store?.isMainWarehouse) resolvedTargetType = 'BUSINESS';
   const paidFromCashRegister = input.paidFromCashRegister ?? true;
-  const writesOffCash = Boolean(input.storeId && store && paidFromCashRegister);
+  const writesOffCash = Boolean(targetStoreId && store && paidFromCashRegister);
   // Not written off the cash register → nothing has actually been paid yet; the expense is
   // recorded as UNPAID and settled later from the register via payExpense.
   const status = writesOffCash ? 'PAID' : 'UNPAID';
@@ -54,7 +72,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       ownerProfitAllocations: moneyJson(ownerProfitAllocations),
       exchangeRate: rate,
       targetType: resolvedTargetType,
-      storeId: input.storeId,
+      storeId: targetStoreId,
       sourceAccount: resolvedSource,
       comment: input.comment,
       description: input.description,
@@ -67,12 +85,11 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
     },
   });
 
-  if (writesOffCash && store && input.storeId) {
-    if (store.isMainWarehouse) throw new Error('Главный склад не является торговой кассой');
-    const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceTjs: { gte: amountTjs } }, data: { cashBalanceTjs: { decrement: amountTjs } } });
+  if (writesOffCash && store && targetStoreId) {
+    const cashGuard = await tx.store.updateMany({ where: { id: targetStoreId, cashBalanceTjs: { gte: amountTjs } }, data: { cashBalanceTjs: { decrement: amountTjs } } });
     if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для расхода');
 
-    const cashAccount = await getStoreCashAccount(tx, input.storeId, store.name);
+    const cashAccount = await getStoreCashAccount(tx, targetStoreId, store.name);
     await postTransaction(tx, {
       type: 'EXPENSE',
       direction: 'OUT',
@@ -85,7 +102,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       amountTjs,
       amountUsd,
       categoryName: input.category,
-      shopId: input.storeId,
+      shopId: targetStoreId,
       sourceType: 'EXPENSE',
       sourceId: expense.id,
       description: input.comment || input.description || `Расход: ${input.category}`,
@@ -103,7 +120,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       amountTjs: D(amountTjs).negated(),
       amountUsd: D(amountUsd).negated(),
       exchangeRate: rate,
-      storeId: input.storeId,
+      storeId: targetStoreId,
       storeName: store?.name,
       userName: actor.name,
       referenceId: expense.id,
@@ -116,7 +133,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       userName: actor.name,
       userRole: actor.role,
       action: 'EXPENSE',
-      details: `Зарегистрирован расход [${input.category}]: ${amountTjs} TJS ($${amountUsd}) (${store?.name || 'Бизнес'})${status === 'UNPAID' ? ' — не оплачено' : ''}`,
+      details: `Зарегистрирован ${resolvedTargetType === 'BUSINESS' ? 'общесетевой расход' : 'расход'} [${input.category}]: ${amountTjs} TJS ($${amountUsd}) (${resolvedTargetType === 'BUSINESS' ? 'Сеть' : store?.name || 'Бизнес'})${status === 'UNPAID' ? ' — не оплачено' : ''}`,
       financialDetails: moneyJson({ amountTjs, amountUsd, exchangeRate: rate }),
       targetId: expense.id,
     },
@@ -140,10 +157,14 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
     if (existing.status !== 'UNPAID') throw new Error('Расход уже оплачен');
 
     const actor = await resolveActor(tx, actorId);
-    const storeId = existing.storeId || storeIdForBusinessExpense;
+    const isNetworkExpense = existing.targetType === 'BUSINESS';
+    // A network expense is always paid from the central safe (main warehouse cash), so it
+    // never lands on a retail store's P&L; a legacy one with no store falls back to the same.
+    const storeId = isNetworkExpense ? existing.storeId || (await findMainWarehouse(tx)).id : existing.storeId || storeIdForBusinessExpense;
     if (!storeId) throw new Error('Выберите кассу для оплаты расхода');
     const store = await tx.store.findUnique({ where: { id: storeId } });
-    if (!store || store.isMainWarehouse) throw new Error('Главный склад не является торговой кассой');
+    if (!store) throw new Error('Касса не найдена');
+    if (store.isMainWarehouse && !isNetworkExpense) throw new Error('Главный склад не является торговой кассой');
 
     const cashGuard = await tx.store.updateMany({
       where: { id: storeId, cashBalanceTjs: { gte: existing.amountTjs } },
@@ -233,7 +254,8 @@ export async function updateExpense(
     const newAmountTjs = input.amountTjs !== undefined ? requirePositiveMoney(input.amountTjs, 'Сумма расхода') : existing.amountTjs;
     const newAmountUsd = roundMoney(D(newAmountTjs).div(rate));
     const newCategory = input.category !== undefined ? input.category.trim() : existing.category;
-    const newStoreId = input.storeId !== undefined ? input.storeId : existing.storeId;
+    // A network expense stays on the central safe — its store can't be edited to a retail one.
+    const newStoreId = input.storeId !== undefined && existing.targetType !== 'BUSINESS' ? input.storeId : existing.storeId;
     if (existing.status === 'PAID' && existing.paidFromCashRegister && !newStoreId) throw new Error('Для оплаченного расхода необходимо сохранить кассу оплаты');
     const newComment = input.comment !== undefined ? input.comment.trim() : existing.comment;
     const newDescription = input.description !== undefined ? input.description.trim() : existing.description;
@@ -257,7 +279,7 @@ export async function updateExpense(
     let newCashAccountId: string | undefined;
     if (newStoreId && existing.status === 'PAID' && existing.paidFromCashRegister) {
       const targetStore = await tx.store.findUnique({ where: { id: newStoreId }, select: { isMainWarehouse: true, name: true } });
-      if (!targetStore || targetStore.isMainWarehouse) throw new Error('Главный склад не является торговой кассой');
+      if (!targetStore || (targetStore.isMainWarehouse && existing.targetType !== 'BUSINESS')) throw new Error('Главный склад не является торговой кассой');
       const cashGuard = await tx.store.updateMany({
         where: { id: newStoreId, cashBalanceTjs: { gte: newAmountTjs } },
         data: { cashBalanceTjs: { decrement: newAmountTjs } },

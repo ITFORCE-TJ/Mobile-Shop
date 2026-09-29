@@ -5,7 +5,7 @@ import { prisma } from './prisma/prisma.service';
 import type { TransactionClient } from './prisma/prisma.service';
 import type { Prisma } from '@prisma/client';
 import { AuthService } from './auth/auth.service';
-import { authenticateJwt, type AuthenticatedRequest, enforceBodyStoreScope, requireRoles } from './auth/auth.middleware';
+import { authenticateJwt, type AuthenticatedRequest, enforceBodyStoreScope, isStoreScopedRole, requireRoles } from './auth/auth.middleware';
 import { SalesService } from './modules/sales/sales.service';
 import { RealtimeSyncGateway } from './websocket/websocket.gateway';
 import { registerTransferRoutes } from './modules/transfers/transfers.routes';
@@ -21,6 +21,7 @@ import { registerNotificationRoutes } from './modules/notifications/notification
 import { registerExchangeRateRoutes } from './modules/exchange-rate/exchange-rate.routes';
 import { registerStoreRoutes } from './modules/stores/stores.routes';
 import { registerReportRoutes } from './modules/reports/reports.routes';
+import { registerCashCollectionRoutes } from './modules/cash-collections/cash-collections.routes';
 import { requirePositiveMoney } from './common/money';
 import { requireTodayRate } from './modules/exchange-rate/exchange-rate.service';
 import { decimalJsonReplacer } from './common/decimal';
@@ -176,9 +177,9 @@ app.post('/api/auth/logout', authenticateJwt, async (req: AuthenticatedRequest, 
 
 app.get('/api/stores', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const isSeller = req.user!.role === 'SELLER';
+    const isSeller = isStoreScopedRole(req.user!.role);
     const storeId = req.user!.storeId;
-    // A SELLER also needs to see the main warehouse (not just their own store) — that's where
+    // A SELLER/STORE_MANAGER also needs to see the main warehouse (not just their own store) — that's where
     // they pull transfer requests from when the admin isn't around to move stock themselves.
     const where = isSeller ? (storeId ? { OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' }) : undefined;
     const stores = await prisma.store.findMany({ where, orderBy: { name: 'asc' } });
@@ -203,8 +204,8 @@ app.get('/api/devices', authenticateJwt, async (req: AuthenticatedRequest, res, 
     const purchaseInvoiceId = typeof req.query.purchaseInvoiceId === 'string' ? req.query.purchaseInvoiceId : undefined;
 
     let where: Prisma.DeviceWhereInput | undefined;
-    if (req.user!.role === 'SELLER') {
-      // A SELLER also needs to see devices sitting at the main warehouse — that's what they
+    if (isStoreScopedRole(req.user!.role)) {
+      // A SELLER/STORE_MANAGER also needs to see devices sitting at the main warehouse — that's what they
       // pick from when requesting a transfer into their own store — but no other retail store.
       if (!req.user!.storeId) {
         res.status(403).json({ message: 'Пользователь не привязан ни к одному магазину' });
@@ -400,6 +401,7 @@ registerNotificationRoutes(app);
 registerExchangeRateRoutes(app);
 registerStoreRoutes(app);
 registerReportRoutes(app);
+registerCashCollectionRoutes(app);
 
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {
   // Every error that reaches here gets logged server-side, regardless of what the client

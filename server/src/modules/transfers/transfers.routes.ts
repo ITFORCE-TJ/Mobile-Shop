@@ -1,5 +1,5 @@
 import type { Express } from 'express';
-import { authenticateJwt, requireRoles, type AuthenticatedRequest } from '../../auth/auth.middleware';
+import { authenticateJwt, isStoreScopedRole, requireRoles, type AuthenticatedRequest } from '../../auth/auth.middleware';
 import { prisma } from '../../prisma/prisma.service';
 import { TransfersService } from './transfers.service';
 
@@ -9,8 +9,8 @@ export function registerTransferRoutes(app: Express) {
       // SELLERs only see transfers touching their own store — cross-store transfer
       // history is not something a store employee should be able to read.
       const storeScope =
-        req.user!.role === 'SELLER' && req.user!.storeId
-          ? { OR: [{ fromStoreId: req.user!.storeId }, { toStoreId: req.user!.storeId }] }
+        isStoreScopedRole(req.user!.role)
+          ? { OR: [{ fromStoreId: req.user!.storeId ?? '__none__' }, { toStoreId: req.user!.storeId ?? '__none__' }] }
           : undefined;
 
       // Explicit opt-in cap — existing callers that don't pass it keep today's full-history
@@ -43,7 +43,7 @@ export function registerTransferRoutes(app: Express) {
       // reach the shop floor) — approval still requires an ADMIN/PARTNER, so this never lets a
       // SELLER move stock on their own authority. Any other combination (another store's stock,
       // or a destination that isn't their own store) stays blocked.
-      if (req.user!.role === 'SELLER') {
+      if (isStoreScopedRole(req.user!.role)) {
         const ownStoreId = req.user!.storeId;
         const isOwnStoreOrigin = fromStoreId === ownStoreId;
         const isPullFromMainWarehouse =

@@ -2,7 +2,7 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { PageId } from '../../types';
+import { PageId, Role } from '../../types';
 import {
   ShoppingBag,
   History,
@@ -43,18 +43,18 @@ const PAGE_ROUTES: Record<string, string> = {
   NOTIFICATIONS: '/notifications',
 };
 
-const TABLET_NAV_ITEMS: { id: PageId; label: string; icon: React.ElementType; roles: ('ADMIN' | 'PARTNER' | 'SELLER')[] }[] = [
-  { id: 'SALE', label: 'POS', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-  { id: 'INVENTORY', label: 'Склад', icon: Package, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-  { id: 'SALES_HISTORY', label: 'Продажи', icon: History, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-  { id: 'EXCHANGE', label: 'Обмен', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-  { id: 'REPAIR', label: 'Ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-  { id: 'TRANSFER', label: 'Перевод', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+const TABLET_NAV_ITEMS: { id: PageId; label: string; icon: React.ElementType; roles: Role[] }[] = [
+  { id: 'SALE', label: 'POS', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+  { id: 'INVENTORY', label: 'Склад', icon: Package, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+  { id: 'SALES_HISTORY', label: 'Продажи', icon: History, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+  { id: 'EXCHANGE', label: 'Обмен', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+  { id: 'REPAIR', label: 'Ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+  { id: 'TRANSFER', label: 'Перевод', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
   { id: 'PURCHASE', label: 'Приход', icon: PlusCircle, roles: ['ADMIN', 'PARTNER'] },
   { id: 'SUPPLIERS', label: 'Поставщ.', icon: Truck, roles: ['ADMIN', 'PARTNER'] },
-  { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
+  { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
   { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-  { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
+  { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
   { id: 'OWNERS', label: 'Партнеры', icon: Users, roles: ['ADMIN', 'PARTNER'] },
   { id: 'EMPLOYEES', label: 'Кадры', icon: UserCheck, roles: ['ADMIN'] },
   { id: 'AUDIT_LOG', label: 'Аудит', icon: FileText, roles: ['ADMIN'] },

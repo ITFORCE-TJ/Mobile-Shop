@@ -1,7 +1,7 @@
 import { D } from '../../common/decimal';
 import type { Express } from 'express';
 import type { Prisma } from '@prisma/client';
-import { authenticateJwt, requireRoles, enforceStoreScope, type AuthenticatedRequest } from '../../auth/auth.middleware';
+import { authenticateJwt, requireRoles, enforceStoreScope, isStoreScopedRole, type AuthenticatedRequest } from '../../auth/auth.middleware';
 import { prisma } from '../../prisma/prisma.service';
 import { RefundService } from './refund.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
@@ -81,12 +81,20 @@ export function registerRefundRoutes(app: Express) {
     }
   });
 
-  app.post('/api/sales/:id/refund', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/sales/:id/refund', authenticateJwt, requireRoles('ADMIN', 'PARTNER', 'STORE_MANAGER'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { reason, refundAmountTjs, penaltyFeeTjs, paymentMethod } = req.body ?? {};
       if (!reason || refundAmountTjs == null || !paymentMethod) {
         res.status(400).json({ message: 'reason, refundAmountTjs и paymentMethod обязательны' });
         return;
+      }
+      // A store manager refunds only their own store's receipts.
+      if (isStoreScopedRole(req.user!.role)) {
+        const sourceSale = await prisma.sale.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
+        if (!sourceSale || sourceSale.storeId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Этот чек принадлежит другому магазину' });
+          return;
+        }
       }
 
       const sale = await RefundService.refund({

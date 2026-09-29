@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { MonthPicker } from '../ui/MonthPicker';
+import { isStoreScoped } from '../../utils/roles';
 
 export const RepairPage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
@@ -92,6 +93,12 @@ export const RepairPage: React.FC = () => {
   const [createTicketStoreId, setCreateTicketStoreId] = useState<string>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : ''
   );
+  // Follow the global store switcher in the TopBar (the main warehouse takes no repairs).
+  useEffect(() => {
+    const isRetail = retailStores.some(s => s.id === globalSelectedStoreId);
+    setSelectedStoreId(isRetail ? globalSelectedStoreId : 'ALL');
+    if (isRetail) setCreateTicketStoreId(globalSelectedStoreId);
+  }, [globalSelectedStoreId]);
 
   useEffect(() => {
     if (!createTicketStoreId && retailStores.length > 0) {
@@ -99,7 +106,7 @@ export const RepairPage: React.FC = () => {
     }
   }, [retailStores, createTicketStoreId]);
 
-  const isSeller = currentUser?.role === 'SELLER';
+  const isSeller = isStoreScoped(currentUser);
   const effectiveStoreId = isSeller ? (currentUser?.storeId || retailStores[0]?.id || '') : selectedStoreId;
 
   const currentStoreName = isSeller

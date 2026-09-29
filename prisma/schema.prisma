@@ -12,6 +12,8 @@ enum Role {
   ADMIN
   PARTNER
   SELLER
+  // Manager of one store (users.storeId): that store's reports/expenses/cash only.
+  STORE_MANAGER
 }
 
 enum DeviceStatus {

@@ -15,6 +15,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
+import { isStoreScoped } from '../../utils/roles';
 
 export const TransferPage: React.FC = () => {
   const {
@@ -29,7 +30,7 @@ export const TransferPage: React.FC = () => {
     selectedStoreId: globalSelectedStoreId
   } = useAppFields('currentUser', 'stores', 'devices', 'transfers', 'createTransferRequest', 'approveTransfer', 'rejectTransfer', 'openScanner', 'selectedStoreId');
 
-  const isSeller = currentUser?.role === 'SELLER';
+  const isSeller = isStoreScoped(currentUser);
   const sellerStoreName = currentUser?.storeName || (currentUser?.storeId ? stores.find(s => s.id === currentUser.storeId)?.name : undefined) || 'Мой магазин';
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
   // A seller's default flow is pulling stock IN from the main warehouse into their own store
@@ -63,6 +64,10 @@ export const TransferPage: React.FC = () => {
   const [historyFilterStoreId, setHistoryFilterStoreId] = useState<string>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
+  // Follow the global store switcher in the TopBar.
+  useEffect(() => {
+    setHistoryFilterStoreId(globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL');
+  }, [globalSelectedStoreId]);
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [statusBanner, setStatusBanner] = useState<StatusMessage | null>(null);
 
@@ -206,7 +211,7 @@ export const TransferPage: React.FC = () => {
   const visibleTransfers = useMemo(() => {
     return (transfers || []).filter((t: TransferRequest) => {
       if (isSeller) {
-        return t.fromLocationId === currentUser.storeId || t.toLocationId === currentUser.storeId;
+        return t.fromLocationId === currentUser?.storeId || t.toLocationId === currentUser?.storeId;
       }
       if (historyFilterStoreId !== 'ALL') {
         return t.fromLocationId === historyFilterStoreId || t.toLocationId === historyFilterStoreId;

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { MonthPicker } from '../ui/MonthPicker';
+import { isStoreScoped } from '../../utils/roles';
 
 // Standard Russian noun pluralization (1 -> singular, 2-4 -> few, else -> many),
 // so the header stays correct whether the business has 2 partners or a third is added.
@@ -195,7 +196,7 @@ export const OwnersPage: React.FC = () => {
   const totalSpentOnGoodsUsd = useMemo(() => (suppliers || []).reduce((acc, s) => acc + (s.totalPaidUsd ?? 0), 0), [suppliers]);
   const totalAvailableProfit = useMemo(() => owners.reduce((acc, o) => acc + (o.availableProfitUsd ?? 0), 0), [owners]);
 
-  if (currentUser?.role === 'SELLER') {
+  if (isStoreScoped(currentUser)) {
     return (
       <div className="p-8 text-center text-fg-muted text-xs">
         <p className="font-bold text-fg-muted uppercase">Доступ ограничен</p>

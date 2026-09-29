@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { PageId } from '../../types';
+import { PageId, Role } from '../../types';
+import { isStoreScoped } from '../../utils/roles';
 import {
   ShoppingBag,
   History,
@@ -51,7 +52,7 @@ interface NavGroup {
     id: PageId;
     label: string;
     icon: React.ElementType;
-    roles: ('ADMIN' | 'PARTNER' | 'SELLER')[];
+    roles: Role[];
   }[];
 }
 
@@ -59,26 +60,26 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Основные операции',
     items: [
-      { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
     ]
   },
   {
     title: 'Склад и логистика',
     items: [
-      { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
       { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
       { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN', 'PARTNER'] },
     ]
   },
   {
     title: 'Финансы и учёт',
     items: [
-      { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'EXPENSES', label: 'Расходы магазина', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
+      { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
+      { id: 'EXPENSES', label: 'Расходы магазина', icon: Wallet, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
       { id: 'BONUSES', label: 'Бонусы продавцов', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
       { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
     ]
@@ -118,7 +119,7 @@ export const Drawer: React.FC = () => {
   // the user has seen it — informational notifications are created already resolved.
   const unreadNotifs = notifications.filter(n => !n.read).length;
   const userStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
-  const storeSubtitle = currentUser?.role === 'SELLER'
+  const storeSubtitle = isStoreScoped(currentUser)
     ? (userStoreName || 'Магазин не привязан')
     : (userStoreName || 'Все магазины');
 

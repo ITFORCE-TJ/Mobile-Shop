@@ -22,6 +22,7 @@ import {
   Wrench,
   Loader2
 } from 'lucide-react';
+import { isStoreScoped } from '../../utils/roles';
 
 export const SettingsPage: React.FC = () => {
   const {
@@ -59,7 +60,7 @@ export const SettingsPage: React.FC = () => {
 
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  if (currentUser?.role === 'SELLER') {
+  if (isStoreScoped(currentUser)) {
     return <Navigate to="/sale" replace />;
   }
 

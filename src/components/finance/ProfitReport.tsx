@@ -28,84 +28,9 @@ import {
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { expenseCategoryLabel } from '../../utils/expenseCategories';
 import { ReportPreviewModal } from '../common/ReportPreviewModal';
+import { type ExpenseBreakdown, EMPTY_SUMMARY, type ReportsSummary, monthLabel, signedUsd, tjs, usd, useReportsSummary } from './reportTypes';
 
-interface ExpenseBreakdown {
-  expensesUsd: number;
-  expensesTjs: number;
-  unpaidExpensesTjs: number;
-  expensesByCategory: { category: string; amountUsd: number; amountTjs: number }[];
-}
-
-interface StoreBreakdown extends ExpenseBreakdown {
-  storeId: string; storeName: string; revenueUsd: number; revenueTjs: number; cogsUsd: number; cogsTjs: number;
-  profitUsd: number; profitTjs: number; refundPenaltiesUsd: number; netProfitUsd: number; netProfitTjs: number;
-  unitsSold: number; salesCount: number; cashTjs: number;
-  stockCount: number; stockCostUsd: number; stockCostTjs: number;
-  topModels: { name: string; count: number; revenueUsd: number; profitUsd: number }[];
-}
-
-interface ReportsSummary {
-  unitsSold: number;
-  salesCount: number;
-  /** Refunds processed in the period — already subtracted from revenue/profit below, even
-   *  when the refunded sale itself was made in an earlier period. */
-  refundsCount: number;
-  refundsRevenueUsd: number;
-  exchangesCount: number;
-  revenueUsd: number;
-  revenueTjs: number;
-  cogsUsd: number;
-  cogsTjs: number;
-  grossProfitUsd: number;
-  grossProfitTjs: number;
-  grossMarginPercent: number;
-  /** "Прибыль (с учетом возвратов)" — recognized profit plus retained refund penalties; the
-   *  one profit figure the summary card, per-store cards, and netProfitUsd/Tjs all share. */
-  profitUsd: number;
-  profitTjs: number;
-  expensesTjs: number;
-  expensesUsd: number;
-  periodRefundPenaltiesUsd: number;
-  periodRefundPenaltiesTjs: number;
-  netProfitUsd: number;
-  netProfitTjs: number;
-  periodCashBonusesUsd: number;
-  periodCashBonusesTjs: number;
-  totalSupplierDebtUsd: number;
-  mainWarehouseStockCount: number;
-  mainWarehouseStockCostUsd: number;
-  mainWarehouseCashUsd: number;
-  mainWarehouseCashTjs: number;
-  mainWarehouseExpenses: ExpenseBreakdown;
-  topSuppliersByDebt: { id: string; name: string; totalPurchasedUsd: number; totalPaidUsd: number; totalDebtUsd: number }[];
-  storeBreakdown: StoreBreakdown[];
-  modelCounts: { name: string; count: number; revenueUsd: number; cogsUsd: number; profitUsd: number }[];
-}
-
-const EMPTY_EXPENSES: ExpenseBreakdown = { expensesUsd: 0, expensesTjs: 0, unpaidExpensesTjs: 0, expensesByCategory: [] };
-const EMPTY_SUMMARY: ReportsSummary = {
-  unitsSold: 0, salesCount: 0, refundsCount: 0, refundsRevenueUsd: 0, exchangesCount: 0, revenueUsd: 0, revenueTjs: 0, cogsUsd: 0, cogsTjs: 0,
-  grossProfitUsd: 0, grossProfitTjs: 0, grossMarginPercent: 0,
-  profitUsd: 0, profitTjs: 0, expensesTjs: 0, expensesUsd: 0,
-  periodRefundPenaltiesUsd: 0, periodRefundPenaltiesTjs: 0,
-  netProfitUsd: 0, netProfitTjs: 0, periodCashBonusesUsd: 0, periodCashBonusesTjs: 0,
-  totalSupplierDebtUsd: 0,
-  mainWarehouseStockCount: 0, mainWarehouseStockCostUsd: 0, mainWarehouseCashUsd: 0, mainWarehouseCashTjs: 0,
-  mainWarehouseExpenses: EMPTY_EXPENSES,
-  topSuppliersByDebt: [], storeBreakdown: [], modelCounts: [],
-};
-
-const usd = (v: number) => `$${v.toLocaleString(undefined, { maximumFractionDigits: 2 })}`;
-const signedUsd = (v: number) => `${v >= 0 ? '+' : '−'}${usd(Math.abs(v))}`;
-const tjs = (v: number) => `${v.toLocaleString(undefined, { maximumFractionDigits: 2 })} TJS`;
-
-function monthLabel(month: string): string {
-  const [y, m] = month.split('-').map(Number);
-  if (!y || !m) return month;
-  return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
-}
-
-const Metric: React.FC<{ label: string; value: string; sub?: string; tone?: 'default' | 'success' | 'danger' | 'accent' }> = ({ label, value, sub, tone = 'default' }) => (
+export const Metric: React.FC<{ label: string; value: string; sub?: string; tone?: 'default' | 'success' | 'danger' | 'accent' }> = ({ label, value, sub, tone = 'default' }) => (
   <div className="min-w-0">
     <p className="text-[10px] text-fg-subtle uppercase tracking-wide truncate">{label}</p>
     <p className={`text-sm font-bold truncate ${tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : tone === 'accent' ? 'text-accent' : 'text-fg-muted'}`}>{value}</p>
@@ -113,7 +38,7 @@ const Metric: React.FC<{ label: string; value: string; sub?: string; tone?: 'def
   </div>
 );
 
-const ExpenseCategoryList: React.FC<{ data: ExpenseBreakdown }> = ({ data }) => (
+export const ExpenseCategoryList: React.FC<{ data: ExpenseBreakdown }> = ({ data }) => (
   data.expensesByCategory.length === 0 ? (
     <p className="text-xs text-fg-subtle">Расходов за период нет</p>
   ) : (
@@ -156,6 +81,10 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     if (retail.some((s) => s.id === globalSelectedStoreId)) return globalSelectedStoreId;
     return 'all';
   });
+  // Follow the global store switcher in the TopBar ('all' = consolidated network).
+  useEffect(() => {
+    setSelectedStore(stores.some((s) => !s.isMainWarehouse && s.id === globalSelectedStoreId) ? globalSelectedStoreId : 'all');
+  }, [globalSelectedStoreId, stores]);
   const scopeStoreId = view === 'stores' ? 'all' : selectedStore;
   // Which store's Excel preview is open — 'all' for every store combined, null when closed.
   const [salesReportStoreId, setSalesReportStoreId] = useState<string | null>(null);
@@ -169,34 +98,14 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
 
   // Period/store filtering happens on the server (/api/reports/summary), so what crosses the
   // network scales with the selected month, not with the business's entire history.
-  const [summary, setSummary] = useState<ReportsSummary | null>(null);
-  const [summaryLoading, setSummaryLoading] = useState(true);
+  const { summary, loading: summaryLoading, error: summaryError, reload } = useReportsSummary(month, scopeStoreId);
   const [reportDownloading, setReportDownloading] = useState(false);
-  const [summaryError, setSummaryError] = useState<string | null>(null);
   const [revision, setRevision] = useState(0);
   useEffect(() => {
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const refresh = () => { clearTimeout(timer); timer = setTimeout(() => setRevision(v => v + 1), 150); };
+    const refresh = () => setRevision(v => v + 1);
     window.addEventListener('business-data-changed', refresh);
-    return () => { clearTimeout(timer); window.removeEventListener('business-data-changed', refresh); };
+    return () => window.removeEventListener('business-data-changed', refresh);
   }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    setSummaryLoading(true);
-    setSummaryError(null);
-
-    const params = new URLSearchParams({ period, month });
-    if (scopeStoreId !== 'all') params.set('storeId', scopeStoreId);
-
-    apiClient<ReportsSummary>(`/reports/summary?${params.toString()}`, { signal: controller.signal })
-      .then((data) => { if (!cancelled) setSummary(data); })
-      .catch((error) => { if (!cancelled) { setSummary(null); setSummaryError(error.message || 'Не удалось загрузить отчёт'); } })
-      .finally(() => { if (!cancelled) setSummaryLoading(false); });
-
-    return () => { cancelled = true; controller.abort(); };
-  }, [month, scopeStoreId, revision]);
 
   // The itemized sales/expenses list is only needed for the Excel preview, so it's fetched
   // only once that preview is opened, scoped to just the one store being previewed.
@@ -318,7 +227,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
 
   if (summaryError) return <div className="p-4 space-y-3" role="alert">
     {monthPicker}<p>Не удалось загрузить финансовый отчёт. Итоги недоступны.</p>
-    <p>{summaryError}</p><button type="button" onClick={() => setRevision(v => v + 1)}>Повторить загрузку</button>
+    <p>{summaryError}</p><button type="button" onClick={reload}>Повторить загрузку</button>
   </div>;
   if (!summary) return <div className="p-4" role="status">{monthPicker}<p>Загрузка финансового отчёта…</p></div>;
 

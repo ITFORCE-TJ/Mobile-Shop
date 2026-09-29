@@ -1,6 +1,6 @@
 import { D } from '../../common/decimal';
 import type { Express } from 'express';
-import { authenticateJwt, enforceBodyStoreScope, type AuthenticatedRequest } from '../../auth/auth.middleware';
+import { authenticateJwt, enforceBodyStoreScope, isStoreScopedRole, type AuthenticatedRequest } from '../../auth/auth.middleware';
 import { prisma } from '../../prisma/prisma.service';
 import { RepairsService } from './repairs.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
@@ -11,7 +11,7 @@ const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'
 export function registerRepairRoutes(app: Express) {
   app.get('/api/repairs', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const storeScopeId = req.user!.role === 'SELLER' && req.user!.storeId ? req.user!.storeId : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
+      const storeScopeId = isStoreScopedRole(req.user!.role) ? req.user!.storeId ?? '__none__' : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
       // period/month let the Reports export preview ask for exactly the range it's showing,
       // instead of the client filtering the entire repairs history it used to fetch in full.
       const period = VALID_PERIODS.includes(req.query.period as ReportPeriod) ? (req.query.period as ReportPeriod) : 'ALL';
@@ -62,8 +62,8 @@ export function registerRepairRoutes(app: Express) {
         res.status(400).json({ message: 'status обязателен' });
         return;
       }
-      // A SELLER may only update tickets belonging to their own store.
-      if (req.user!.role === 'SELLER') {
+      // A SELLER/STORE_MANAGER may only update tickets belonging to their own store.
+      if (isStoreScopedRole(req.user!.role)) {
         const existing = await prisma.repairTicket.findUnique({ where: { id: req.params.id } });
         if (!existing || existing.storeId !== req.user!.storeId) {
           res.status(403).json({ message: 'Эта квитанция на ремонт принадлежит другому магазину' });

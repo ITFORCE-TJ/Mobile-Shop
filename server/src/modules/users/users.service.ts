@@ -1,5 +1,5 @@
 import { type MoneyInput } from '../../common/decimal';
-import { prisma } from '../../prisma/prisma.service';
+import { prisma, type TransactionClient } from '../../prisma/prisma.service';
 import { AuthService } from '../../auth/auth.service';
 import { resolveActor } from '../../common/actor';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
@@ -12,6 +12,13 @@ function validateCompensation(input: { baseSalaryTjs?: MoneyInput; salesCommissi
     const value = D(input.salesCommissionPercent);
     if (value.lt(0) || value.gt(100)) throw new Error('Комиссия должна быть от 0 до 100%');
   }
+}
+
+/** A store manager runs one retail store — the main warehouse is the network's own stock/safe. */
+async function requireRetailStore(tx: TransactionClient, storeId: string) {
+  const store = await tx.store.findUnique({ where: { id: storeId }, select: { isMainWarehouse: true, active: true } });
+  if (!store || !store.active) throw new Error('Магазин не найден или неактивен');
+  if (store.isMainWarehouse) throw new Error('Управляющего можно привязать только к розничному магазину, не к главному складу');
 }
 
 const MIN_PASSWORD_LENGTH = 6;
@@ -61,7 +68,7 @@ export class UsersService {
     login: string;
     password: string;
     name: string;
-    role: 'ADMIN' | 'PARTNER' | 'SELLER';
+    role: 'ADMIN' | 'PARTNER' | 'SELLER' | 'STORE_MANAGER';
     storeId?: string;
     baseSalaryTjs?: MoneyInput;
     salesCommissionPercent?: number;
@@ -75,9 +82,10 @@ export class UsersService {
       const existing = await tx.user.findUnique({ where: { login: input.login } });
       if (existing) throw new Error('Пользователь с таким логином уже существует');
 
-      if (input.role === 'SELLER' && (!input.storeId || !input.storeId.trim())) {
-        throw new Error('Для роли Продавец обязательна привязка к магазину');
+      if ((input.role === 'SELLER' || input.role === 'STORE_MANAGER') && (!input.storeId || !input.storeId.trim())) {
+        throw new Error('Для ролей Продавец и Управляющий обязательна привязка к магазину');
       }
+      if (input.role === 'STORE_MANAGER') await requireRetailStore(tx, input.storeId!);
 
       const hashed = await AuthService.hashPassword(requireValidPassword(input.password));
       const user = await tx.user.create({
@@ -106,7 +114,7 @@ export class UsersService {
       login?: string;
       password?: string;
       name?: string;
-      role?: 'ADMIN' | 'PARTNER' | 'SELLER';
+      role?: 'ADMIN' | 'PARTNER' | 'SELLER' | 'STORE_MANAGER';
       storeId?: string | null;
       baseSalaryTjs?: MoneyInput;
       salesCommissionPercent?: number;
@@ -136,9 +144,10 @@ export class UsersService {
 
       const effectiveRole = data.role || targetUser.role;
       const effectiveStoreId = data.storeId !== undefined ? data.storeId : targetUser.storeId;
-      if (effectiveRole === 'SELLER' && (!effectiveStoreId || !String(effectiveStoreId).trim())) {
-        throw new Error('Для роли Продавец обязательна привязка к магазину');
+      if ((effectiveRole === 'SELLER' || effectiveRole === 'STORE_MANAGER') && (!effectiveStoreId || !String(effectiveStoreId).trim())) {
+        throw new Error('Для ролей Продавец и Управляющий обязательна привязка к магазину');
       }
+      if (effectiveRole === 'STORE_MANAGER') await requireRetailStore(tx, effectiveStoreId);
 
       if (input.password && input.password.trim().length > 0) {
         data.password = await AuthService.hashPassword(requireValidPassword(input.password.trim()));

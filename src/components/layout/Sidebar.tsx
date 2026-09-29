@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { PageId } from '../../types';
+import { PageId, Role } from '../../types';
+import { isStoreScoped, ROLE_LABELS } from '../../utils/roles';
 import {
   ShoppingBag,
   History,
@@ -50,7 +51,7 @@ interface NavGroup {
     id: PageId;
     label: string;
     icon: React.ElementType;
-    roles: ('ADMIN' | 'PARTNER' | 'SELLER')[];
+    roles: Role[];
   }[];
 }
 
@@ -58,26 +59,26 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: 'Основное',
     items: [
-      { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'EXCHANGE', label: 'Обмен Trade-In', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'EXCHANGE', label: 'Обмен Trade-In', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
+      { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
     ]
   },
   {
     title: 'Склад',
     items: [
-      { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
       { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
+      { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER', 'SELLER'] },
       { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN', 'PARTNER'] },
     ]
   },
   {
     title: 'Финансы',
     items: [
-      { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
+      { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
+      { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER', 'STORE_MANAGER'] },
       { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
       { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
     ]
@@ -170,14 +171,14 @@ export const Sidebar: React.FC = () => {
         </div>
         <div className="min-w-0 flex-1">
           <p className="text-xs font-semibold text-fg-muted truncate">{currentUser?.name || 'Пользователь'}</p>
-          {currentUser?.role === 'SELLER' ? (
+          {isStoreScoped(currentUser) ? (
             <p className="text-[10px] text-accent truncate flex items-center gap-1" title={sellerStoreName}>
               <Store className="w-2.5 h-2.5 shrink-0" />
               <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
             </p>
           ) : (
             <p className="text-[10px] text-fg-subtle truncate">
-              {currentUser?.role === 'ADMIN' ? 'Администратор' : 'Партнер'}
+              {currentUser ? ROLE_LABELS[currentUser.role] : ''}
             </p>
           )}
         </div>

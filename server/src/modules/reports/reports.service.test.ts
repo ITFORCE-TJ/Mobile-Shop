@@ -7,15 +7,16 @@ const db = vi.hoisted(() => ({
   sale: { findMany: vi.fn() }, expense: { findMany: vi.fn() }, supplierBonus: { findMany: vi.fn() },
   supplier: { aggregate: vi.fn(), findMany: vi.fn() }, store: { findFirst: vi.fn(), findMany: vi.fn() },
   auditLog: { findMany: vi.fn() }, device: { findMany: vi.fn() },
+  user: { findMany: vi.fn() }, financialTransaction: { groupBy: vi.fn() },
 }));
 vi.mock('../../prisma/prisma.service', () => ({ prisma: db }));
 vi.mock('../exchange-rate/exchange-rate.service', () => ({ getRateForDate: async () => 10 }));
-import { computeReportsSummary } from './reports.service';
+import { computeReportsSummary, toStoreManagerView } from './reports.service';
 
 const date = new Date('2026-09-15T09:00:00Z');
 const stores = Array.from({ length: 20 }, (_, i) => ({ id: `store-${i}`, name: `Store ${i}`, cashBalanceTjs: 1000 + i }));
 const sales = Array.from({ length: 2000 }, (_, i) => ({
-  id: `sale-${i}`, storeId: stores[i % 20].id, totalTjs: 3001.2, totalUsd: 300.12, exchangeRate: 10,
+  id: `sale-${i}`, storeId: stores[i % 20].id, userId: `seller-${i % 3}`, totalTjs: 3001.2, totalUsd: 300.12, exchangeRate: 10,
   createdAt: date, refundedAt: date, status: i % 13 === 0 ? 'REFUNDED' : 'COMPLETED', penaltyFeeUsd: 1.23, penaltyFeeTjs: 12.3,
   customerName: `Customer ${i}`, receiptNumber: i + 1, paymentMethod: 'CASH', cashAmountTjs: 3001.2, cardAmountTjs: 0,
   saleItems: [{ deviceId: `device-${i}`, imei: String(350000000000000 + i), storage: '128GB', color: 'Black', brand: 'Phone', model: `M${i % 7}`, salePriceUsd: 300.12, salePriceTjs: 3001.2, costBasisUsd: i % 9 ? 200.01 : 0, purchaseCostUsd: 200.01 }],
@@ -50,6 +51,8 @@ beforeEach(() => {
   db.supplierBonus.findMany.mockResolvedValue([{ bonusType: 'CASH_DISCOUNT', amountUsd: 25.5, exchangeRate: 10, dateReceived: date }, { bonusType: 'FREE_DEVICES', dateReceived: date, status: 'IN_STOCK' }]);
   db.supplier.aggregate.mockResolvedValue({ _sum: { totalDebtUsd: 123.45 } });
   db.supplier.findMany.mockResolvedValue([{ id: 'supplier', name: 'Supplier', totalPurchasedUsd: 200, totalPaidUsd: 76.55, totalDebtUsd: 123.45 }]);
+  db.user.findMany.mockImplementation(async ({ where }) => where.id.in.map((id: string) => ({ id, name: `Seller ${id.slice(-1)}` })));
+  db.financialTransaction.groupBy.mockResolvedValue([{ shopId: 'store-0', _sum: { amountTjs: 500 }, _count: { _all: 2 } }]);
   db.store.findFirst.mockResolvedValue({ id: 'warehouse', cashBalanceTjs: 345.67 });
   db.store.findMany.mockImplementation(async ({ where }) => stores.filter((store) => !where.id || store.id === where.id));
   db.device.findMany.mockImplementation(async ({ where }) => where.storeId === 'warehouse'
@@ -67,5 +70,31 @@ describe('financial report query optimization preserves all totals', () => {
       writeFileSync(`output/performance/reports-${process.env.REPORT_BENCHMARK_LABEL}-${storeId}.json`, JSON.stringify({ storeId, workload,
         rows: workload.reduce((sum, row) => sum + row.rows, 0), bytes: workload.reduce((sum, row) => sum + row.bytes, 0) }, null, 2));
     }
+  });
+});
+
+describe('network benchmarking fields', () => {
+  it('adds per-store average check, margin, seller ranking, daily dynamics and cash collections', async () => {
+    const summary = await computeReportsSummary({ period: 'SPECIFIC_MONTH', month: '2026-09', storeId: 'all' });
+    const store0 = summary.storeBreakdown.find((s) => s.storeId === 'store-0')!;
+    expect(Number(store0.avgCheckUsd)).toBeCloseTo(300.12, 2);
+    expect(Number(store0.cashCollectedTjs)).toBe(500);
+    expect(store0.cashCollectionsCount).toBe(2);
+    expect(store0.sellers.reduce((n, s) => n + s.salesCount, 0)).toBe(store0.salesCount);
+    expect(store0.daily).toHaveLength(1);
+    expect(store0.daily[0].date).toBe('2026-09-15');
+    expect(store0.daily[0].salesCount).toBe(store0.salesCount);
+    expect(Number(store0.grossMarginPercent)).toBeGreaterThan(0);
+    expect(summary.sellers.map((s) => s.sellerName).sort()).toEqual(['Seller 0', 'Seller 1', 'Seller 2']);
+  });
+
+  it('strips every network/owner-level figure from a store manager view', async () => {
+    const summary = await computeReportsSummary({ period: 'SPECIFIC_MONTH', month: '2026-09', storeId: 'store-1' });
+    const view = toStoreManagerView(summary) as Record<string, unknown>;
+    for (const key of ['totalSupplierDebtUsd', 'topSuppliersByDebt', 'mainWarehouseCashTjs', 'mainWarehouseStockCostUsd', 'mainWarehouseExpenses', 'periodCashBonusesUsd', 'freeDeviceBonusesInStock']) {
+      expect(view).not.toHaveProperty(key);
+    }
+    expect(view.storeBreakdown).toEqual(summary.storeBreakdown);
+    expect(view.netProfitUsd).toEqual(summary.netProfitUsd);
   });
 });

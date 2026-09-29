@@ -25,6 +25,7 @@ import { soundEffects } from '../../utils/sound';
 import { MonthPicker } from '../ui/MonthPicker';
 import { Combobox } from '../ui/Combobox';
 import { getBusinessDateKey } from '../../utils/businessDate';
+import { isStoreScoped } from '../../utils/roles';
 
 interface PurchaseItem {
   imei: string;
@@ -577,7 +578,7 @@ export const PurchasePage: React.FC = () => {
     }
   };
 
-  if (currentUser?.role === 'SELLER') {
+  if (isStoreScoped(currentUser)) {
     return (
       <div className="p-8 text-center text-fg-subtle">
         <p className="text-sm font-medium text-fg-muted">Доступ ограничен</p>

@@ -14,6 +14,7 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
+import { isStoreScoped } from '../../utils/roles';
 
 const formatDateStr = (dateVal?: string) => {
   if (!dateVal) return '-';
@@ -116,7 +117,7 @@ export const SuppliersPage: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (currentUser?.role === 'SELLER') {
+  if (isStoreScoped(currentUser)) {
     return (
       <div className="p-8 text-center text-fg-subtle">
         <p className="text-sm font-medium text-fg-muted">Доступ ограничен</p>

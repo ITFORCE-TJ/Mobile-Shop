@@ -28,6 +28,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { Dialog } from '../ui/Dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soundEffects } from '../../utils/sound';
+import { isStoreScoped } from '../../utils/roles';
 
 interface CartItem {
   device: Device;
@@ -69,8 +70,8 @@ export const SalePage: React.FC = () => {
     return stores.filter(s => !s.isMainWarehouse);
   }, [stores]);
 
-  const effectiveStoreId = currentUser?.role === 'SELLER'
-    ? currentUser.storeId
+  const effectiveStoreId = isStoreScoped(currentUser)
+    ? currentUser?.storeId
     : (selectableStores.some(s => s.id === selectedStoreId)
         ? selectedStoreId
         : (selectableStores[0]?.id || ''));

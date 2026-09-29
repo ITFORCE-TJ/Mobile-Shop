@@ -6,6 +6,7 @@ import { Bell, ArrowRight, CheckCheck } from 'lucide-react';
 import { PageHeader } from '../ui/PageHeader';
 import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
+import { isStoreScoped } from '../../utils/roles';
 
 const PAGE_ROUTES: Record<string, string> = {
   SALE: '/sale',
@@ -31,7 +32,7 @@ export const NotificationsPage: React.FC = () => {
   const { currentUser, setActivePage } = useAppFields('currentUser', 'setActivePage');
   const { notifications, markNotificationAsRead, markAllNotificationsAsRead } = useNotifications();
 
-  if (currentUser?.role === 'SELLER') {
+  if (isStoreScoped(currentUser)) {
     return <Navigate to="/sale" replace />;
   }
 

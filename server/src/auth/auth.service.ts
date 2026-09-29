@@ -4,7 +4,7 @@ import { prisma } from '../prisma/prisma.service';
 export interface JwtPayload {
   userId: string;
   login: string;
-  role: 'ADMIN' | 'PARTNER' | 'SELLER';
+  role: 'ADMIN' | 'PARTNER' | 'SELLER' | 'STORE_MANAGER';
   storeId?: string | null;
   sessionId?: string;
   exp?: number;

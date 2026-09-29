@@ -1,4 +1,4 @@
-export type Role = 'ADMIN' | 'PARTNER' | 'SELLER';
+export type Role = 'ADMIN' | 'PARTNER' | 'SELLER' | 'STORE_MANAGER';
 
 export type DeviceStatus = 
   | 'MAIN_WAREHOUSE'

@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { Device, DeviceStatus, Store as StoreType } from '../../types';
 import {
@@ -24,6 +24,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { LoadingState } from '../ui/Skeleton';
 import { Dialog } from '../ui/Dialog';
 import { StatCard } from '../ui/StatCard';
+import { isStoreScoped } from '../../utils/roles';
 
 const IN_STOCK_STATUSES: DeviceStatus[] = ['STORE_STOCK', 'MAIN_WAREHOUSE', 'IN_STOCK_AFTER_EXCHANGE'];
 
@@ -115,14 +116,19 @@ export const InventoryPage: React.FC = () => {
   const [pickedStoreId, setPickedStoreId] = useState<string | null>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : null
   );
+  // Follow the global store switcher in the TopBar.
+  useEffect(() => {
+    setPickedStoreId(globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : null);
+  }, [globalSelectedStoreId]);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
   const [selectedDevice, setSelectedDevice] = useState<Device | null>(null);
   const [groupByModel, setGroupByModel] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
 
-  const isSeller = currentUser?.role === 'SELLER';
-  const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  const isSeller = isStoreScoped(currentUser);
+  // A store manager sees stock value too — it's part of their store's P&L.
+  const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER' || currentUser?.role === 'STORE_MANAGER';
   const activeStoreId = isSeller ? (currentUser?.storeId || '') : pickedStoreId;
   const activeStore = stores.find(s => s.id === activeStoreId) || null;
   const showPicker = !isSeller && !activeStoreId;

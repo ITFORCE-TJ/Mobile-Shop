@@ -5,7 +5,7 @@ import { getRateForDate } from '../exchange-rate/exchange-rate.service';
 import { calculateRecognizedProfit } from '../sales/profit';
 import { roundMoney } from '../../common/money';
 
-import { dateRangeForPeriod, type ReportPeriod } from '../../common/business-date';
+import { dateRangeForPeriod, getBusinessDateKey, type ReportPeriod } from '../../common/business-date';
 export { dateRangeForPeriod, type ReportPeriod } from '../../common/business-date';
 
 interface ReportsSummaryInput {
@@ -44,6 +44,66 @@ function sumProfitEvents(events: ProfitEvent[]) {
     cogsTjs = cogsTjs.plus(eventCogsUsd.mul(event.rate));
   }
   return { revenueUsd, revenueTjs, cogsUsd, cogsTjs };
+}
+
+type DailyPoint = { date: string; salesCount: number; revenueUsd: MoneyInput; profitUsd: MoneyInput };
+type SellerStat = { sellerId: string; sellerName: string; salesCount: number; unitsSold: number; revenueUsd: MoneyInput; profitUsd: MoneyInput };
+type ReceiptRow = {
+  userId: string;
+  createdAt: Date;
+  exchangeRate: MoneyInput | null;
+  saleItems: Array<{ salePriceUsd: MoneyInput | null; salePriceTjs: MoneyInput; costBasisUsd: MoneyInput | null; purchaseCostUsd: MoneyInput | null }>;
+};
+
+/** Receipt-level price/profit of one sale, the same per-item math the model statistics use. */
+function receiptTotals(sale: ReceiptRow, fallbackRate: MoneyInput) {
+  const saleRate = sale.exchangeRate || fallbackRate;
+  let revenueUsd = D(0);
+  let profitUsd = D(0);
+  for (const item of sale.saleItems) {
+    const priceUsd = item.salePriceUsd || D(D(item.salePriceTjs).div(saleRate).toFixed(2));
+    revenueUsd = revenueUsd.plus(priceUsd);
+    profitUsd = profitUsd.plus(D(priceUsd).minus(item.costBasisUsd ?? item.purchaseCostUsd ?? 0));
+  }
+  return { revenueUsd, profitUsd };
+}
+
+/** Day-by-day sales dynamics (business-date buckets), ascending. */
+function dailySeries(sales: ReceiptRow[], fallbackRate: MoneyInput): DailyPoint[] {
+  const days = new Map<string, { date: string; salesCount: number; revenueUsd: Prisma.Decimal; profitUsd: Prisma.Decimal }>();
+  for (const sale of sales) {
+    const date = getBusinessDateKey(sale.createdAt);
+    const totals = receiptTotals(sale, fallbackRate);
+    const day = days.get(date) ?? { date, salesCount: 0, revenueUsd: D(0), profitUsd: D(0) };
+    day.salesCount += 1;
+    day.revenueUsd = day.revenueUsd.plus(totals.revenueUsd);
+    day.profitUsd = day.profitUsd.plus(totals.profitUsd);
+    days.set(date, day);
+  }
+  return [...days.values()]
+    .sort((a, b) => a.date.localeCompare(b.date))
+    .map((day) => ({ ...day, revenueUsd: roundMoney(day.revenueUsd), profitUsd: roundMoney(day.profitUsd) }));
+}
+
+/** Seller ranking by revenue — who sold how much and what margin they brought. */
+function sellerRanking(sales: ReceiptRow[], fallbackRate: MoneyInput, names: Map<string, string>): SellerStat[] {
+  const sellers = new Map<string, { sellerId: string; salesCount: number; unitsSold: number; revenueUsd: Prisma.Decimal; profitUsd: Prisma.Decimal }>();
+  for (const sale of sales) {
+    const totals = receiptTotals(sale, fallbackRate);
+    const seller = sellers.get(sale.userId) ?? { sellerId: sale.userId, salesCount: 0, unitsSold: 0, revenueUsd: D(0), profitUsd: D(0) };
+    seller.salesCount += 1;
+    seller.unitsSold += sale.saleItems.length;
+    seller.revenueUsd = seller.revenueUsd.plus(totals.revenueUsd);
+    seller.profitUsd = seller.profitUsd.plus(totals.profitUsd);
+    sellers.set(sale.userId, seller);
+  }
+  return [...sellers.values()]
+    .map((seller) => ({ ...seller, sellerName: names.get(seller.sellerId) ?? '—', revenueUsd: roundMoney(seller.revenueUsd), profitUsd: roundMoney(seller.profitUsd) }))
+    .sort((a, b) => D(b.revenueUsd).comparedTo(a.revenueUsd) || b.salesCount - a.salesCount);
+}
+
+function percentOf(part: MoneyInput, whole: MoneyInput) {
+  return D(whole).gt(0) ? D(D(part).div(whole).mul(100).toFixed(1)) : D(0);
 }
 
 function groupByStore<T extends { storeId: string }>(rows: T[]): Map<string, T[]> {
@@ -87,7 +147,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         ...(dateRange ? { createdAt: dateRange } : {}),
       },
       select: {
-        id: true, storeId: true, status: true, totalTjs: true, totalUsd: true, exchangeRate: true,
+        id: true, storeId: true, userId: true, createdAt: true, status: true, totalTjs: true, totalUsd: true, exchangeRate: true,
         saleItems: { select: {
           brand: true, model: true, salePriceUsd: true, salePriceTjs: true,
           costBasisUsd: true, purchaseCostUsd: true,
@@ -134,7 +194,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
   const saleIds = periodSalesAllStores.map((s) => s.id);
   const exchangeSaleIds = [...new Set(periodExchangeLogs.map((log) => log.targetId).filter((id): id is string => Boolean(id)))];
   const logSaleIds = [...new Set([...saleIds, ...refundedSalesAllStores.map((s) => s.id), ...exchangeSaleIds])];
-  const [profitLogs, exchangeSales, mainWarehouseStock, retailStock] = await Promise.all([
+  const sellerIds = [...new Set(periodSalesAllStores.map((s) => s.userId))];
+  const [profitLogs, exchangeSales, mainWarehouseStock, retailStock, sellers, cashCollections] = await Promise.all([
     logSaleIds.length
       ? prisma.auditLog.findMany({
           where: { targetId: { in: logSaleIds }, action: { in: ['SALE', 'SALE_BELOW_COST', 'EXCHANGE', 'REFUND'] } },
@@ -154,7 +215,21 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       where: { storeId: { in: retailStores.map((s) => s.id) }, status: { in: [...IN_STOCK_STATUSES] } },
       select: { storeId: true, costBasisUsd: true, purchasePriceUsd: true },
     }),
+    sellerIds.length ? prisma.user.findMany({ where: { id: { in: sellerIds } }, select: { id: true, name: true } }) : Promise.resolve([]),
+    // Cash handed over to the central safe in the period («Инкассация»), per store.
+    prisma.financialTransaction.groupBy({
+      by: ['shopId'],
+      where: {
+        sourceType: 'CASH_COLLECTION', status: 'POSTED', reversedTransactionId: null,
+        shopId: { in: retailStores.map((s) => s.id) },
+        ...(dateRange ? { transactionDate: dateRange } : {}),
+      },
+      _sum: { amountTjs: true },
+      _count: { _all: true },
+    }),
   ]);
+  const sellerNames = new Map(sellers.map((u) => [u.id, u.name]));
+  const collectionsByStore = new Map(cashCollections.map((row) => [row.shopId, { tjs: D(row._sum.amountTjs ?? 0), count: row._count._all }]));
   const profitsBySale = new Map<string, typeof profitLogs>();
   for (const log of profitLogs) {
     if (log.targetId) profitsBySale.set(log.targetId, [...(profitsBySale.get(log.targetId) ?? []), log]);
@@ -357,6 +432,9 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       // Same "с учетом возвратов" treatment as the overall totals: a refund reverses the
       // sale's margin in the refund's own period; the withheld penalty is retained profit.
       const storePenalty = refundPenaltiesByStore.get(store.id) || { usd: D(0), tjs: D(0) };
+      const storeReceiptsUsd = storeSales.reduce((sum, sale) => sum.plus(sale.totalUsd), D(0));
+      const storeReceiptsTjs = storeSales.reduce((sum, sale) => sum.plus(sale.totalTjs), D(0));
+      const storeCollections = collectionsByStore.get(store.id);
       return {
         storeId: store.id,
         storeName: store.name,
@@ -370,10 +448,17 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         ...storeExpenses,
         netProfitUsd: D((D(D(storeProfitUsd).plus(storePenalty.usd)).minus(storeExpenses.expensesUsd)).toFixed(2)),
         netProfitTjs: roundMoney(D(D(storeProfitTjs).plus(storePenalty.tjs)).minus(storeExpenses.expensesTjs)),
+        grossMarginPercent: percentOf(D(storeProfitUsd).plus(storePenalty.usd), storeRevenueUsd),
+        avgCheckUsd: storeSales.length ? roundMoney(storeReceiptsUsd.div(storeSales.length)) : D(0),
+        avgCheckTjs: storeSales.length ? roundMoney(storeReceiptsTjs.div(storeSales.length)) : D(0),
+        cashCollectedTjs: roundMoney(storeCollections?.tjs ?? 0),
+        cashCollectionsCount: storeCollections?.count ?? 0,
+        sellers: sellerRanking(storeSales, rate, sellerNames),
+        daily: dailySeries(storeSales, rate),
         topModels: [...storeModels.values()]
           .map((m) => ({ ...m, revenueUsd: D(D(m.revenueUsd).toFixed(2)), profitUsd: D(D(m.profitUsd).toFixed(2)) }))
           .sort((a, b) => b.count - a.count || D(b.profitUsd).comparedTo(a.profitUsd))
-          .slice(0, 5),
+          .slice(0, 10),
         unitsSold: storeUnits,
         salesCount: storeSales.length,
         refundsCount: refundedSalesAllStores.filter((sale) => sale.storeId === store.id).length,
@@ -441,5 +526,28 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     })),
     storeBreakdown,
     modelCounts: sortedModelList,
+    avgCheckUsd: periodSales.length ? roundMoney(periodSales.reduce((sum, sale) => sum.plus(sale.totalUsd), D(0)).div(periodSales.length)) : D(0),
+    avgCheckTjs: periodSales.length ? roundMoney(periodSales.reduce((sum, sale) => sum.plus(sale.totalTjs), D(0)).div(periodSales.length)) : D(0),
+    sellers: sellerRanking(periodSales, rate, sellerNames),
+    daily: dailySeries(periodSales, rate),
   };
+}
+
+type ReportsSummary = Awaited<ReturnType<typeof computeReportsSummary>>;
+
+/**
+ * What a store manager may see: their one store's P&L only — no supplier debt, main
+ * warehouse stock/cash, network expenses, supplier bonuses or anything owner-level.
+ * The summary itself is already computed for their store (storeId is forced by the route).
+ */
+export function toStoreManagerView(summary: ReportsSummary) {
+  const {
+    periodCashBonusesUsd: _cashBonusesUsd, periodCashBonusesTjs: _cashBonusesTjs,
+    periodFreeDeviceBonusesReceived: _freeReceived, freeDeviceBonusesInStock: _freeInStock,
+    totalSupplierDebtUsd: _debtUsd, totalSupplierDebtTjs: _debtTjs, topSuppliersByDebt: _topSuppliers,
+    mainWarehouseStockCount: _mwCount, mainWarehouseStockCostUsd: _mwCostUsd, mainWarehouseStockCostTjs: _mwCostTjs,
+    mainWarehouseCashUsd: _mwCashUsd, mainWarehouseCashTjs: _mwCashTjs, mainWarehouseExpenses: _mwExpenses,
+    ...storeView
+  } = summary;
+  return storeView;
 }

@@ -14,6 +14,7 @@ import { apiClient } from '../api/client';
 import { useRealtimeSync } from '../hooks/useRealtimeSync';
 import { scanCode, cancelScan, isNativeScanner } from '../services/scanner/scannerService';
 import { soundEffects } from '../utils/sound';
+import { isStoreScoped } from '../utils/roles';
 import {
   buildNameLookup,
   mapDevice,
@@ -277,6 +278,11 @@ interface AppContextType {
 const AppContext = createContext<StoreApi<AppContextType> | null>(null);
 const AppLoaderContext = createContext<((keys: readonly (keyof AppContextType)[]) => void) | null>(null);
 
+const STORE_SCOPE_KEY = 'ms_selected_store';
+function readSavedStoreScope(): string {
+  try { return localStorage.getItem(STORE_SCOPE_KEY) || 'all'; } catch { return 'all'; }
+}
+
 function errorMessage(err: unknown, fallback: string): string {
   return err instanceof Error ? err.message : fallback;
 }
@@ -292,7 +298,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUserState] = useState<User | null>(authUser);
   const [todayRate, setTodayRateState] = useSharedState<DailyRate | null>(null);
   const [activePage, setActivePageState] = useState<PageId>('SALE');
-  const [selectedStoreId, setSelectedStoreIdState] = useState<string>(authUser?.role === 'SELLER' && authUser.storeId ? authUser.storeId : 'all');
+  const [selectedStoreId, setSelectedStoreIdState] = useState<string>(
+    isStoreScoped(authUser) && authUser?.storeId ? authUser.storeId : readSavedStoreScope(),
+  );
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [stores, setStores] = useSharedState<Store[]>([]);
@@ -825,10 +833,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       useAuthStore.getState().setAuth(mappedUser, result.token);
       setCurrentUserState(mappedUser);
-      if (mappedUser.role === 'SELLER' && mappedUser.storeId) {
+      if (isStoreScoped(mappedUser) && mappedUser.storeId) {
         setSelectedStoreIdState(mappedUser.storeId);
       } else {
-        setSelectedStoreIdState('all');
+        setSelectedStoreIdState(readSavedStoreScope());
       }
       setActivePageState('SALE');
       // The authenticated-data effect performs the initial fetch. Calling refetchAll
@@ -866,9 +874,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     setDrawerOpen(false);
   };
 
+  // The global store switcher (TopBar) — 'all' is the consolidated network view. Remembered
+  // per device so an owner reopening the app lands back on the store they were looking at.
   const setSelectedStoreId = (storeId: string) => {
-    if (currentUser?.role === 'SELLER') return;
+    if (isStoreScoped(currentUser)) return;
     setSelectedStoreIdState(storeId);
+    try { localStorage.setItem(STORE_SCOPE_KEY, storeId); } catch { /* storage unavailable */ }
   };
 
   const openScanner = (callback: (code: string) => void) => {
@@ -902,8 +913,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Trust the actual location of the devices in the cart over the (possibly stale,
     // shared-across-pages) selectedStoreId — e.g. an admin who last picked the main
     // warehouse on the Inventory page must not have that leak into a POS sale here.
-    const storeId = currentUser?.role === 'SELLER'
-      ? currentUser.storeId
+    const storeId = isStoreScoped(currentUser)
+      ? currentUser!.storeId
       : (items[0]?.device.locationId || (selectedStoreId !== 'all' ? selectedStoreId : undefined));
     if (!storeId) return { success: false, message: 'Не удалось определить магазин для продажи' };
 
