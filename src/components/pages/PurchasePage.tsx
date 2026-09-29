@@ -62,6 +62,13 @@ interface PurchasePreviewData {
   groups: PurchasePreviewGroup[];
 }
 
+/** Invoice dates arrive as ISO timestamps — show a short local date instead. */
+function formatInvoiceDate(value?: string): string {
+  if (!value) return '—';
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? value : date.toLocaleDateString('ru-RU');
+}
+
 export const PurchasePage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
   const {
@@ -721,7 +728,7 @@ export const PurchasePage: React.FC = () => {
                           <span>{inv.supplierName}</span>
                         </span>
                         <span>•</span>
-                        <span>{inv.date}</span>
+                        <span>{formatInvoiceDate(inv.date)}</span>
                         <span>•</span>
                         <span className="flex items-center space-x-1 text-fg-muted">
                           <StoreIcon className="w-3 h-3 text-fg-subtle" />
@@ -804,7 +811,7 @@ export const PurchasePage: React.FC = () => {
                       )}
                     </h3>
                     <p className="text-[11px] text-fg-subtle">
-                      Поставщик: {selectedInvoice.supplierName} • {selectedInvoice.date}
+                      Поставщик: {selectedInvoice.supplierName} • {formatInvoiceDate(selectedInvoice.date)}
                     </p>
                   </div>
                 </div>
@@ -1470,7 +1477,7 @@ export const PurchasePage: React.FC = () => {
                 </div>
                 <div>
                   <span className="block text-[10px] text-fg-subtle">Дата</span>
-                  <span className="font-bold text-fg-muted">{previewInvoice.date}</span>
+                  <span className="font-bold text-fg-muted">{formatInvoiceDate(previewInvoice.date)}</span>
                 </div>
                 <div>
                   <span className="block text-[10px] text-fg-subtle">Назначение</span>

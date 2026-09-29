@@ -83,16 +83,14 @@
     touch-action: manipulation;
   }
 
-  /* Prevent iOS Safari from zooming in on input focus by ensuring minimum 16px font size on touch/mobile */
+  /* Prevent iOS Safari from zooming in on input focus: it zooms into any focused field
+     whose font is under 16px (selects and the combobox input included), after which the
+     whole layout is left zoomed and shifted. Touch/phone screens therefore get 16px. */
   @media screen and (max-width: 768px) {
     input:not([type="checkbox"]):not([type="radio"]),
     select,
     textarea {
       font-size: 16px !important;
-    }
-    select,
-    .app-combobox input {
-      font-size: var(--choice-font-size) !important;
     }
   }
 
@@ -104,6 +102,16 @@
     text-shadow: none !important;
     -webkit-user-select: none;
     user-select: none;
+  }
+
+  /* iOS Safari: an input/textarea with user-select:none (inherited from the rule above)
+     can refuse focus, hide the caret and block text selection/paste. Editable fields
+     must always stay selectable. */
+  input,
+  textarea,
+  [contenteditable="true"] {
+    -webkit-user-select: text;
+    user-select: text;
   }
 }
 
@@ -403,7 +411,13 @@ body:has(.fixed.inset-0.z-50) .app-bottom-nav {
 }
 
 /* Native selects and editable suggestion lists share one size across all pages.
-   Pixels keep this stable even when the small-screen root font changes. */
+   Pixels keep this stable even when the small-screen root font changes. On phones and
+   touch screens it's 16px — the minimum iOS Safari accepts without zooming on focus. */
+@media screen and (max-width: 768px), (hover: none) and (pointer: coarse) {
+  :root {
+    --choice-font-size: 16px;
+  }
+}
 select,
 select option,
 select optgroup,

@@ -143,7 +143,7 @@ export const StoreDashboard: React.FC<StoreDashboardProps> = ({ month, onMonthCh
             <StatCard label="Выручка" value={usd(store.revenueUsd)} subvalue={`${tjs(store.revenueTjs)} · ${store.salesCount} чеков`} icon={Receipt} tone="neutral" />
             <StatCard label="Средний чек" value={usd(store.avgCheckUsd)} subvalue={tjs(store.avgCheckTjs)} icon={ShoppingCart} tone="neutral" />
             <StatCard label="Валовая прибыль" value={signedUsd(store.profitUsd)} subvalue={`маржа ${pct(store.grossMarginPercent)}`} icon={TrendingUp} tone={store.profitUsd >= 0 ? 'accent' : 'danger'} />
-            <StatCard label="Чистая прибыль точки" value={signedUsd(store.netProfitUsd)} subvalue={`расходы −${usd(store.expensesUsd)}`} icon={PiggyBank} tone={store.netProfitUsd >= 0 ? 'accent' : 'danger'} />
+            <StatCard label="Чистая прибыль" value={signedUsd(store.netProfitUsd)} subvalue={`расходы −${usd(store.expensesUsd)}`} icon={PiggyBank} tone={store.netProfitUsd >= 0 ? 'accent' : 'danger'} />
           </div>
         </div>
 

@@ -39,6 +39,7 @@ export const TopBar: React.FC = () => {
   const retailStores = stores.filter(s => !s.isMainWarehouse && s.active !== false);
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
   const switcherValue = stores.some(s => s.id === selectedStoreId) ? selectedStoreId : 'all';
+  const switcherLabel = switcherValue === 'all' ? 'Все магазины (сводно)' : stores.find(s => s.id === switcherValue)?.name ?? 'Все магазины (сводно)';
 
   const getPageTitle = () => {
     switch (activePage) {
@@ -77,19 +78,23 @@ export const TopBar: React.FC = () => {
               <span className="truncate">{currentStoreDisplay}</span>
             </p>
           ) : (
-            <label className="relative inline-flex items-center max-w-full text-[11px] text-fg-subtle hover:text-fg cursor-pointer">
-              <Store className="w-2.5 h-2.5 mr-1 text-accent shrink-0" />
+            // The visible label is small text; the native <select> sits invisibly on top of
+            // it so tapping opens the OS picker (wheel on iPhone). The select itself keeps a
+            // 16px font from the global rule, so iOS Safari doesn't zoom in on focus.
+            <label className="relative inline-flex items-center gap-1 max-w-[70vw] sm:max-w-xs min-h-6 text-[11px] font-semibold text-accent cursor-pointer rounded focus-within:ring-2 focus-within:ring-accent/40">
+              <Store className="w-2.5 h-2.5 shrink-0" />
+              <span className="truncate">{switcherLabel}</span>
+              <ChevronDown className="w-3 h-3 shrink-0" />
               <select
                 aria-label="Магазин"
                 value={switcherValue}
                 onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="appearance-none bg-transparent pr-4 font-semibold text-accent truncate max-w-[60vw] sm:max-w-xs focus:outline-none cursor-pointer"
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer appearance-none"
               >
                 <option value="all">Все магазины (сводно)</option>
                 {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                 {mainWarehouse && <option value={mainWarehouse.id}>{mainWarehouse.name} (главный склад)</option>}
               </select>
-              <ChevronDown className="w-3 h-3 -ml-3.5 text-accent pointer-events-none shrink-0" />
             </label>
           )}
         </div>

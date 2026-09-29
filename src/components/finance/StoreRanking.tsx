@@ -164,14 +164,62 @@ export const StoreRanking: React.FC<StoreRankingProps> = ({ month, onMonthChange
       <div className={`p-3 sm:p-4 space-y-4 transition-opacity ${loading ? 'opacity-60' : ''}`}>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
           <StatCard label="Лидер по выручке" value={leaders.revenue?.revenueUsd ? leaders.revenue.storeName : '—'} subvalue={leaders.revenue?.revenueUsd ? usd(leaders.revenue.revenueUsd) : 'продаж нет'} icon={Trophy} tone="accent" />
-          <StatCard label="Лидер по чистой прибыли" value={leaders.net && leaders.net.netProfitUsd > 0 ? leaders.net.storeName : '—'} subvalue={leaders.net ? signedUsd(leaders.net.netProfitUsd) : ''} icon={Trophy} tone="accent" />
+          <StatCard label="Лидер по прибыли" value={leaders.net && leaders.net.netProfitUsd > 0 ? leaders.net.storeName : '—'} subvalue={leaders.net ? signedUsd(leaders.net.netProfitUsd) : ''} icon={Trophy} tone="accent" />
           <StatCard label="Самая низкая маржа" value={leaders.lowestMargin?.storeName ?? '—'} subvalue={leaders.lowestMargin ? pct(leaders.lowestMargin.grossMarginPercent) : ''} icon={ArrowDown} tone="warning" />
-          <StatCard label="Расходы / выручка — выше всех" value={leaders.heaviestExpenses?.expensesUsd ? leaders.heaviestExpenses.storeName : '—'}
+          <StatCard label="Выше всех расходы" value={leaders.heaviestExpenses?.expensesUsd ? leaders.heaviestExpenses.storeName : '—'}
             subvalue={leaders.heaviestExpenses?.expensesUsd ? `${usd(leaders.heaviestExpenses.expensesUsd)}${leaders.heaviestExpenses.revenueUsd ? ` · ${pct((leaders.heaviestExpenses.expensesUsd / leaders.heaviestExpenses.revenueUsd) * 100)} выручки` : ''}` : ''}
             icon={ArrowUp} tone="danger" />
         </div>
 
-        <div className="rounded-xl bg-surface border border-border overflow-hidden">
+        {/* Phones: one card per store, sorted by the chosen metric — a 10-column table
+            doesn't fit a 375–430px screen without sideways scrolling. */}
+        <div className="md:hidden space-y-2.5">
+          <label className="flex items-center gap-2 text-xs text-fg-subtle">
+            <span className="shrink-0">Сортировать:</span>
+            <select
+              value={`${sortKey}:${sortAsc ? 'asc' : 'desc'}`}
+              onChange={(e) => { const [k, dir] = e.target.value.split(':'); setSortKey(k as SortKey); setSortAsc(dir === 'asc'); }}
+              className="flex-1 h-10 rounded-lg bg-surface-raised border border-border px-2.5 text-fg-muted"
+            >
+              {COLUMNS.filter((c) => c.key !== 'storeName').map((c) => (
+                <option key={c.key} value={`${c.key}:desc`}>{c.label} ↓</option>
+              ))}
+              <option value="storeName:asc">Название А→Я</option>
+            </select>
+          </label>
+          {rows.map((s, i) => (
+            <button key={s.storeId} type="button" onClick={() => onOpenStore(s.storeId)}
+              className="w-full text-left p-3.5 rounded-xl bg-surface border border-border active:bg-surface-raised">
+              <div className="flex items-center justify-between gap-2">
+                <span className="flex items-center gap-2 min-w-0">
+                  <span className="w-6 h-6 rounded-full bg-accent/15 text-accent text-xs font-bold flex items-center justify-center shrink-0">{i + 1}</span>
+                  <span className="font-bold text-sm text-fg-muted truncate">{s.storeName}</span>
+                </span>
+                <span className={`text-sm font-bold shrink-0 ${s.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(s.netProfitUsd)}</span>
+              </div>
+              <div className="mt-2.5 grid grid-cols-3 gap-x-2 gap-y-2 text-xs">
+                {[
+                  ['Выручка', usd(s.revenueUsd)],
+                  ['Чеки', String(s.salesCount)],
+                  ['Ср. чек', usd(s.avgCheckUsd)],
+                  ['Вал. прибыль', signedUsd(s.profitUsd)],
+                  ['Маржа', pct(s.grossMarginPercent)],
+                  ['Расходы', s.expensesUsd ? `−${usd(s.expensesUsd)}` : '—'],
+                  ['Касса', tjs(s.cashTjs)],
+                  ['Товар', `${s.stockCount} шт`],
+                  ['На сумму', usd(s.stockCostUsd)],
+                ].map(([label, value]) => (
+                  <div key={label} className="min-w-0">
+                    <p className="text-[10px] uppercase tracking-wide text-fg-subtle truncate">{label}</p>
+                    <p className="font-semibold text-fg-muted truncate tabular-nums">{value}</p>
+                  </div>
+                ))}
+              </div>
+            </button>
+          ))}
+        </div>
+
+        <div className="hidden md:block rounded-xl bg-surface border border-border overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
               <thead>
@@ -207,7 +255,7 @@ export const StoreRanking: React.FC<StoreRankingProps> = ({ month, onMonthChange
               <tfoot>
                 <tr className="border-t-2 border-border bg-surface-raised font-bold text-fg-muted">
                   <td />
-                  <td className="py-2 px-2.5">Итого по точкам</td>
+                  <td className="py-2 px-2.5 whitespace-nowrap">Итого по точкам</td>
                   <td className={cell}>{sum(rows, 'salesCount')}</td>
                   <td className={cell}>{sum(rows, 'salesCount') ? usd(sum(rows, 'revenueUsd') / sum(rows, 'salesCount')) : '—'}</td>
                   <td className={cell}>{usd(sum(rows, 'revenueUsd'))}</td>
