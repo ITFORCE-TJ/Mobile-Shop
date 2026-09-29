@@ -16,6 +16,44 @@ const MAX_DECODE_WIDTH = 1280;
 // Shared across remounts: a new camera waits for the previous stream to stop.
 let cameraRelease: Promise<void> = Promise.resolve();
 
+// iOS Safari (and a home-screen web app even more so) asks for camera permission again on
+// almost every getUserMedia() call once the previous stream was fully stopped. So after a
+// scan the stream is parked — detached from the preview but still live — and the next scan
+// reuses it without a prompt. It is really released after a short idle period, or as soon
+// as the app goes to the background, so the camera is never held longer than needed.
+const CAMERA_KEEPALIVE_MS = 120_000;
+let parkedStream: MediaStream | null = null;
+let parkedReleaseTimer = 0;
+
+function releaseParkedStream() {
+  window.clearTimeout(parkedReleaseTimer);
+  parkedStream?.getTracks().forEach((track) => track.stop());
+  parkedStream = null;
+}
+
+function parkStream(stream: MediaStream) {
+  if (parkedStream && parkedStream !== stream) releaseParkedStream();
+  const live = stream.getVideoTracks().some((track) => track.readyState === 'live');
+  if (!live) { stream.getTracks().forEach((track) => track.stop()); return; }
+  parkedStream = stream;
+  window.clearTimeout(parkedReleaseTimer);
+  parkedReleaseTimer = window.setTimeout(releaseParkedStream, CAMERA_KEEPALIVE_MS);
+}
+
+function takeParkedStream(): MediaStream | null {
+  const stream = parkedStream;
+  parkedStream = null;
+  window.clearTimeout(parkedReleaseTimer);
+  if (stream && stream.getVideoTracks().some((track) => track.readyState === 'live')) return stream;
+  stream?.getTracks().forEach((track) => track.stop());
+  return null;
+}
+
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => { if (document.hidden) releaseParkedStream(); });
+  window.addEventListener('pagehide', releaseParkedStream);
+}
+
 type BarcodeCameraCapabilities = MediaTrackCapabilities & {
   focusMode?: string[];
   torch?: boolean;
@@ -184,21 +222,31 @@ export const ScannerModal: React.FC = () => {
     let cancelled = false;
     let timer = 0;
     let stream: MediaStream | null = null;
+    // Detaches the camera from this scanner session and parks the stream for reuse (see
+    // parkStream). Safe to call more than once: only the first call parks it.
     const stopCamera = () => {
       cancelled = true;
       window.clearTimeout(timer);
-      stream?.getTracks().forEach((track) => track.stop());
-      if (trackRef.current && stream?.getVideoTracks().includes(trackRef.current)) trackRef.current = null;
-      if (stream && videoRef.current?.srcObject === stream) {
+      const current = stream;
+      stream = null;
+      if (!current) return;
+      const track = current.getVideoTracks()[0];
+      if (track && trackRef.current === track) trackRef.current = null;
+      // A lit torch must not stay on while the stream is parked.
+      track?.applyConstraints({ advanced: [{ torch: false } as BarcodeCameraConstraint] }).catch(() => {});
+      if (videoRef.current?.srcObject === current) {
         videoRef.current.pause();
         videoRef.current.srcObject = null;
       }
+      parkStream(current);
     };
     stopCameraRef.current = stopCamera;
     scanLockedRef.current = false;
     pendingScanRef.current = { code: '', matches: 0, seenAt: 0 };
 
     const openCamera = async () => {
+      const reused = takeParkedStream();
+      if (reused) return reused;
       if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no camera API'), { name: 'NotFoundError' });
       try {
         return await navigator.mediaDevices.getUserMedia({
@@ -251,8 +299,9 @@ export const ScannerModal: React.FC = () => {
 
     const startPromise = cameraRelease.then(async () => {
       if (cancelled) return;
-      stream = await openCamera();
-      if (cancelled) { stopCamera(); return; }
+      const opened = await openCamera();
+      if (cancelled) { parkStream(opened); return; }
+      stream = opened;
       const track = stream.getVideoTracks()[0] ?? null;
       trackRef.current = track;
       const video = videoRef.current;
