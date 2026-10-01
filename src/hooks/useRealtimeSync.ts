@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { Capacitor, type PluginListenerHandle } from '@capacitor/core';
 import { requireNativeUrl } from '../services/nativeConfig';
+import { setRealtimeState } from '../services/connectionStatus';
 
 /** Subscribes to the backend's authenticated WebSocket and invokes onEvent for every broadcast. */
 export function useRealtimeSync(token: string | null, onEvent: (type: string, payload: any) => void) {
@@ -76,6 +77,7 @@ export function useRealtimeSync(token: string | null, onEvent: (type: string, pa
         }
         const connection = new WebSocket(wsUrl);
         socket = connection;
+        setRealtimeState('connecting');
 
         connection.onopen = () => {
           if (stopped) {
@@ -86,6 +88,7 @@ export function useRealtimeSync(token: string | null, onEvent: (type: string, pa
             console.debug('[WebSocket] connected');
           }
           retryDelay = 1000;
+          setRealtimeState('online');
           if (hasConnected) onEventRef.current('RECONNECTED', null);
           hasConnected = true;
         };
@@ -105,6 +108,7 @@ export function useRealtimeSync(token: string | null, onEvent: (type: string, pa
             console.debug(`[WebSocket] disconnected code=${event.code} reason=${event.reason || ''}`);
           }
           if (stopped) return;
+          setRealtimeState('offline');
           // Authorization failures require a new token, not repeated connections.
           if (event.code === 1008) authRejected = true;
           if (!authRejected) {
@@ -172,6 +176,7 @@ export function useRealtimeSync(token: string | null, onEvent: (type: string, pa
 
     return () => {
       stopped = true;
+      setRealtimeState('idle');
       void appListener?.remove();
       clearRetryTimer();
       if (typeof window !== 'undefined' && typeof window.removeEventListener === 'function') {

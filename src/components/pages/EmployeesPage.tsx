@@ -501,11 +501,32 @@ export const EmployeesPage: React.FC = () => {
     setTimeout(() => URL.revokeObjectURL(url), 60000);
   };
 
-  // Management (admin/partner) shown ahead of sellers — separate concerns (profit
-  // share & full access vs. a store-scoped salary/commission role) that get their
-  // own section instead of being interleaved in one undifferentiated list.
-  const managementUsers = users.filter(u => u.role === 'ADMIN' || u.role === 'PARTNER');
-  const sellerUsers = users.filter(u => u.role === 'SELLER');
+  // Grouping: One global admin at the top, each store separately with its staff/workers
+  const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('ALL');
+
+  const adminUsers = useMemo(() => users.filter(u => u.role === 'ADMIN'), [users]);
+  const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
+  const mainWarehouse = useMemo(() => stores.find(s => s.isMainWarehouse), [stores]);
+  const warehouseUsers = useMemo(() => mainWarehouse ? users.filter(u => u.storeId === mainWarehouse.id && u.role !== 'ADMIN') : [], [mainWarehouse, users]);
+
+  // Map each retail store to its staff (partner + sellers)
+  const storeStaffMap = useMemo(() => {
+    const map = new Map<string, User[]>();
+    retailStores.forEach(s => {
+      const staff = users.filter(u => u.storeId === s.id && u.role !== 'ADMIN');
+      staff.sort((a, b) => {
+        if (a.role === 'PARTNER' && b.role !== 'PARTNER') return -1;
+        if (a.role !== 'PARTNER' && b.role === 'PARTNER') return 1;
+        return a.name.localeCompare(b.name, 'ru');
+      });
+      map.set(s.id, staff);
+    });
+    return map;
+  }, [retailStores, users]);
+
+  const unassignedUsers = useMemo(() => {
+    return users.filter(u => u.role !== 'ADMIN' && (!u.storeId || !stores.some(s => s.id === u.storeId)));
+  }, [users, stores]);
 
   const renderUserCard = (u: User) => {
     const roleConf = ROLE_CONFIG[u.role] || ROLE_CONFIG.SELLER;
@@ -718,35 +739,211 @@ export const EmployeesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Users List: management (admin/partner) first, then sellers */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg space-y-6">
-        <div>
-          <h4 className="text-xs font-bold text-fg-subtle   mb-2.5 flex items-center gap-1.5">
-            <Shield className="w-3.5 h-3.5 text-accent" />
-            <span>Руководство ({managementUsers.length})</span>
-          </h4>
-          {managementUsers.length === 0 ? (
-            <p className="text-xs text-fg-subtle">Нет сотрудников с этой ролью</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
-              {managementUsers.map(renderUserCard)}
-            </div>
-          )}
-        </div>
+      {/* Quick Store Filter Pills */}
+      <div className="px-4 md:px-6 py-2.5 border-b border-border bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none">
+        <button
+          type="button"
+          onClick={() => setSelectedStoreFilter('ALL')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+            selectedStoreFilter === 'ALL'
+              ? 'bg-accent text-accent-fg shadow-xs'
+              : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+          }`}
+        >
+          Все ({users.length})
+        </button>
 
-        <div>
-          <h4 className="text-xs font-bold text-fg-subtle   mb-2.5 flex items-center gap-1.5">
-            <Users className="w-3.5 h-3.5 text-accent" />
-            <span>Продавцы ({sellerUsers.length})</span>
-          </h4>
-          {sellerUsers.length === 0 ? (
-            <p className="text-xs text-fg-subtle">Нет продавцов</p>
-          ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
-              {sellerUsers.map(renderUserCard)}
+        <button
+          type="button"
+          onClick={() => setSelectedStoreFilter('ADMIN')}
+          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+            selectedStoreFilter === 'ADMIN'
+              ? 'bg-accent text-accent-fg shadow-xs'
+              : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+          }`}
+        >
+          <Shield className="w-3.5 h-3.5" />
+          <span>Общий админ ({adminUsers.length})</span>
+        </button>
+
+        {retailStores.map(st => {
+          const count = storeStaffMap.get(st.id)?.length || 0;
+          const isActive = selectedStoreFilter === st.id;
+          return (
+            <button
+              key={st.id}
+              type="button"
+              onClick={() => setSelectedStoreFilter(st.id)}
+              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                isActive
+                  ? 'bg-accent text-accent-fg shadow-xs'
+                  : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+              }`}
+            >
+              <Store className="w-3.5 h-3.5" />
+              <span>{st.name} ({count})</span>
+            </button>
+          );
+        })}
+
+        {warehouseUsers.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedStoreFilter('WAREHOUSE')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+              selectedStoreFilter === 'WAREHOUSE'
+                ? 'bg-accent text-accent-fg shadow-xs'
+                : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+            }`}
+          >
+            <span>Главный склад ({warehouseUsers.length})</span>
+          </button>
+        )}
+
+        {unassignedUsers.length > 0 && (
+          <button
+            type="button"
+            onClick={() => setSelectedStoreFilter('UNASSIGNED')}
+            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
+              selectedStoreFilter === 'UNASSIGNED'
+                ? 'bg-accent text-accent-fg shadow-xs'
+                : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+            }`}
+          >
+            Без привязки ({unassignedUsers.length})
+          </button>
+        )}
+      </div>
+
+      {/* Users List: Global Admin at top, then each retail store with its staff */}
+      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg space-y-7">
+        {/* Section 1: Общий администратор */}
+        {(selectedStoreFilter === 'ALL' || selectedStoreFilter === 'ADMIN') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-accent/10 border border-accent/25 text-accent">
+                  <Shield className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                    <span>Общий администратор</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent font-semibold">
+                      {adminUsers.length}
+                    </span>
+                  </h4>
+                </div>
+              </div>
+              <span className="text-[11px] text-fg-subtle hidden sm:inline">
+                Центральное руководство и полный доступ ко всем магазинам
+              </span>
             </div>
-          )}
-        </div>
+
+            {adminUsers.length === 0 ? (
+              <div className="p-5 rounded-2xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
+                Нет назначенных администраторов
+              </div>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+                {adminUsers.map(renderUserCard)}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Section 2: Магазины сети с рабочими */}
+        {retailStores.map(store => {
+          if (selectedStoreFilter !== 'ALL' && selectedStoreFilter !== store.id) return null;
+          const storeStaff = storeStaffMap.get(store.id) || [];
+          return (
+            <div key={store.id} className="space-y-3">
+              <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
+                <div className="flex items-center gap-2">
+                  <div className="p-1.5 rounded-xl bg-accent/10 border border-accent/25 text-accent">
+                    <Store className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                      <span>{store.name}</span>
+                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                        {storeStaff.length} {storeStaff.length === 1 ? 'сотрудник' : storeStaff.length < 5 ? 'сотрудника' : 'сотрудников'}
+                      </span>
+                    </h4>
+                  </div>
+                </div>
+                <span className="text-[11px] text-fg-subtle hidden sm:inline">
+                  Розничная торговая точка · Персонал и партнер
+                </span>
+              </div>
+
+              {storeStaff.length === 0 ? (
+                <div className="p-5 rounded-2xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
+                  В этом магазине пока нет назначенных сотрудников
+                </div>
+              ) : (
+                <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+                  {storeStaff.map(renderUserCard)}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        {/* Section 3: Главный склад (если есть прикрепленный персонал) */}
+        {warehouseUsers.length > 0 && (selectedStoreFilter === 'ALL' || selectedStoreFilter === 'WAREHOUSE') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-500">
+                  <Store className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                    <span>{mainWarehouse?.name || 'Главный склад'}</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                      {warehouseUsers.length}
+                    </span>
+                  </h4>
+                </div>
+              </div>
+              <span className="text-[11px] text-fg-subtle hidden sm:inline">
+                Персонал центрального склада
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+              {warehouseUsers.map(renderUserCard)}
+            </div>
+          </div>
+        )}
+
+        {/* Section 4: Без привязки (если есть) */}
+        {unassignedUsers.length > 0 && (selectedStoreFilter === 'ALL' || selectedStoreFilter === 'UNASSIGNED') && (
+          <div className="space-y-3">
+            <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-xl bg-surface-raised border border-border text-fg-subtle">
+                  <Users className="w-4 h-4" />
+                </div>
+                <div>
+                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                    <span>Без привязки к магазину</span>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                      {unassignedUsers.length}
+                    </span>
+                  </h4>
+                </div>
+              </div>
+              <span className="text-[11px] text-fg-subtle hidden sm:inline">
+                Сотрудники без назначенной точки
+              </span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+              {unassignedUsers.map(renderUserCard)}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* MODAL: Add / Edit User */}

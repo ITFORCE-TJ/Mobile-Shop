@@ -297,6 +297,7 @@ export function mapOwner(o: any): Owner {
     totalPaidProfitUsd: o.totalPaidProfitUsd,
     totalReinvestedUsd: o.totalReinvestedUsd,
     availableProfitUsd: o.availableProfitUsd,
+    reinvestableProfitUsd: o.reinvestableProfitUsd ?? undefined,
     storeId: o.storeId ?? o.user?.storeId ?? undefined,
   };
 }

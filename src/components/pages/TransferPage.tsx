@@ -5,17 +5,17 @@ import { useAppFields } from '../../context/AppContext';
 import { TransferRequest } from '../../types';
 import {
   ArrowLeftRight,
-  Search,
-  Scan,
-  CheckCircle2,
   AlertCircle,
   Store as StoreIcon,
   Send,
-  X,
   Check,
   Loader2
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
+import { ConfirmDialog } from '../ui/ConfirmDialog';
+import { SearchBar } from '../ui/SearchBar';
+import { LoadingState } from '../ui/Skeleton';
+import { DEVICE_STATUS_LABELS, findDeviceByCode, looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
 
 export const TransferPage: React.FC = () => {
   const {
@@ -27,8 +27,9 @@ export const TransferPage: React.FC = () => {
     approveTransfer,
     rejectTransfer,
     openScanner,
+    isInitialLoading,
     selectedStoreId: globalSelectedStoreId
-  } = useAppFields('currentUser', 'stores', 'devices', 'transfers', 'createTransferRequest', 'approveTransfer', 'rejectTransfer', 'openScanner', 'selectedStoreId');
+  } = useAppFields('currentUser', 'stores', 'devices', 'transfers', 'createTransferRequest', 'approveTransfer', 'rejectTransfer', 'openScanner', 'isInitialLoading', 'selectedStoreId');
 
   const isSeller = currentUser?.role === 'SELLER';
   const isPartner = currentUser?.role === 'PARTNER';
@@ -62,8 +63,12 @@ export const TransferPage: React.FC = () => {
   const [historyFilterStoreId, setHistoryFilterStoreId] = useState<string>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [statusBanner, setStatusBanner] = useState<StatusMessage | null>(null);
+  // One message system for the page (the inline second banner is gone).
+  const setStatusMessage = (m: { type: 'success' | 'error'; text: string } | null) =>
+    setStatusBanner(m ? { tone: m.type, text: m.text } : null);
+  const [rejectTarget, setRejectTarget] = useState<TransferRequest | null>(null);
+  const [rejectReason, setRejectReason] = useState('');
 
   const [confirmTransferModal, setConfirmTransferModal] = useState<boolean>(false);
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
@@ -121,21 +126,37 @@ export const TransferPage: React.FC = () => {
     setSelectedDeviceIds([]);
   };
 
-  const handleScanDevice = () => {
-    openScanner((scannedCode) => {
-      const code = scannedCode.trim();
-      const matched = availableDevicesAtFromLocation.find(d =>
-        d.imei === code || d.imei2 === code
-      );
-      if (matched) {
-        if (!selectedDeviceIds.includes(matched.id)) {
-          setSelectedDeviceIds(prev => [...prev, matched.id]);
-          setStatusMessage({ type: 'success', text: `Добавлено устройство: ${matched.brand} ${matched.model}` });
-        }
+  /** Camera scan or Enter from a USB/Bluetooth scanner: select the phone or say why not. */
+  const handleDeviceCode = (rawCode: string, source: 'camera' | 'enter') => {
+    const code = normalizeScanCode(rawCode);
+    if (!code) return;
+    const device = findDeviceByCode(devices, code);
+    const isAvailableHere = device && device.locationId === fromLocationId &&
+      (device.status === 'STORE_STOCK' || device.status === 'MAIN_WAREHOUSE' || device.status === 'IN_STOCK_AFTER_EXCHANGE');
+    if (device && isAvailableHere) {
+      if (source === 'enter') setSearchQuery('');
+      if (selectedDeviceIds.includes(device.id)) {
+        setStatusBanner({ tone: 'info', text: `${device.brand} ${device.model} уже выбран` });
       } else {
-        setSearchQuery(code);
+        setSelectedDeviceIds(prev => [...prev, device.id]);
+        setStatusBanner({ tone: 'success', text: `Добавлено устройство: ${device.brand} ${device.model}` });
       }
-    });
+      return;
+    }
+    if (source === 'enter' && !device && !looksLikeDeviceCode(code)) return;
+    if (source === 'camera') setSearchQuery(code);
+    if (!device) {
+      setStatusBanner({ tone: 'error', text: `Устройство с IMEI ${code} не найдено` });
+    } else if (device.locationId !== fromLocationId) {
+      const where = stores.find(st => st.id === device.locationId)?.name || device.locationName || 'другой точке';
+      setStatusBanner({ tone: 'warning', text: `${device.brand} ${device.model} числится в «${where}», а не в «${fromStore?.name || 'выбранной точке'}»` });
+    } else {
+      setStatusBanner({ tone: 'warning', text: `${device.brand} ${device.model} нельзя переместить: статус «${DEVICE_STATUS_LABELS[device.status] || device.status}»` });
+    }
+  };
+
+  const handleScanDevice = () => {
+    openScanner((scannedCode) => handleDeviceCode(scannedCode, 'camera'));
   };
 
   const handleOpenConfirmModal = () => {
@@ -206,8 +227,10 @@ export const TransferPage: React.FC = () => {
     if (processingTransferId) return;
     setProcessingTransferId(transferId);
     try {
-      const res = await rejectTransfer(transferId, 'Отклонено пользователем');
+      const res = await rejectTransfer(transferId, rejectReason.trim() || 'Отклонено пользователем');
       if (res.success) {
+        setRejectTarget(null);
+        setRejectReason('');
         setStatusBanner({ tone: 'success', text: 'Перемещение отклонено' });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка отклонения' });
@@ -235,20 +258,6 @@ export const TransferPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
-
-      {statusMessage && (
-        <div className={`mx-3 sm:mx-4 mt-2.5 p-3 rounded-xl text-xs flex items-center justify-between shrink-0 ${
-          statusMessage.type === 'success' ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-danger/15 text-danger border border-danger/30'
-        }`}>
-          <div className="flex items-center space-x-2">
-            {statusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-            <span>{statusMessage.text}</span>
-          </div>
-          <button onClick={() => setStatusMessage(null)} className="text-fg-subtle hover:text-fg-muted ml-2">
-            <X className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Tabs */}
       <div className="flex border-b border-border bg-surface px-3 sm:px-4 pt-2 text-xs shrink-0">
@@ -363,26 +372,14 @@ export const TransferPage: React.FC = () => {
             </div>
 
             {/* Device search & actions bar */}
-            <div className="p-3 bg-surface border-b border-border flex items-center justify-between gap-2 shrink-0">
-              <div className="relative flex-1">
-                <Search className="absolute left-3 top-2.5 w-4 h-4 text-fg-subtle" />
-                <input
-                  type="text"
-                  value={searchQuery ?? ''}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Поиск устройства в этой точке (модель, IMEI)..."
-                  className="w-full rounded-xl bg-surface-raised border border-border pl-9 pr-3 py-1.5 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <button
-                type="button"
-                onClick={handleScanDevice}
-                className="flex items-center justify-center p-2 bg-surface-raised hover:bg-surface text-accent text-xs font-bold rounded-xl border border-border shrink-0 transition-colors"
-                title="Сканировать"
-              >
-                <Scan className="w-4 h-4" />
-              </button>
+            <div className="p-3 bg-surface border-b border-border shrink-0">
+              <SearchBar
+                value={searchQuery ?? ''}
+                onChange={setSearchQuery}
+                onScan={handleScanDevice}
+                onSubmit={(value) => handleDeviceCode(value, 'enter')}
+                placeholder="Поиск устройства в этой точке (модель, IMEI)..."
+              />
             </div>
 
             {/* Devices Checklist */}
@@ -395,7 +392,9 @@ export const TransferPage: React.FC = () => {
                 </div>
               </div>
 
-              {availableDevicesAtFromLocation.length === 0 ? (
+              {isInitialLoading ? (
+                <LoadingState label="Загрузка устройств…" />
+              ) : availableDevicesAtFromLocation.length === 0 ? (
                 <div className="p-12 text-center text-fg-muted text-xs tracking-wider">
                   Нет доступных устройств в локации «{fromStoreName}»
                 </div>
@@ -405,35 +404,37 @@ export const TransferPage: React.FC = () => {
                     const isChecked = selectedDeviceIds.includes(dev.id);
 
                     return (
-                      <div
+                      <button
+                        type="button"
                         key={dev.id}
                         onClick={() => handleToggleSelectDevice(dev.id)}
-                        className={`p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                        aria-pressed={isChecked}
+                        className={`w-full text-left p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
                           isChecked
                             ? 'bg-accent/10 border-accent/40 shadow-xs'
                             : 'bg-surface hover:bg-surface-raised border-border'
                         }`}
                       >
-                        <div className="flex items-center space-x-3 min-w-0">
-                          <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${
+                        <span className="flex items-center space-x-3 min-w-0">
+                          <span aria-hidden="true" className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-colors ${
                             isChecked
                               ? 'bg-accent border-accent text-accent-fg'
                               : 'border-border bg-surface-raised'
                           }`}>
                             {isChecked && <Check className="w-3.5 h-3.5 stroke-3" />}
-                          </div>
+                          </span>
 
-                          <div className="min-w-0">
-                            <h4 className="text-xs font-bold text-fg-muted truncate">{dev.brand} {dev.model}</h4>
-                            <p className="text-[11px] text-fg-muted truncate">{dev.ram ? `${dev.ram} • ` : ''}{dev.storage} • {dev.color}</p>
-                            <p className="text-[10px] text-fg-subtle truncate">IMEI: {dev.imei}</p>
-                          </div>
-                        </div>
+                          <span className="min-w-0 block">
+                            <span className="block text-xs font-bold text-fg-muted truncate">{dev.brand} {dev.model}</span>
+                            <span className="block text-[11px] text-fg-muted truncate">{dev.ram ? `${dev.ram} • ` : ''}{dev.storage} • {dev.color}</span>
+                            <span className="block text-[11px] text-fg-subtle truncate">IMEI: {dev.imei}</span>
+                          </span>
+                        </span>
 
                         <span className="text-xs font-bold text-accent shrink-0">
-                          {formatMoney(dev.retailPriceTjs)} TJS
+                          {(dev.retailPriceTjs ?? 0) > 0 ? `${formatMoney(dev.retailPriceTjs)} TJS` : '—'}
                         </span>
-                      </div>
+                      </button>
                     );
                   })}
                 </div>
@@ -467,7 +468,7 @@ export const TransferPage: React.FC = () => {
 
                   <button
                     onClick={handleOpenConfirmModal}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs tracking-wider flex items-center space-x-1.5 transition-all shadow-xs ${
+                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs ${
                       !toLocationId
                         ? 'bg-warning hover:bg-warning/90 text-black'
                         : 'bg-accent hover:bg-accent-strong text-accent-fg'
@@ -517,11 +518,11 @@ export const TransferPage: React.FC = () => {
                           tr.status === 'PENDING_APPROVAL' ? 'bg-warning/15 text-warning border-warning/30' :
                           'bg-danger/15 text-danger border-danger/30'
                         }`}>
-                          {tr.status === 'APPROVED' ? 'ВЫПОЛНЕНО' : tr.status === 'PENDING_APPROVAL' ? 'ОЖИДАЕТ ПОДТВЕРЖДЕНИЯ' : 'ОТКЛОНЕНО'}
+                          {tr.status === 'APPROVED' ? 'Выполнено' : tr.status === 'PENDING_APPROVAL' ? 'Ожидает подтверждения' : 'Отклонено'}
                         </span>
                       </div>
                       <span className="text-fg-subtle text-[11px]">
-                        {tr.requestedAt ? new Date(tr.requestedAt).toLocaleString() : ''}
+                        {tr.requestedAt ? new Date(tr.requestedAt).toLocaleString('ru-RU') : ''}
                       </span>
                     </div>
 
@@ -536,21 +537,21 @@ export const TransferPage: React.FC = () => {
                       {(tr.deviceModels || []).map((mod, idx) => (
                         <div key={idx} className="flex items-center justify-between text-xs text-fg-muted">
                           <span>{tr.deviceBrands?.[idx] ? `${tr.deviceBrands[idx]} ${mod}` : mod}</span>
-                          <span className="text-fg-subtle text-[11px]">IMEI: {tr.deviceImeis?.[idx] || 'N/A'}</span>
+                          <span className="text-fg-subtle text-[11px]">IMEI: {tr.deviceImeis?.[idx] || '—'}</span>
                         </div>
                       ))}
                     </div>
 
                     {/* Pending Actions — approving/rejecting is ADMIN/PARTNER-only server-side */}
                     {tr.status === 'PENDING_APPROVAL' && !isSeller && (
-                      <div className="pt-1 flex items-center justify-end space-x-2">
+                      <div className="pt-1 flex items-center justify-between sm:justify-end gap-3">
                         <button
-                          onClick={() => handleReject(tr.id)}
+                          type="button"
+                          onClick={() => { setRejectReason(''); setRejectTarget(tr); }}
                           disabled={processingTransferId === tr.id}
                           className="px-3 py-1.5 rounded-xl bg-danger/10 hover:bg-danger/15 text-danger border border-danger/30 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5"
                         >
-                          {processingTransferId === tr.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          ОТКЛОНИТЬ
+                          Отклонить
                         </button>
                         <button
                           onClick={() => handleApprove(tr.id)}
@@ -558,7 +559,7 @@ export const TransferPage: React.FC = () => {
                           className="px-4 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors disabled:opacity-60 flex items-center gap-1.5"
                         >
                           {processingTransferId === tr.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          {processingTransferId === tr.id ? 'ОБРАБОТКА…' : 'ПОДТВЕРДИТЬ И ПРИНЯТЬ'}
+                          {processingTransferId === tr.id ? 'Обработка…' : 'Подтвердить и принять'}
                         </button>
                       </div>
                     )}
@@ -571,39 +572,51 @@ export const TransferPage: React.FC = () => {
       </div>
 
       {/* CONFIRMATION MODAL */}
-      {confirmTransferModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-fg-muted border-b border-border pb-3">Подтверждение перемещения</h3>
-
-            <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-1">
-              <p className="text-fg-muted">Откуда: <strong className="text-accent">{fromStoreName}</strong></p>
-              <p className="text-fg-muted">Куда: <strong className="text-accent">{toStoreName}</strong></p>
-              <p className="text-fg-muted">Устройств к передаче: <strong className="text-fg-muted">{selectedDeviceIds.length} шт.</strong></p>
-            </div>
-
-            <div className="flex space-x-2 pt-2">
-              <button
-                type="button"
-                disabled={isSubmittingTransfer}
-                onClick={() => setConfirmTransferModal(false)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                type="button"
-                disabled={isSubmittingTransfer}
-                onClick={handleExecuteTransfer}
-                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmittingTransfer && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmittingTransfer ? 'ОФОРМЛЕНИЕ…' : 'ПОДТВЕРДИТЬ'}
-              </button>
-            </div>
+      <ConfirmDialog
+        open={confirmTransferModal}
+        tone="default"
+        title="Подтверждение перемещения"
+        confirmLabel={isSeller ? 'Отправить заявку' : 'Переместить'}
+        loading={isSubmittingTransfer}
+        onConfirm={handleExecuteTransfer}
+        onCancel={() => { if (!isSubmittingTransfer) setConfirmTransferModal(false); }}
+        message={
+          <div className="space-y-1">
+            <p>Откуда: <strong className="text-accent">{fromStoreName}</strong></p>
+            <p>Куда: <strong className="text-accent">{toStoreName}</strong></p>
+            <p>Устройств к передаче: <strong className="text-fg">{selectedDeviceIds.length} шт.</strong></p>
           </div>
-        </div>
-      )}
+        }
+      />
+
+      {/* REJECT CONFIRMATION: a separate step with a reason, not a tap next to «Подтвердить» */}
+      <ConfirmDialog
+        open={rejectTarget !== null}
+        title="Отклонить перемещение?"
+        confirmLabel="Отклонить"
+        loading={rejectTarget !== null && processingTransferId === rejectTarget.id}
+        onConfirm={() => { if (rejectTarget) void handleReject(rejectTarget.id); }}
+        onCancel={() => { if (!processingTransferId) setRejectTarget(null); }}
+        message={rejectTarget && (
+          <div className="space-y-2">
+            <p>
+              {rejectTarget.fromLocationName} → {rejectTarget.toLocationName}, {(rejectTarget.deviceIds || []).length} шт.
+              Устройства останутся у отправителя.
+            </p>
+            <label className="block">
+              <span className="block text-xs text-fg-subtle mb-1">Причина (необязательно)</span>
+              <textarea
+                value={rejectReason}
+                onChange={(e) => setRejectReason(e.target.value)}
+                rows={2}
+                maxLength={200}
+                placeholder="Например: телефон не пришёл"
+                className="w-full rounded-lg bg-bg border border-border px-3 py-2 text-sm text-fg focus:outline-none focus:border-accent"
+              />
+            </label>
+          </div>
+        )}
+      />
     </div>
   );
 };

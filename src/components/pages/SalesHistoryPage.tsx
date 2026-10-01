@@ -25,7 +25,9 @@ import { LoadingState } from '../ui/Skeleton';
 import { Dialog } from '../ui/Dialog';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 
-import { getBusinessDateKey } from '../../utils/businessDate';
+import { currentBusinessMonth, getBusinessDateKey, monthBounds } from '../../utils/businessDate';
+import { summarizeSales } from '../../utils/salesSummary';
+import { looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
 
 type DialogView = 'details' | 'refund' | 'pick-exchange' | 'pick-repair';
 
@@ -55,15 +57,18 @@ export const SalesHistoryPage: React.FC = () => {
   );
 
   const todayStr = getBusinessDateKey();
-  const thisMonthStr = todayStr.substring(0, 7);
+  const thisMonthStr = currentBusinessMonth();
   const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'CUSTOM' | 'MONTH'>('MONTH');
   const [selectedMonth, setSelectedMonth] = useState<string>(thisMonthStr);
-  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => `${thisMonthStr}-01`);
-  const [selectedEndDate, setSelectedEndDate] = useState<string>(() => {
-    const [y, m] = thisMonthStr.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${thisMonthStr}-${String(lastDay).padStart(2, '0')}`;
-  });
+  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => monthBounds(thisMonthStr).start);
+  const [selectedEndDate, setSelectedEndDate] = useState<string>(() => monthBounds(thisMonthStr).end);
+  const resetToCurrentMonth = () => {
+    const { start, end } = monthBounds(thisMonthStr);
+    setSelectedMonth(thisMonthStr);
+    setSelectedStartDate(start);
+    setSelectedEndDate(end);
+    setPeriodFilter('MONTH');
+  };
 
   const retailStores = useMemo(() => stores.filter((s) => !s.isMainWarehouse), [stores]);
 
@@ -111,19 +116,31 @@ export const SalesHistoryPage: React.FC = () => {
     ? (currentUser?.storeId || undefined)
     : (selectedStoreFilter === 'ALL' ? undefined : selectedStoreFilter);
 
+  // The period's own load state: without it a slow network showed «Продажи не найдены» while
+  // the period was still loading, and a failed load only reached the console.
+  const [periodLoad, setPeriodLoad] = useState<'loading' | 'done' | 'error'>('loading');
+  const [periodLoadAttempt, setPeriodLoadAttempt] = useState(0);
+
   // Fetch sales for the selected period & store filter (or all stores if selectedStoreFilter === 'ALL')
   useEffect(() => {
-    if (isStoreScoped && !effectiveFetchStoreId) return;
+    if (isStoreScoped && !effectiveFetchStoreId) { setPeriodLoad('done'); return; }
     let cancelled = false;
+    setPeriodLoad('loading');
     fetchSalesRange({
       period: periodFilter === 'TODAY' ? 'TODAY' : (periodFilter === 'MONTH' && selectedMonth ? 'SPECIFIC_MONTH' : undefined),
       month: periodFilter === 'MONTH' ? selectedMonth : undefined,
       startDate: periodFilter === 'CUSTOM' && selectedStartDate ? selectedStartDate : undefined,
       endDate: periodFilter === 'CUSTOM' && selectedEndDate ? selectedEndDate : undefined,
       storeId: effectiveFetchStoreId,
-    }).catch((e) => { if (!cancelled) console.error('Failed to load sales for period', e); });
+    })
+      .then(() => { if (!cancelled) setPeriodLoad('done'); })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error('Failed to load sales for period', e);
+        setPeriodLoad('error');
+      });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedStartDate, selectedEndDate, selectedMonth, effectiveFetchStoreId, fetchSalesRange, dataRefreshRevision, isStoreScoped]);
+  }, [periodFilter, selectedStartDate, selectedEndDate, selectedMonth, effectiveFetchStoreId, fetchSalesRange, dataRefreshRevision, isStoreScoped, periodLoadAttempt]);
 
   const filteredSales = useMemo(() => {
     if (isStoreScoped && !currentUser?.storeId) return [];
@@ -168,12 +185,17 @@ export const SalesHistoryPage: React.FC = () => {
     }).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [sales, currentUser, isSeller, selectedStoreFilter, periodFilter, selectedStartDate, selectedEndDate, selectedMonth, searchQuery]);
 
+  const periodSummary = useMemo(() => summarizeSales(filteredSales), [filteredSales]);
+
   const findByReceiptOrImei = (list: typeof sales, code: string) =>
     list.find(s => s.receiptNumber.toString() === code || s.items.some(i => i.imei === code || i.imei2 === code));
 
-  const handleScanFinder = () => {
-    openScanner(async (scannedCode) => {
-      const code = scannedCode.trim();
+  /** Camera scan or Enter (USB/Bluetooth scanner): opens the receipt by number or IMEI. */
+  const openSaleByCode = async (rawCode: string, source: 'camera' | 'enter') => {
+      const code = normalizeScanCode(rawCode);
+      if (!code) return;
+      // Enter on a text search ("Ахмад", "iPhone") keeps filtering the list.
+      if (source === 'enter' && !/^\d+$/.test(code)) return;
       const matched = findByReceiptOrImei(sales, code);
       if (matched) {
         setSelectedSaleId(matched.id);
@@ -196,7 +218,13 @@ export const SalesHistoryPage: React.FC = () => {
       }
 
       setSearchQuery(code);
-    });
+      if (source === 'camera' || looksLikeDeviceCode(code)) {
+        setStatus({ tone: 'error', text: `Чек или IMEI «${code}» не найден` });
+      }
+  };
+
+  const handleScanFinder = () => {
+    openScanner((scannedCode) => { void openSaleByCode(scannedCode, 'camera'); });
   };
 
   const openSale = (id: string) => {
@@ -278,6 +306,7 @@ export const SalesHistoryPage: React.FC = () => {
           value={searchQuery}
           onChange={setSearchQuery}
           onScan={handleScanFinder}
+          onSubmit={(value) => { void openSaleByCode(value, 'enter'); }}
           placeholder="Номер чека / IMEI / модель / продавец..."
         />
 
@@ -323,14 +352,7 @@ export const SalesHistoryPage: React.FC = () => {
                   setPeriodFilter('CUSTOM');
                 }
               }}
-              onResetMonth={() => {
-                setSelectedMonth(thisMonthStr);
-                const [y, m] = thisMonthStr.split('-').map(Number);
-                const lastDay = new Date(y, m, 0).getDate();
-                setSelectedStartDate(`${thisMonthStr}-01`);
-                setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
-                setPeriodFilter('MONTH');
-              }}
+              onResetMonth={resetToCurrentMonth}
               className="shrink-0"
             />
           </div>
@@ -358,6 +380,15 @@ export const SalesHistoryPage: React.FC = () => {
               </div>
             ) : null}
           </div>
+        {filteredSales.length > 0 && (
+          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-fg-subtle tabular-nums" aria-label="Итоги за период">
+            <span>Чеков: <strong className="text-fg-muted">{periodSummary.receipts}</strong></span>
+            <span>Сумма: <strong className="text-accent">{formatMoney(periodSummary.totalTjs)} TJS</strong></span>
+            <span>Наличные: <strong className="text-fg-muted">{formatMoney(periodSummary.cashTjs)}</strong></span>
+            <span>Карта: <strong className="text-fg-muted">{formatMoney(periodSummary.cardTjs)}</strong></span>
+            {periodSummary.refunded > 0 && <span>Возвратов: <strong className="text-fg-muted">{periodSummary.refunded}</strong> (не в сумме)</span>}
+          </div>
+        )}
         </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-border">
@@ -371,8 +402,15 @@ export const SalesHistoryPage: React.FC = () => {
               Ваш аккаунт не привязан к торговой точке
             </p>
           </div>
-        ) : isInitialLoading ? (
+        ) : isInitialLoading || (periodLoad === 'loading' && filteredSales.length === 0) ? (
           <LoadingState label="Загрузка продаж…" />
+        ) : periodLoad === 'error' && filteredSales.length === 0 ? (
+          <EmptyState
+            icon={Receipt}
+            title="Не удалось загрузить продажи"
+            description="Проверьте подключение к интернету и повторите. Показанный список мог быть неполным."
+            action={<Button onClick={() => setPeriodLoadAttempt((n) => n + 1)}>Повторить</Button>}
+          />
         ) : filteredSales.length === 0 ? (
           <EmptyState icon={Receipt} title="Продажи не найдены" description="Попробуйте изменить период или поисковый запрос" />
         ) : (

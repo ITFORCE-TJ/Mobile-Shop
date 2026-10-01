@@ -6,21 +6,31 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   onScan?: () => void;
+  /** Enter in the field — USB/Bluetooth barcode scanners type the code and press Enter. */
+  onSubmit?: (value: string) => void;
   placeholder?: string;
   className?: string;
 }
 
 /** The search+scan input row duplicated near-verbatim across every list screen. */
-export const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, onScan, placeholder = 'Поиск…', className }) => (
+export const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, onScan, onSubmit, placeholder = 'Поиск…', className }) => (
   <div className={`flex items-center gap-2 ${className || ''}`}>
     <div className="relative flex-1 min-w-0">
       <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
       <input
-        type="text"
+        type="search"
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' || !onSubmit || e.nativeEvent.isComposing) return;
+          e.preventDefault();
+          onSubmit(e.currentTarget.value);
+        }}
+        enterKeyHint={onSubmit ? 'go' : 'search'}
+        aria-label={placeholder}
+        autoComplete="off"
         placeholder={placeholder}
-        className="w-full h-11 rounded-lg bg-surface border border-border pl-9 pr-9 text-sm text-fg-muted placeholder:text-fg-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
+        className="w-full h-11 rounded-lg bg-surface border border-border pl-9 pr-9 text-sm text-fg-muted placeholder:text-fg-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button

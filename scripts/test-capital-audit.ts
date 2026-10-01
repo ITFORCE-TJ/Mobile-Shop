@@ -2,6 +2,7 @@ import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
+import { D } from '../server/src/common/decimal';
 
 const url = new URL(process.env.DATABASE_URL || '');
 assert(['localhost', '127.0.0.1'].includes(url.hostname), 'Disposable local database required');
@@ -120,6 +121,76 @@ try {
   await ok('withdrawal', 100000);
   assert((await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } })).capitalBalanceUsd.eq(beforeLarge.capitalBalanceUsd));
   pass('100000 USD investment and withdrawal succeed with exact balances');
+
+  // A store partner's money goes through the register the admin picks — the partner's store link
+  // never redirects it. Partner of Сиёма invests $300 into the main warehouse, then takes $100
+  // back out of it: the main warehouse moves, Сиёма's register does not.
+  await db.owner.update({ where: { id: 'owner-partner' }, data: { storeId: 'store-siyoma' } });
+  const registers = async () => {
+    const [main, siyoma] = await Promise.all([
+      db.store.findFirstOrThrow({ where: { isMainWarehouse: true } }),
+      db.store.findUniqueOrThrow({ where: { id: 'store-siyoma' } }),
+    ]);
+    return { main: D(main.cashBalanceUsd), siyoma: D(siyoma.cashBalanceUsd), mainName: main.name };
+  };
+  const partnerTxBefore = await db.ownerTransaction.findMany({ orderBy: { id: 'asc' } });
+  const beforePartner = await registers();
+  const capitalBefore = D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd);
+  const invest = await api('POST', '/owners/owner-partner/investment', { amountUsd: 300, destination: beforePartner.mainName }, 'partner-invest-main');
+  assert.equal(invest.status, 200, JSON.stringify(invest));
+  const withdraw = await api('POST', '/owners/owner-partner/withdrawal', { amountUsd: 100, source: beforePartner.mainName }, 'partner-withdraw-main');
+  assert.equal(withdraw.status, 200, JSON.stringify(withdraw));
+  const afterPartner = await registers();
+  assert.equal(afterPartner.main.minus(beforePartner.main).toString(), '200');
+  assert.equal(afterPartner.siyoma.minus(beforePartner.siyoma).toString(), '0');
+  assert.equal(D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd).minus(capitalBefore).toString(), '200');
+  const partnerTxs = await db.ownerTransaction.findMany({ where: { ownerId: 'owner-partner' }, orderBy: { createdAt: 'asc' } });
+  assert.deepEqual(partnerTxs.slice(-2).map((t) => [t.type, D(t.amountUsd).toString(), t.sourceOrDestination]),
+    [['INVESTMENT', '300', beforePartner.mainName], ['WITHDRAWAL', '100', beforePartner.mainName]]);
+  // Earlier history is untouched.
+  const stillThere = await db.ownerTransaction.findMany({ where: { id: { in: partnerTxBefore.map((t) => t.id) } }, orderBy: { id: 'asc' } });
+  assert.deepEqual(stillThere.map((t) => [t.id, D(t.amountUsd).toString(), t.sourceOrDestination]), partnerTxBefore.map((t) => [t.id, D(t.amountUsd).toString(), t.sourceOrDestination]));
+  pass('store partner invests into and withdraws from the main warehouse: only the main warehouse register moves');
+
+  // Moving a partner to another store re-links the person only: capital, registers and the
+  // history that places the capital stay exactly as they were.
+  await db.store.create({ data: { id: 'store-sahovat', name: 'Саховат' } });
+  const money = async () => ({
+    stores: (await db.store.findMany({ orderBy: { id: 'asc' } })).map((st) => [st.id, D(st.cashBalanceUsd).toString()]),
+    capital: D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd).toString(),
+    tx: (await db.ownerTransaction.findMany({ orderBy: { id: 'asc' } })).map((t) => [t.id, D(t.amountUsd).toString(), t.sourceOrDestination]),
+  });
+  const beforeMove = await money();
+  for (const storeId of ['store-sahovat', 'store-siyoma']) {
+    const moved = await api('PATCH', '/users/user-partner', { storeId }, `partner-move-${storeId}`);
+    assert.equal(moved.status, 200, JSON.stringify(moved));
+    assert.equal((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).storeId, storeId);
+    assert.deepEqual(await money(), beforeMove);
+  }
+  pass('partner moved Сиёма → Саховат → Сиёма: capital, every register and owner history unchanged');
+
+  // Partner profit becomes capital only after its quarter is closed; the admin is not limited.
+  await db.owner.update({ where: { id: 'owner-partner' }, data: { availableProfitUsd: 500, totalAccruedProfitUsd: 500 } });
+  const reinvestPartner = (amount: unknown, key: string) => api('POST', '/owners/owner-partner/reinvest', { amountUsd: amount }, key);
+  const blocked = await reinvestPartner(1, 'partner-reinvest-open');
+  assert.equal(blocked.status, 400, JSON.stringify(blocked));
+  assert.match(blocked.data.message, /после закрытия квартала/);
+  assert.equal((await api('POST', '/owners/quarter-close', { quarterName: 'Q3 2026 audit', transferRemainingToCapital: false }, 'partner-close-q3')).status, 200);
+  // $200 more is earned in the new, still open quarter.
+  await db.owner.update({ where: { id: 'owner-partner' }, data: { availableProfitUsd: { increment: 200 }, totalAccruedProfitUsd: { increment: 200 } } });
+  const listed = (await api('GET', '/owners')).data.find((o: any) => o.id === 'owner-partner');
+  assert.equal(String(listed.reinvestableProfitUsd), '500');
+  assert.equal((await reinvestPartner('500.01', 'partner-reinvest-too-much')).status, 400);
+  const capitalBeforeReinvest = D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd);
+  assert.equal((await reinvestPartner(300, 'partner-reinvest-300')).status, 200);
+  assert.equal((await reinvestPartner('200.01', 'partner-reinvest-rest-too-much')).status, 400);
+  assert.equal((await reinvestPartner(200, 'partner-reinvest-200')).status, 200);
+  const partnerAfter = await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } });
+  assert.equal(D(partnerAfter.capitalBalanceUsd).minus(capitalBeforeReinvest).toString(), '500');
+  assert.equal(D(partnerAfter.availableProfitUsd).toString(), '200');
+  assert.equal((await reinvestPartner(1, 'partner-reinvest-open-again')).status, 400);
+  assert.equal(String((await api('GET', '/owners')).data.find((o: any) => o.id === 'owner-partner').reinvestableProfitUsd), '0');
+  pass('partner reinvests only closed-quarter profit ($500 of $700); open-quarter profit waits for the next close');
   console.log(`Capital audit: ${passed} groups passed`);
 } finally {
   if (server) await new Promise<void>(resolve => server!.close(() => resolve()));

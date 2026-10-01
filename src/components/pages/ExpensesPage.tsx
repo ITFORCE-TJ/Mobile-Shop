@@ -1,6 +1,6 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { ActionMenu } from '../ui/ActionMenu';
-import { getBusinessDateKey } from '../../utils/businessDate';
+import { currentBusinessMonth, getBusinessDateKey, monthBounds } from '../../utils/businessDate';
 import { formatMoney, sumMoney, moneyNumber } from '../../utils/money';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -126,16 +126,19 @@ export const ExpensesPage: React.FC = () => {
   }, [retailStores, storeId, isStoreScoped, currentUser?.storeId]);
 
   const todayStr = getBusinessDateKey();
-  const thisMonthStr = todayStr.substring(0, 7);
+  const thisMonthStr = currentBusinessMonth();
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'CUSTOM' | 'MONTH'>('MONTH');
+  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'CUSTOM' | 'MONTH' | 'ALL'>('MONTH');
   const [selectedMonth, setSelectedMonth] = useState<string>(thisMonthStr);
-  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => `${thisMonthStr}-01`);
-  const [selectedEndDate, setSelectedEndDate] = useState<string>(() => {
-    const [y, m] = thisMonthStr.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    return `${thisMonthStr}-${String(lastDay).padStart(2, '0')}`;
-  });
+  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => monthBounds(thisMonthStr).start);
+  const [selectedEndDate, setSelectedEndDate] = useState<string>(() => monthBounds(thisMonthStr).end);
+  const resetToCurrentMonth = () => {
+    const { start, end } = monthBounds(thisMonthStr);
+    setPeriodFilter('MONTH');
+    setSelectedMonth(thisMonthStr);
+    setSelectedStartDate(start);
+    setSelectedEndDate(end);
+  };
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'DATE_DESC' | 'DATE_ASC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
@@ -183,6 +186,8 @@ export const ExpensesPage: React.FC = () => {
     } else if (periodFilter === 'CUSTOM' && selectedStartDate) {
       params.startDate = selectedStartDate;
       params.endDate = selectedEndDate || selectedStartDate;
+    } else if (periodFilter === 'ALL') {
+      params.period = 'ALL';
     }
 
     if (selectedStoreFilter !== 'ALL') {
@@ -489,12 +494,7 @@ export const ExpensesPage: React.FC = () => {
   const hasActiveFilters = activeFiltersCount > 0;
 
   const handleResetFilters = () => {
-    setPeriodFilter('MONTH');
-    setSelectedMonth(thisMonthStr);
-    const [y, m] = thisMonthStr.split('-').map(Number);
-    const lastDay = new Date(y, m, 0).getDate();
-    setSelectedStartDate(`${thisMonthStr}-01`);
-    setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
+    resetToCurrentMonth();
     setSelectedStoreFilter(isPartner ? (currentUser?.storeId || '') : 'ALL');
     setSelectedCategoryTab('ALL');
     setStatusFilter('ALL');
@@ -680,7 +680,12 @@ export const ExpensesPage: React.FC = () => {
               selectedMonth={periodFilter === 'MONTH' ? selectedMonth : undefined}
               currentMonthStr={thisMonthStr}
               isToday={periodFilter === 'TODAY'}
-              isActive={periodFilter === 'MONTH' || periodFilter === 'CUSTOM'}
+              isAllTime={periodFilter === 'ALL'}
+              onSelectAllTime={() => {
+                setSelectedMonth('');
+                setPeriodFilter('ALL');
+              }}
+              isActive={periodFilter === 'MONTH' || periodFilter === 'CUSTOM' || periodFilter === 'ALL'}
               onChange={(start, end, monthStr) => {
                 if (monthStr) {
                   setSelectedMonth(monthStr);
@@ -694,14 +699,7 @@ export const ExpensesPage: React.FC = () => {
                   setPeriodFilter('CUSTOM');
                 }
               }}
-              onResetMonth={() => {
-                setSelectedMonth(thisMonthStr);
-                const [y, m] = thisMonthStr.split('-').map(Number);
-                const lastDay = new Date(y, m, 0).getDate();
-                setSelectedStartDate(`${thisMonthStr}-01`);
-                setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
-                setPeriodFilter('MONTH');
-              }}
+              onResetMonth={resetToCurrentMonth}
               className="shrink-0"
             />
           </div>
@@ -716,6 +714,8 @@ export const ExpensesPage: React.FC = () => {
                   <span>
                     {periodFilter === 'TODAY'
                       ? 'Сегодня'
+                      : periodFilter === 'ALL'
+                      ? 'Всё время'
                       : periodFilter === 'MONTH' && selectedMonth
                       ? `Месяц: ${selectedMonth}`
                       : selectedStartDate === selectedEndDate || !selectedEndDate
@@ -723,14 +723,7 @@ export const ExpensesPage: React.FC = () => {
                       : `${selectedStartDate} — ${selectedEndDate}`}
                   </span>
                   <button
-                    onClick={() => {
-                      setPeriodFilter('MONTH');
-                      setSelectedMonth(thisMonthStr);
-                      const [y, m] = thisMonthStr.split('-').map(Number);
-                      const lastDay = new Date(y, m, 0).getDate();
-                      setSelectedStartDate(`${thisMonthStr}-01`);
-                      setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
-                    }}
+                    onClick={resetToCurrentMonth}
                     className="hover:text-danger ml-0.5"
                     title="Сбросить на текущий месяц"
                   >

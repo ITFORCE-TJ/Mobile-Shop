@@ -1,6 +1,7 @@
 import { getBusinessDateKey } from '../../utils/businessDate';
 import { formatMoney } from '../../utils/money';
 import { formatUserName } from '../../utils/formatUser';
+import { capitalByLocation } from '../../utils/ownerCapital';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
@@ -22,7 +23,6 @@ import {
   Loader2,
   CheckCircle2,
   AlertCircle,
-  Building2,
   Store,
   Warehouse,
   ChevronDown,
@@ -126,14 +126,14 @@ export const OwnersPage: React.FC = () => {
 
   const getOwnerDetails = (owner: { id: string; name?: string; userId?: string }) => {
     const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
-    const cleanName = formatUserName(owner.name || linkedUser?.name);
+    const rawName = owner.name || linkedUser?.name;
     if (linkedUser?.role === 'ADMIN') {
-      return { name: cleanName || 'Администратор', roleTag: 'Администратор', roleSub: 'Владелец & Управляющий' };
+      return { name: formatUserName(rawName, 'Администратор'), roleTag: 'Администратор', roleSub: 'Владелец & Управляющий' };
     }
     if (linkedUser?.role === 'PARTNER') {
-      return { name: cleanName || 'Партнер', roleTag: 'Партнер', roleSub: 'Соучредитель бизнеса' };
+      return { name: formatUserName(rawName, 'Партнер'), roleTag: 'Партнер', roleSub: 'Соучредитель бизнеса' };
     }
-    return { name: cleanName || 'Владелец', roleTag: 'Владелец', roleSub: 'Совладелец бизнеса' };
+    return { name: formatUserName(rawName, 'Владелец'), roleTag: 'Владелец', roleSub: 'Совладелец бизнеса' };
   };
 
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -222,106 +222,20 @@ export const OwnersPage: React.FC = () => {
   const [statusBanner, setStatusBanner] = useState<StatusMessage | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Stores breakdown filter & view
-  const [storeLocationFilter, setStoreLocationFilter] = useState<'ALL' | 'RETAIL' | 'WAREHOUSE'>('ALL');
-
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
 
-  const normalizeStoreName = (name?: string) =>
-    (name || '').toLowerCase().replace(/["'«»]|магазин|склад/gi, '').trim();
-
-  const resolveTxStore = (sourceOrDestination?: string, storesList: typeof stores = stores) => {
-    if (!sourceOrDestination) return null;
-    const raw = sourceOrDestination.trim().toLowerCase();
-    const byId = storesList.find(s => s.id === sourceOrDestination || s.id.toLowerCase() === raw);
-    if (byId) return byId;
-    const byName = storesList.find(s => s.name.trim().toLowerCase() === raw);
-    if (byName) return byName;
-    const cleanTarget = normalizeStoreName(sourceOrDestination);
-    if (cleanTarget) {
-      const byClean = storesList.find(s => {
-        const c = normalizeStoreName(s.name);
-        return c === cleanTarget || c.includes(cleanTarget) || cleanTarget.includes(c);
-      });
-      if (byClean) return byClean;
-    }
-    return null;
-  };
-
-  const sortedStores = useMemo(() => {
-    return [...stores].sort((a, b) => {
-      if (a.isMainWarehouse && !b.isMainWarehouse) return 1;
-      if (!a.isMainWarehouse && b.isMainWarehouse) return -1;
-      return a.name.localeCompare(b.name, 'ru');
-    });
-  }, [stores]);
-
-  const displayedStores = useMemo(() => {
-    if (storeLocationFilter === 'RETAIL') return sortedStores.filter(s => !s.isMainWarehouse);
-    if (storeLocationFilter === 'WAREHOUSE') return sortedStores.filter(s => s.isMainWarehouse);
-    return sortedStores;
-  }, [sortedStores, storeLocationFilter]);
-
-  // Track invested capital separately for each store and owner
+  // Track invested capital separately for each store and owner (used in owner cards)
   const storeInvestmentsByOwner = useMemo(() => {
-    const mainStore = mainWarehouse || stores[0];
     const result: Record<string, Record<string, number>> = {};
-
     owners.forEach(owner => {
-      const capital = Math.max(0, owner.capitalBalanceUsd || 0);
-      const storeMap: Record<string, number> = {};
-      stores.forEach(s => { storeMap[s.id] = 0; });
-
-      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
-      const ownerStoreId = owner.storeId || linkedUser?.storeId;
-
-      if (capital === 0) {
-        result[owner.id] = storeMap;
-        return;
-      }
-
-      // If owner is tied to a specific store (partner), ALL their capital is strictly in their own store!
-      if (ownerStoreId) {
-        storeMap[ownerStoreId] = capital;
-        result[owner.id] = storeMap;
-        return;
-      }
-
-      let txSum = 0;
-      const txs = ownerTransactions.filter(
-        tx => tx.ownerId === owner.id && (tx.type === 'INVESTMENT' || tx.type === 'REINVEST' || tx.type === 'WITHDRAWAL')
-      );
-
-      txs.forEach(tx => {
-        const matched = resolveTxStore(tx.sourceOrDestination, stores);
-        const targetId = matched ? matched.id : (mainStore?.id || stores[0]?.id);
-        if (targetId) {
-          const delta = tx.type === 'WITHDRAWAL' ? -(tx.amountUsd || 0) : (tx.amountUsd || 0);
-          storeMap[targetId] = (storeMap[targetId] || 0) + delta;
-          txSum += delta;
-        }
+      result[owner.id] = capitalByLocation({
+        capitalUsd: owner.capitalBalanceUsd || 0,
+        transactions: ownerTransactions.filter(tx => tx.ownerId === owner.id),
+        stores,
       });
-
-      const diff = capital - txSum;
-      const fallbackId = mainStore?.id || stores[0]?.id;
-      if (fallbackId) {
-        storeMap[fallbackId] = (storeMap[fallbackId] || 0) + diff;
-      }
-
-      stores.forEach(s => {
-        if ((storeMap[s.id] || 0) < 0) storeMap[s.id] = 0;
-      });
-
-      const positiveSum = Object.values(storeMap).reduce((acc, v) => acc + v, 0);
-      if (fallbackId && positiveSum !== capital) {
-        storeMap[fallbackId] = Math.max(0, (storeMap[fallbackId] || 0) + (capital - positiveSum));
-      }
-
-      result[owner.id] = storeMap;
     });
-
     return result;
-  }, [owners, stores, ownerTransactions, mainWarehouse, users]);
+  }, [owners, stores, ownerTransactions]);
 
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
@@ -515,11 +429,6 @@ export const OwnersPage: React.FC = () => {
     }
   };
 
-  const handleApplyPreset = (adminPct: number, partnerPct: number) => {
-    setAdminShareVal(adminPct.toString());
-    setPartnerShareVal(partnerPct.toString());
-  };
-
   const openTxModalForOwner = (
     ownerId: string,
     defaultType: 'INVESTMENT' | 'PROFIT_PAYOUT' | 'WITHDRAWAL' | 'REINVEST',
@@ -527,17 +436,9 @@ export const OwnersPage: React.FC = () => {
   ) => {
     setSelectedOwnerId(ownerId);
     setTxType(defaultType);
-    const targetOwner = owners.find(o => o.id === ownerId);
-    const linkedUser = targetOwner?.userId ? users.find(u => u.id === targetOwner.userId) : undefined;
-    const ownerStoreId = targetOwner?.storeId || linkedUser?.storeId;
-
-    if (ownerStoreId) {
-      setSelectedTxStoreId(ownerStoreId);
-    } else if (targetStoreId) {
-      setSelectedTxStoreId(targetStoreId);
-    } else if (!selectedTxStoreId && stores.length > 0) {
-      setSelectedTxStoreId(stores[0].id);
-    }
+    // The admin chooses which register the money goes through; a partner's store link never
+    // decides it. Preselect the main warehouse, which holds the partners' equity.
+    setSelectedTxStoreId(targetStoreId || mainWarehouse?.id || stores[0]?.id || '');
     setAmountUsd('');
     setNote('');
     setStatusBanner(null);
@@ -624,12 +525,21 @@ export const OwnersPage: React.FC = () => {
         });
         return;
       }
+      const reinvestable = currentOwner.reinvestableProfitUsd ?? availProfit;
+      if (txType === 'REINVEST' && val > reinvestable) {
+        setStatusBanner({
+          tone: 'error',
+          text: `Прибыль партнёра переходит в капитал только после закрытия квартала. Сейчас можно реинвестировать не больше $${reinvestable}`
+        });
+        return;
+      }
     }
 
-    const linkedUser = currentOwner?.userId ? users.find(u => u.id === currentOwner.userId) : undefined;
-    const ownerStoreId = currentOwner?.storeId || linkedUser?.storeId;
-    const storeToUse = ownerStoreId || selectedTxStoreId;
-    const targetStore = stores.find(s => s.id === storeToUse) || stores[0];
+    const targetStore = stores.find(s => s.id === selectedTxStoreId);
+    if (!targetStore) {
+      setStatusBanner({ tone: 'error', text: 'Выберите кассу: магазин или центральный склад' });
+      return;
+    }
 
     setIsSubmitting(true);
     try {
@@ -1001,8 +911,7 @@ export const OwnersPage: React.FC = () => {
                               {info.roleTag}
                             </span>
                             {(() => {
-                              const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
-                              const ownerStoreId = owner.storeId || linkedUser?.storeId;
+                              const ownerStoreId = owner.storeId;
                               if (ownerStoreId) {
                                 return (
                                   <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning">
@@ -1075,8 +984,7 @@ export const OwnersPage: React.FC = () => {
 
                     {/* Attached store stock & cash assets snapshot */}
                     {(() => {
-                      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
-                      const targetStoreId = owner.storeId || linkedUser?.storeId;
+                      const targetStoreId = owner.storeId;
                       const partnerStore = targetStoreId ? storeAssetsBreakdown.find(s => s.id === targetStoreId) : null;
                       if (!partnerStore) return null;
                       return (
@@ -1124,34 +1032,8 @@ export const OwnersPage: React.FC = () => {
 
                     {/* Stores distribution preview */}
                     {(() => {
-                      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
-                      const ownerStoreId = owner.storeId || linkedUser?.storeId;
-
-                      // If owner is tied to a specific store (partner of a store), show ONLY their store!
-                      if (ownerStoreId) {
-                        const targetStore = stores.find(s => s.id === ownerStoreId);
-                        if (!targetStore) return null;
-                        const storeAmt = storeInvestmentsByOwner[owner.id]?.[targetStore.id] ?? capUsd;
-                        return (
-                          <div className="space-y-1.5 pt-1">
-                            <span className="text-[10px] uppercase font-bold text-fg-subtle block">
-                              Размещение капитала:
-                            </span>
-                            <div className="flex flex-wrap gap-1.5">
-                              <div
-                                key={targetStore.id}
-                                className="px-2 py-1 rounded-lg bg-surface-raised border border-border text-[11px] flex items-center gap-1.5"
-                              >
-                                <Store className="w-3 h-3 text-accent shrink-0" />
-                                <span className="font-medium text-fg-muted truncate max-w-32">{targetStore.name}:</span>
-                                <span className="font-bold text-fg">${formatMoney(storeAmt)}</span>
-                              </div>
-                            </div>
-                          </div>
-                        );
-                      }
-
                       // For Admin (all stores)
+                      // Placement follows the transaction history for every owner, partners included.
                       const activeStores = stores.filter(s => (storeInvestmentsByOwner[owner.id]?.[s.id] || 0) > 0);
                       if (activeStores.length === 0) return null;
 
@@ -1231,171 +1113,6 @@ export const OwnersPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Section: Capital Allocation by Location (Stores & Warehouse) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-xs">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-                <Building2 className="w-4 h-4" />
-              </div>
-              <div>
-                <h2 className="text-xs sm:text-sm font-bold text-fg uppercase tracking-wide">
-                  Капитал по объектам сети
-                </h2>
-                <p className="text-[11px] text-fg-subtle">
-                  Распределение вложений учредителей между магазинами и центральным складом
-                </p>
-              </div>
-            </div>
-
-            {/* Filter Pills */}
-            <div className="flex items-center bg-surface-raised p-1 rounded-xl border border-border text-xs font-semibold self-start sm:self-auto">
-              <button
-                type="button"
-                onClick={() => setStoreLocationFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  storeLocationFilter === 'ALL'
-                    ? 'bg-accent text-accent-fg font-bold'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Все ({sortedStores.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStoreLocationFilter('RETAIL')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  storeLocationFilter === 'RETAIL'
-                    ? 'bg-accent text-accent-fg font-bold'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Магазины ({retailStores.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setStoreLocationFilter('WAREHOUSE')}
-                className={`px-2.5 py-1 rounded-lg transition-colors cursor-pointer ${
-                  storeLocationFilter === 'WAREHOUSE'
-                    ? 'bg-accent text-accent-fg font-bold'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Склад ({mainWarehouse ? 1 : 0})
-              </button>
-            </div>
-          </div>
-
-          {/* Clean Modern Location Table */}
-          <div className="overflow-x-auto rounded-xl border border-border bg-surface-raised">
-            <table className="w-full text-left text-xs">
-              <thead className="bg-surface text-[10px] text-fg-subtle uppercase border-b border-border">
-                <tr>
-                  <th className="p-3">Объект</th>
-                  <th className="p-3 text-right">Вложено (Капитал)</th>
-                  <th className="p-3 text-right">Доля в сети</th>
-                  {displayOwners.map(owner => (
-                    <th key={owner.id} className="p-3 text-right">
-                      {getOwnerDetails(owner).name}
-                    </th>
-                  ))}
-                  <th className="p-3 text-center">Действие</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-border">
-                {displayedStores.map(store => {
-                  const isWarehouse = store.isMainWarehouse;
-                  const totalStoreCap = displayOwners.reduce((sum, o) => {
-                    return sum + (storeInvestmentsByOwner[o.id]?.[store.id] || 0);
-                  }, 0);
-                  const pct = totalCapitalInvested > 0 ? Math.round((totalStoreCap / totalCapitalInvested) * 1000) / 10 : 0;
-                  const totalStoreTjs = Math.round(totalStoreCap * rate);
-
-                  return (
-                    <tr key={store.id} className="hover:bg-surface/50 transition-colors">
-                      <td className="p-3">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className={`p-2 rounded-xl border shrink-0 ${
-                              isWarehouse
-                                ? 'bg-warning/10 border-warning/30 text-warning'
-                                : 'bg-accent/10 border-accent/30 text-accent'
-                            }`}
-                          >
-                            {isWarehouse ? <Warehouse className="w-4 h-4" /> : <Store className="w-4 h-4" />}
-                          </div>
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className="font-bold text-fg block text-xs">
-                                {store.name}
-                              </span>
-                              <span
-                                className={`text-[9px] font-semibold px-1.5 py-0.2 rounded border ${
-                                  isWarehouse
-                                    ? 'bg-warning/15 border-warning/30 text-warning'
-                                    : 'bg-accent/15 border-accent/30 text-accent'
-                                }`}
-                              >
-                                {isWarehouse ? 'Склад' : 'Магазин'}
-                              </span>
-                            </div>
-                            <span className="text-[10px] text-fg-subtle block mt-0.5">
-                              {isWarehouse ? 'Центральный хаб и товарный резерв' : 'Розничная точка продаж'}
-                            </span>
-                          </div>
-                        </div>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <span className="font-bold text-fg text-sm block">
-                          ${formatMoney(totalStoreCap)}
-                        </span>
-                        <span className="text-[10px] text-fg-subtle block">
-                          ≈ {formatMoney(totalStoreTjs)} TJS
-                        </span>
-                      </td>
-
-                      <td className="p-3 text-right">
-                        <div className="inline-block text-right">
-                          <span className="font-bold text-fg text-xs block">{pct}%</span>
-                          <div className="w-16 bg-surface h-1.5 rounded-full overflow-hidden ml-auto mt-1 border border-border">
-                            <div
-                              className="bg-accent h-full rounded-full"
-                              style={{ width: `${Math.min(100, Math.max(0, pct))}%` }}
-                            />
-                          </div>
-                        </div>
-                      </td>
-
-                      {displayOwners.map(owner => {
-                        const amount = storeInvestmentsByOwner[owner.id]?.[store.id] || 0;
-
-                        return (
-                          <td key={owner.id} className="p-3 text-right">
-                            <span className={`font-bold block ${amount > 0 ? 'text-fg' : 'text-fg-subtle'}`}>
-                              ${formatMoney(amount)}
-                            </span>
-                          </td>
-                        );
-                      })}
-
-                      <td className="p-3 text-center">
-                        <button
-                          type="button"
-                          onClick={() => openTxModalForOwner(displayOwners[0]?.id, 'INVESTMENT', store.id)}
-                          className="px-2.5 py-1 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 font-bold text-xs transition-colors cursor-pointer"
-                          title={`Внести капитал в ${store.name}`}
-                        >
-                          + Вложить
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
 
         {/* Section: Transaction History (Clean & Minimalist) */}
         <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-xs">
@@ -1721,7 +1438,7 @@ export const OwnersPage: React.FC = () => {
             {/* Store Selector */}
             <div className="space-y-2">
               <div>
-                <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider mb-1 items-center gap-1.5">
                   <Store className="w-3.5 h-3.5 text-accent" />
                   <span>Магазин:</span>
                 </label>
@@ -1821,33 +1538,6 @@ export const OwnersPage: React.FC = () => {
                       Доля партнёра филиала
                     </span>
                   </div>
-                </div>
-
-                {/* Quick Presets */}
-                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                  <span className="text-[10px] text-fg-subtle font-semibold">Быстро:</span>
-                  {[
-                    { label: '60 / 40', admin: 60, partner: 40 },
-                    { label: '50 / 50', admin: 50, partner: 50 },
-                    { label: '70 / 30', admin: 70, partner: 30 },
-                    { label: '80 / 20', admin: 80, partner: 20 },
-                  ].map((p) => {
-                    const isActive = parseFloat(adminShareVal) === p.admin && parseFloat(partnerShareVal) === p.partner;
-                    return (
-                      <button
-                        key={p.label}
-                        type="button"
-                        onClick={() => handleApplyPreset(p.admin, p.partner)}
-                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
-                          isActive
-                            ? 'bg-accent text-accent-fg border-accent shadow-xs'
-                            : 'bg-surface hover:bg-surface-raised border-border text-fg'
-                        }`}
-                      >
-                        {p.label}
-                      </button>
-                    );
-                  })}
                 </div>
 
                 {/* Visual Ratio Bar */}
@@ -1967,16 +1657,7 @@ export const OwnersPage: React.FC = () => {
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Учредитель *</label>
                 <select
                   value={selectedOwnerId ?? ''}
-                  onChange={(e) => {
-                    const newOwnerId = e.target.value;
-                    setSelectedOwnerId(newOwnerId);
-                    const newOwner = owners.find(o => o.id === newOwnerId);
-                    const linkedUser = newOwner?.userId ? users.find(u => u.id === newOwner.userId) : undefined;
-                    const newOwnerStoreId = newOwner?.storeId || linkedUser?.storeId;
-                    if (newOwnerStoreId) {
-                      setSelectedTxStoreId(newOwnerStoreId);
-                    }
-                  }}
+                  onChange={(e) => setSelectedOwnerId(e.target.value)}
                   className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
                 >
                   {displayOwners.map((o) => (
@@ -2001,50 +1682,30 @@ export const OwnersPage: React.FC = () => {
 
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Объект (магазин / склад) *</label>
-                {(() => {
-                  const currentModalOwner = owners.find(o => o.id === selectedOwnerId);
-                  const linkedUser = currentModalOwner?.userId ? users.find(u => u.id === currentModalOwner.userId) : undefined;
-                  const modalOwnerStoreId = currentModalOwner?.storeId || linkedUser?.storeId;
-
-                  if (modalOwnerStoreId) {
-                    const st = stores.find(s => s.id === modalOwnerStoreId);
-                    const displayName = st?.name ? (st.name.startsWith('Магазин') ? st.name : `Магазин «${st.name}»`) : 'Закреплённый магазин';
-                    return (
-                      <div className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <Store className="w-3.5 h-3.5 text-accent shrink-0" />
-                          <span>{displayName}</span>
-                        </div>
-                        <span className="text-[10px] text-fg-subtle">(только свой магазин)</span>
-                      </div>
-                    );
-                  }
-
-                  return (
-                    <select
-                      value={selectedTxStoreId}
-                      onChange={(e) => setSelectedTxStoreId(e.target.value)}
-                      className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      {retailStores.map(store => (
-                        <option key={store.id} value={store.id}>
-                          Магазин «{store.name}»
-                        </option>
-                      ))}
-                      {mainWarehouse && (
-                        <option value={mainWarehouse.id}>
-                          Центральный склад ({mainWarehouse.name})
-                        </option>
-                      )}
-                    </select>
-                  );
-                })()}
+                <select
+                  value={selectedTxStoreId}
+                  onChange={(e) => setSelectedTxStoreId(e.target.value)}
+                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
+                >
+                  {mainWarehouse && (
+                    <option value={mainWarehouse.id}>
+                      Центральный склад ({mainWarehouse.name})
+                    </option>
+                  )}
+                  {retailStores.map(store => (
+                    <option key={store.id} value={store.id}>
+                      Магазин «{store.name}»
+                    </option>
+                  ))}
+                </select>
               </div>
 
               {/* Helper for available profit */}
               {(() => {
                 const currentOwner = owners.find(o => o.id === selectedOwnerId);
                 const availProfit = currentOwner?.availableProfitUsd ?? 0;
+                const reinvestable = currentOwner?.reinvestableProfitUsd ?? availProfit;
+                const limit = txType === 'REINVEST' ? reinvestable : availProfit;
 
                 if ((txType === 'REINVEST' || txType === 'PROFIT_PAYOUT') && availProfit > 0) {
                   return (
@@ -2053,13 +1714,21 @@ export const OwnersPage: React.FC = () => {
                         <span className="text-fg-muted">Остаток к выплате:</span>
                         <strong className="text-warning font-bold">${availProfit.toLocaleString()} USD</strong>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setAmountUsd(availProfit.toFixed(2))}
-                        className="w-full py-1.5 px-2 rounded-lg bg-warning/20 hover:bg-warning/30 text-warning text-xs font-bold border border-warning/40 transition-colors cursor-pointer"
-                      >
-                        Заполнить весь остаток (${availProfit.toLocaleString()})
-                      </button>
+                      {txType === 'REINVEST' && reinvestable < availProfit && (
+                        <p className="text-fg-muted leading-snug">
+                          Можно реинвестировать: <strong className="text-fg">${reinvestable.toLocaleString()}</strong>.
+                          Прибыль текущего квартала перейдёт в капитал при закрытии квартала.
+                        </p>
+                      )}
+                      {limit > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setAmountUsd(limit.toFixed(2))}
+                          className="w-full py-1.5 px-2 rounded-lg bg-warning/20 hover:bg-warning/30 text-warning text-xs font-bold border border-warning/40 transition-colors cursor-pointer"
+                        >
+                          Заполнить весь остаток (${limit.toLocaleString()})
+                        </button>
+                      )}
                     </div>
                   );
                 }

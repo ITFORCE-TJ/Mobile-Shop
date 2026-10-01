@@ -90,7 +90,7 @@ export function ModalLayer({ children, className, variant = 'legacy', onClose, l
     <div
       ref={ref}
       data-modal-layer
-      className={cn('fixed inset-0 z-[60] flex overflow-hidden modal-layer', `modal-${variant}`, className)}
+      className={cn('fixed inset-0 z-60 flex overflow-hidden modal-layer', `modal-${variant}`, className)}
     >
       {children}
     </div>,

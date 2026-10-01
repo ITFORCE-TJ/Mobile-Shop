@@ -8,6 +8,7 @@ import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 import { allocateOwnerProfit } from '../sales/profit';
 import { findAdminOwner } from '../finance/owner-allocations';
+import { closedQuarterProfitByOwner } from './reinvest-limit';
 
 export class OwnersService {
   /**
@@ -185,8 +186,17 @@ export class OwnersService {
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, userId);
       const exchangeRate = await requireTodayRate(tx);
-      const owner = await tx.owner.findUnique({ where: { id: ownerId } });
+      // Locked so a parallel payout cannot spend the same closed-quarter profit.
+      await tx.$queryRaw`SELECT id FROM owners WHERE id = ${ownerId} FOR UPDATE`;
+      const owners = await tx.owner.findMany({ include: { user: { select: { role: true } } } });
+      const owner = owners.find((o) => o.id === ownerId);
       if (!owner) throw new Error('Владелец не найден');
+      if (owner.id !== findAdminOwner(owners)?.id) {
+        const allowed = (await closedQuarterProfitByOwner(tx, [owner])).get(owner.id) ?? 0;
+        if (D(amountUsd).gt(allowed)) {
+          throw new Error(`Прибыль партнёра переходит в капитал только после закрытия квартала. Сейчас можно реинвестировать не больше $${D(allowed)} — остаток прибыли закрытых кварталов`);
+        }
+      }
       const guard = await tx.owner.updateMany({
         where: { id: ownerId, availableProfitUsd: { gte: amountUsd } },
         data: { availableProfitUsd: { decrement: amountUsd }, totalReinvestedUsd: { increment: amountUsd }, capitalBalanceUsd: { increment: amountUsd } },
@@ -490,8 +500,16 @@ export class OwnersService {
    * recreates a link the administrator deliberately removed.
    */
   public static async listWithResolvedNames() {
-    const owners = await prisma.owner.findMany({ include: { user: { select: { id: true, name: true, storeId: true } } }, orderBy: { createdAt: 'asc' } });
-    return owners.map((o: any) => ({ ...o, name: o.user?.name ?? o.name, storeId: o.storeId ?? o.user?.storeId ?? null }));
+    const owners = await prisma.owner.findMany({ include: { user: { select: { id: true, name: true, storeId: true, role: true } } }, orderBy: { createdAt: 'asc' } });
+    const adminId = findAdminOwner(owners)?.id;
+    const closedProfit = await closedQuarterProfitByOwner(prisma, owners);
+    return owners.map((o: any) => ({
+      ...o,
+      name: o.user?.name ?? o.name,
+      storeId: o.storeId ?? o.user?.storeId ?? null,
+      // What a manual reinvestment may move into capital right now (see reinvest()).
+      reinvestableProfitUsd: o.id === adminId ? o.availableProfitUsd : closedProfit.get(o.id) ?? 0,
+    }));
   }
 
   /** Explicitly (re)links an owner's capital record to a specific login account. */

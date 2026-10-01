@@ -361,6 +361,8 @@ export interface Owner {
   totalPaidProfitUsd: number;
   totalReinvestedUsd: number;
   availableProfitUsd: number;
+  /** Part of availableProfitUsd a manual reinvestment may move into capital now (partners: closed quarters only). */
+  reinvestableProfitUsd?: number;
   storeId?: string | null;
 }
 

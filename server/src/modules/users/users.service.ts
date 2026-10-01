@@ -5,6 +5,7 @@ import { resolveActor } from '../../common/actor';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import { D } from '../../common/decimal';
 import { requireNonNegativeMoney } from '../../common/money';
+import { requirePersonName } from '../../common/person-name';
 
 function validateCompensation(input: { baseSalaryTjs?: MoneyInput; salesCommissionPercent?: number }) {
   if (input.baseSalaryTjs !== undefined) input.baseSalaryTjs = requireNonNegativeMoney(input.baseSalaryTjs, 'Оклад');
@@ -69,7 +70,7 @@ export class UsersService {
   }) {
     validateCompensation(input);
     if (typeof input.name !== 'string' || !input.name.trim() || typeof input.login !== 'string' || !input.login.trim()) throw new Error('Укажите имя и логин');
-    input.name = input.name.trim(); input.login = input.login.trim();
+    input.name = requirePersonName(input.name); input.login = input.login.trim();
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, input.createdByUserId);
       const existing = await tx.user.findUnique({ where: { login: input.login } });
@@ -145,7 +146,7 @@ export class UsersService {
         }
         data.login = newLogin;
       }
-      if (input.name && input.name.trim()) data.name = input.name.trim();
+      if (input.name && input.name.trim()) data.name = requirePersonName(input.name);
       if (input.role) data.role = input.role;
       if (input.storeId !== undefined) data.storeId = input.storeId;
       if (input.baseSalaryTjs !== undefined) data.baseSalaryTjs = input.baseSalaryTjs;

@@ -175,13 +175,13 @@ export const TabletNavRail: React.FC = () => {
             }
           >
             {isCentralCashMode ? <Landmark className="w-5 h-5" /> : <Store className="w-5 h-5" />}
-            <span className="text-[8px] font-bold uppercase mt-0.5 tracking-tighter truncate max-w-10">
-              {isCentralCashMode ? 'Офис' : 'В Центр'}
+            <span className="text-[10px] font-bold mt-0.5 leading-none truncate max-w-11">
+              {isCentralCashMode ? 'Офис' : (activeRetailStore?.name || 'Магазин')}
             </span>
           </button>
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 text-accent font-extrabold text-[10px] flex items-center justify-center">
-            {isPartner ? 'ТОЧКА' : 'POS'}
+          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 text-accent flex items-center justify-center" aria-hidden="true">
+            <Store className="w-5 h-5" />
           </div>
         )}
       </div>
@@ -199,18 +199,20 @@ export const TabletNavRail: React.FC = () => {
                 setActivePage(item.id);
                 navigate(routePath);
               }}
-              className={`w-full min-h-10 py-1.5 rounded-lg flex flex-col items-center justify-center transition-colors relative ${
+              aria-label={item.label}
+              aria-current={isActive ? 'page' : undefined}
+              className={`w-full min-h-12 py-1.5 rounded-lg flex flex-col items-center justify-center transition-colors relative ${
                 isActive ? 'bg-accent/15 text-accent font-bold' : 'text-fg-subtle hover:text-fg-muted hover:bg-surface-raised'
               }`}
               title={item.label}
             >
               <Icon className="w-4 h-4" />
-              <span className="text-[9px] mt-0.5 tracking-tight leading-none truncate max-w-15">
+              <span className="text-[11px] mt-1 leading-tight text-center line-clamp-2 max-w-full px-0.5 wrap-break-word">
                 {item.label}
               </span>
 
               {item.id === 'NOTIFICATIONS' && unreadNotifs > 0 && (
-                <span className="absolute top-1 right-1 flex h-3 min-w-3 items-center justify-center rounded-full bg-danger px-1 text-[8px] font-bold text-white">
+                <span className="absolute top-1 right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[10px] font-bold text-white">
                   {unreadNotifs}
                 </span>
               )}

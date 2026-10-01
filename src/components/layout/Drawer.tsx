@@ -1,4 +1,5 @@
 import React, { useState, useMemo } from 'react';
+import { useCollapsedNavGroups } from '../../hooks/useCollapsedNavGroups';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
@@ -85,14 +86,7 @@ export const Drawer: React.FC = () => {
   const { notifications } = useNotifications();
   const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
 
-  const [collapsedGroups, setCollapsedGroups] = useState<Record<number, boolean>>({});
-
-  const toggleGroup = (index: number) => {
-    setCollapsedGroups(prev => ({
-      ...prev,
-      [index]: !prev[index],
-    }));
-  };
+  const { isCollapsed: isGroupCollapsed, toggle: toggleGroup } = useCollapsedNavGroups();
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
@@ -370,13 +364,14 @@ export const Drawer: React.FC = () => {
           {navGroups.map((group, gIdx) => {
             const visibleItems = group.items.filter(item => item.roles.includes(userRole));
             if (visibleItems.length === 0) return null;
-            const isCollapsed = Boolean(collapsedGroups[gIdx]);
+            const isCollapsed = isGroupCollapsed(group.title);
 
             return (
               <div key={gIdx} className="space-y-1.5">
                 <button
                   type="button"
-                  onClick={() => toggleGroup(gIdx)}
+                  onClick={() => toggleGroup(group.title)}
+                  aria-expanded={!isCollapsed}
                   className="w-full flex items-center justify-between px-1 py-1 text-[11px] font-bold text-fg-subtle uppercase tracking-wider hover:text-fg transition-colors select-none group"
                 >
                   <span className="group-hover:text-fg transition-colors">{group.title}</span>

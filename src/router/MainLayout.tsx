@@ -20,6 +20,7 @@ import { useAppFields } from '../context/AppContext';
 import { LoadingState } from '../components/ui/Skeleton';
 import { useNavigationLayout } from '../hooks/useNavigationLayout';
 import { cancelScan, isNativeScanner } from '../services/scanner/scannerService';
+import { useConnectionStatus } from '../services/connectionStatus';
 
 // Lazy-loaded so the ~3MB html5-qrcode dependency it pulls in only downloads the first
 // time a user actually opens the scanner, instead of riding along in the main chunk on
@@ -73,6 +74,7 @@ export function MainLayout() {
   const native = isNativeScanner();
   React.useEffect(() => () => cancelScan(), []);
   const navigationLayout = useNavigationLayout();
+  const connection = useConnectionStatus();
   const location = useLocation();
   const { currentUser } = useAuthStore();
   const { isDailyRateModalOpen, setDailyRateModalOpen, isStoreSwitchModalOpen, setStoreSwitchModalOpen } = useUIStore();
@@ -138,12 +140,18 @@ export function MainLayout() {
 
         <footer className="hidden md:flex h-6 shrink-0 border-t border-border bg-surface px-3 items-center justify-between text-[10px] text-fg-subtle select-none z-20">
           <div className="flex items-center gap-3">
-            <span className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-success" />
-              <span className="text-fg-muted font-medium">Система активна</span>
+            {/* Real network + realtime socket state, not a permanent green dot. */}
+            <span className="flex items-center gap-1.5" role="status" aria-live="polite">
+              <span className={`w-1.5 h-1.5 rounded-full ${connection.tone === 'success' ? 'bg-success' : connection.tone === 'danger' ? 'bg-danger' : 'bg-warning'}`} />
+              <span className={`font-medium ${connection.tone === 'success' ? 'text-fg-muted' : connection.tone === 'danger' ? 'text-danger' : 'text-warning'}`}>{connection.label}</span>
             </span>
-            <span>·</span>
-            <span>Точка: {activeStoreLabel}</span>
+            {/* Sellers and partners only ever work in their own store, so it is not repeated here. */}
+            {currentUser?.role === 'ADMIN' && (
+              <>
+                <span>·</span>
+                <span>Точка: {activeStoreLabel}</span>
+              </>
+            )}
             <span>·</span>
             <span>{formatUserName(currentUser?.name)}</span>
           </div>
@@ -151,7 +159,7 @@ export function MainLayout() {
           <div className="flex items-center gap-3">
             <span>USD / TJS</span>
             <span>·</span>
-            <span className="text-fg-muted font-medium">Синхронизация онлайн</span>
+            <span className="text-fg-muted font-medium">{connection.syncLabel}</span>
           </div>
         </footer>
       </div>

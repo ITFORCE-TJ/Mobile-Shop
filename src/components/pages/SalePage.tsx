@@ -2,7 +2,8 @@ import { decimal, moneyNumber, sumMoney, formatMoney } from '../../utils/money';
 import React, { useState, useMemo } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { Device, PaymentMethod } from '../../types';
-import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
+import { looksLikeDeviceCode, normalizeScanCode, resolveSaleScan, saleScanMessage } from '../../utils/scanLookup';
+import { formatReceiptText, paymentSummary } from '../../utils/receipt';
 import {
   Smartphone,
   Trash2,
@@ -16,6 +17,7 @@ import {
   Store as StoreIcon,
   Plus,
   Flame,
+  Share2,
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
@@ -46,7 +48,8 @@ export const SalePage: React.FC = () => {
     openScanner,
     createSale,
     isInitialLoading,
-  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading');
+    sales,
+  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading', 'sales');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
@@ -62,6 +65,11 @@ export const SalePage: React.FC = () => {
   const [paymentStatus, setPaymentStatus] = useState<StatusMessage | null>(null);
 
   const [completedReceiptNumber, setCompletedReceiptNumber] = useState<number | null>(null);
+  const completedSale = useMemo(
+    () => (completedReceiptNumber === null ? undefined : sales.find(s => s.receiptNumber === completedReceiptNumber)),
+    [sales, completedReceiptNumber]
+  );
+  const [receiptShareState, setReceiptShareState] = useState<'idle' | 'copied' | 'failed'>('idle');
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
   const isRealAdmin = currentUser?.role === 'ADMIN';
@@ -182,25 +190,43 @@ export const SalePage: React.FC = () => {
     });
   };
 
-  const handleTriggerScanner = () => {
-    openScanner((scannedCode) => {
-      const code = scannedCode.trim();
-      const exactDev = devices.find(d =>
-        (d.imei === code || d.imei2 === code) &&
-        (d.status === 'STORE_STOCK' || d.status === 'IN_STOCK_AFTER_EXCHANGE') &&
-        (!effectiveStoreId || d.locationId === effectiveStoreId) &&
-        !cart.some(ci => ci.device.id === d.id)
-      );
+  /**
+   * One answer for every scan: the camera scanner and a USB/Bluetooth scanner (which types the
+   * code into search and presses Enter). A phone that can't be added says why instead of only
+   * beeping, so a cashier in a noisy shop still knows what happened.
+   */
+  const handleDeviceCode = (rawCode: string, source: 'camera' | 'enter') => {
+    const code = normalizeScanCode(rawCode);
+    if (!code) return;
+    const result = resolveSaleScan({
+      devices,
+      code,
+      storeId: effectiveStoreId,
+      cartDeviceIds: cart.map(ci => ci.device.id),
+      storeName: (id) => stores.find(s => s.id === id)?.name,
+    });
 
-      if (exactDev) {
-        addDeviceToCart(exactDev);
+    if (result.kind === 'add') {
+      addDeviceToCart(result.device);
+      if (source === 'camera') {
         setPaymentStatus(null);
         setIsCartOpen(true);
       } else {
-        soundEffects.playError();
-        setSearchQuery(code);
+        // Keep the cursor in search so the next phone can be scanned straight away.
+        setSearchQuery('');
+        setPaymentStatus({ tone: 'success', text: `Добавлено в корзину: ${result.device.brand} ${result.device.model}` });
       }
-    });
+      return;
+    }
+    // Enter on an ordinary text search ("iphone 15") just keeps filtering the catalog.
+    if (source === 'enter' && result.kind === 'not-found' && !looksLikeDeviceCode(code)) return;
+    soundEffects.playError();
+    setPaymentStatus({ tone: result.kind === 'not-found' ? 'error' : 'warning', text: saleScanMessage(result) });
+    if (source === 'camera') setSearchQuery(code);
+  };
+
+  const handleTriggerScanner = () => {
+    openScanner((scannedCode) => handleDeviceCode(scannedCode, 'camera'));
   };
 
   const handleAddMore = () => {
@@ -210,12 +236,13 @@ export const SalePage: React.FC = () => {
   const totalTjs = sumMoney(cart.map(item => item.salePriceTjs && item.salePriceTjs > 0 ? item.salePriceTjs : 0));
   const hasEmptyPrice = cart.some(item => item.salePriceTjs === undefined || item.salePriceTjs <= 0);
   const totalUsd = todayRate ? moneyNumber(decimal(totalTjs).div(todayRate.rate)) : 0;
-  const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
+  // Without today's rate there is no honest USD figure, so none is shown (the sale itself
+  // requires the rate on the server anyway).
+  const usdLabel = todayRate ? `≈ $${formatMoney(totalUsd)}` : 'курс на сегодня не задан';
 
   const isItemBelowCost = (item: CartItem) => {
-    if (item.salePriceTjs === undefined || isNaN(item.salePriceTjs)) return false;
-    const costTjs = item.device.costBasisUsd * rate;
-    return item.salePriceTjs < costTjs;
+    if (!todayRate || item.salePriceTjs === undefined || isNaN(item.salePriceTjs)) return false;
+    return decimal(item.salePriceTjs).lt(decimal(item.device.costBasisUsd).mul(todayRate.rate));
   };
 
   const handleOpenCart = () => {
@@ -318,6 +345,7 @@ export const SalePage: React.FC = () => {
           value={searchQuery}
           onChange={setSearchQuery}
           onScan={handleTriggerScanner}
+          onSubmit={(value) => handleDeviceCode(value, 'enter')}
           placeholder="Поиск по IMEI / штрихкоду / модели..."
         />
 
@@ -327,7 +355,7 @@ export const SalePage: React.FC = () => {
       {/* Catalog */}
       <div
         key={effectiveStoreId}
-        className={`animate-store-catalog flex-1 overflow-y-auto divide-y divide-border ${cart.length > 0 ? 'pb-32 md:pb-24' : 'pb-4'}`}
+        className="animate-store-catalog flex-1 min-h-0 overflow-y-auto divide-y divide-border pb-4"
       >
         {isInitialLoading ? (
           <LoadingState label="Загрузка каталога…" />
@@ -350,6 +378,9 @@ export const SalePage: React.FC = () => {
             const hasCostVariance = maxCost > minCost;
             const isExpanded = expandedVariantKey === variant.variantKey;
             const sortedDevices = [...variant.devices].sort((a, b) => (b.purchaseCostUsd ?? b.costBasisUsd ?? 0) - (a.purchaseCostUsd ?? a.costBasisUsd ?? 0));
+            const retailPrices = variant.devices.map(defaultPriceFor).filter((p): p is number => p !== undefined);
+            const minRetail = retailPrices.length ? Math.min(...retailPrices) : undefined;
+            const maxRetail = retailPrices.length ? Math.max(...retailPrices) : undefined;
 
             return (
               <div key={variant.variantKey}>
@@ -372,7 +403,16 @@ export const SalePage: React.FC = () => {
                   </div>
 
                   <div className="text-right shrink-0 flex items-center gap-2">
-                    <Badge tone="neutral">{variant.devices.length} шт.</Badge>
+                    <div className="flex flex-col items-end gap-0.5">
+                      {minRetail !== undefined ? (
+                        <span className="text-sm font-bold tabular-nums text-accent whitespace-nowrap">
+                          {formatMoney(minRetail)}{maxRetail !== undefined && maxRetail > minRetail ? `–${formatMoney(maxRetail)}` : ''} TJS
+                        </span>
+                      ) : (
+                        <span className="text-xs text-fg-subtle whitespace-nowrap">Цена не задана</span>
+                      )}
+                      <span className="text-xs text-fg-subtle tabular-nums">{variant.devices.length} шт.</span>
+                    </div>
                     {variant.devices.length > 1 && (
                       <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     )}
@@ -405,7 +445,12 @@ export const SalePage: React.FC = () => {
                               </p>
                             )}
                           </div>
-                          <Badge tone={isHighestCost ? 'warning' : 'accent'}>Выбрать</Badge>
+                          <div className="flex items-center gap-2 shrink-0">
+                            {defaultPriceFor(dev) !== undefined && (
+                              <span className="text-xs font-semibold tabular-nums text-fg-muted">{formatMoney(defaultPriceFor(dev))} TJS</span>
+                            )}
+                            <Badge tone={isHighestCost ? 'warning' : 'accent'}>Выбрать</Badge>
+                          </div>
                         </button>
                       );
                     })}
@@ -419,17 +464,19 @@ export const SalePage: React.FC = () => {
 
       </>)}
 
-      {/* Floating cart bar */}
+      {/* Cart bar: a normal last row of the page, so it always sits above the bottom navigation
+          (which already pads for the iPhone home indicator) and centers on the content area next
+          to any side navigation. Extra bottom space on phones clears the raised center nav button. */}
       {cart.length > 0 && (
-        <div className="fixed bottom-18 md:bottom-4 left-3 right-3 md:left-64 md:right-4 z-40 max-w-2xl mx-auto">
-          <div className="p-3 rounded-xl bg-surface border border-accent/40 flex items-center justify-between gap-2">
+        <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-bg">
+          <div className="max-w-2xl mx-auto p-3 rounded-xl bg-surface border border-accent/40 flex items-center justify-between gap-2" role="region" aria-label="Корзина">
             <div className="flex items-center gap-3 min-w-0 pl-1">
               <div className="w-9 h-9 rounded-lg bg-accent text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
                 {cart.length}
               </div>
               <div className="truncate">
                 <span className="text-sm font-bold text-accent block truncate">{formatMoney(totalTjs)} TJS</span>
-                <span className="text-xs text-fg-subtle block">≈ ${formatMoney(totalUsd)} USD</span>
+                <span className="text-xs text-fg-subtle block">{usdLabel}</span>
               </div>
             </div>
 
@@ -463,7 +510,7 @@ export const SalePage: React.FC = () => {
         open={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         title={isStoreScoped ? 'Чек' : `Чек · ${activeStoreName}`}
-        subtitle={`${formatMoney(totalTjs)} TJS ≈ $${formatMoney(totalUsd)}`}
+        subtitle={`${formatMoney(totalTjs)} TJS · ${usdLabel}`}
         maxWidth="lg"
         footer={
           <div className="w-full grid grid-cols-2 gap-2">
@@ -523,7 +570,7 @@ export const SalePage: React.FC = () => {
                   <div className="relative">
                     <input step="0.01"
                       type="number"
-                      inputMode="numeric"
+                      inputMode="decimal"
                       min="0.01"
                       placeholder="Укажите цену продажи..."
                       value={item.salePriceTjs !== undefined ? item.salePriceTjs : ''}
@@ -649,24 +696,80 @@ export const SalePage: React.FC = () => {
       {/* Receipt */}
       <Dialog
         open={completedReceiptNumber !== null}
-        onClose={() => setCompletedReceiptNumber(null)}
+        onClose={() => { setCompletedReceiptNumber(null); setReceiptShareState('idle'); }}
         title="Продажа завершена"
         maxWidth="sm"
-        footer={<Button fullWidth onClick={() => setCompletedReceiptNumber(null)}>Новый чек</Button>}
+        footer={
+          <div className="w-full grid grid-cols-2 gap-2">
+            <Button
+              variant="secondary"
+              fullWidth
+              leftIcon={Share2}
+              disabled={!completedSale}
+              onClick={async () => {
+                if (!completedSale) return;
+                const text = formatReceiptText(completedSale, { showStore: !isStoreScoped });
+                try {
+                  if (navigator.share) {
+                    await navigator.share({ title: `Чек №${completedSale.receiptNumber}`, text });
+                    return;
+                  }
+                  await navigator.clipboard.writeText(text);
+                  setReceiptShareState('copied');
+                } catch (err) {
+                  // Closing the share sheet is not an error.
+                  if ((err as Error)?.name !== 'AbortError') setReceiptShareState('failed');
+                }
+              }}
+            >
+              {receiptShareState === 'copied' ? 'Скопировано' : 'Отправить чек'}
+            </Button>
+            <Button fullWidth onClick={() => { setCompletedReceiptNumber(null); setReceiptShareState('idle'); }}>Новый чек</Button>
+          </div>
+        }
       >
-        <div className="text-center">
-          <div className="w-12 h-12 rounded-full bg-success/15 text-success flex items-center justify-center mx-auto mb-3">
-            <CheckCircle2 className="w-6 h-6" />
+        <div>
+          <div className="flex items-center gap-3 mb-3">
+            <div className="w-10 h-10 rounded-full bg-success/15 text-success flex items-center justify-center shrink-0">
+              <CheckCircle2 className="w-5 h-5" />
+            </div>
+            <div className="min-w-0">
+              <p className="text-sm font-semibold text-fg">Чек №{completedReceiptNumber}</p>
+              <p className="text-xs text-fg-subtle">
+                {new Date(completedSale?.date || Date.now()).toLocaleString('ru-RU')}
+                {!isStoreScoped && ` · ${completedSale?.storeName || activeStoreName}`}
+              </p>
+            </div>
           </div>
-          <p className="text-sm font-semibold text-accent">Чек #{completedReceiptNumber}</p>
 
-          <div className="my-3 p-3 bg-bg rounded-lg border border-border text-left space-y-1 text-xs">
-            <div className="text-fg-muted font-medium">{new Date().toLocaleString('ru-RU')}</div>
-            {!isStoreScoped && <div className="text-fg-muted">{activeStoreName}</div>}
-            <div className="text-accent font-semibold">Оператор: {currentUser?.name || 'Администратор'}</div>
-          </div>
+          {completedSale ? (
+            <div className="rounded-lg border border-border bg-bg divide-y divide-border text-sm">
+              {completedSale.items.map((item) => (
+                <div key={item.deviceId} className="flex items-start justify-between gap-3 px-3 py-2">
+                  <div className="min-w-0">
+                    <p className="font-medium text-fg-muted">{item.brand} {item.model}</p>
+                    <p className="text-xs text-fg-subtle">IMEI: {item.imei}</p>
+                  </div>
+                  <span className="tabular-nums font-semibold text-fg-muted whitespace-nowrap">{formatMoney(item.salePriceTjs)} TJS</span>
+                </div>
+              ))}
+              <div className="flex items-center justify-between px-3 py-2.5">
+                <span className="text-fg-muted">Итого</span>
+                <strong className="text-base tabular-nums text-accent">{formatMoney(completedSale.totalTjs)} TJS</strong>
+              </div>
+              <div className="px-3 py-2 text-xs text-fg-subtle space-y-0.5">
+                <p>Оплата: <span className="text-fg-muted">{paymentSummary(completedSale)}</span></p>
+                {completedSale.customerName && <p>Покупатель: <span className="text-fg-muted">{completedSale.customerName}</span></p>}
+                <p>Продавец: <span className="text-fg-muted">{completedSale.sellerName || currentUser?.name}</span></p>
+              </div>
+            </div>
+          ) : (
+            <p className="text-xs text-fg-subtle">Продажа сохранена. Состав чека появится после обновления данных — его можно открыть в «Истории продаж».</p>
+          )}
 
-          <p className="text-xs text-fg-subtle">{isStoreScoped ? 'Устройства списаны со склада магазина' : `Устройства списаны со склада ${activeStoreName}`}</p>
+          {receiptShareState === 'failed' && (
+            <p className="mt-2 text-xs text-danger">Не удалось отправить чек. Откройте его в «Истории продаж».</p>
+          )}
         </div>
       </Dialog>
     </div>

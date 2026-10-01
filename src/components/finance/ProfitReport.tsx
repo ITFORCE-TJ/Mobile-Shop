@@ -23,7 +23,6 @@ import {
   Banknote,
   ArrowRight,
 } from 'lucide-react';
-import { useUIStore } from '../../stores/useUIStore';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
 import { Badge } from '../ui/Badge';
@@ -158,11 +157,10 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     users,
     todayRate,
     selectedStoreId: globalSelectedStoreId,
-    setSelectedStoreId,
     owners,
     storeProfitShares,
     setActivePage,
-  } = useAppFields('currentUser', 'stores', 'users', 'todayRate', 'selectedStoreId', 'setSelectedStoreId', 'owners', 'storeProfitShares', 'setActivePage');
+  } = useAppFields('currentUser', 'stores', 'users', 'todayRate', 'selectedStoreId', 'owners', 'storeProfitShares', 'setActivePage');
 
   const period = 'SPECIFIC_MONTH';
   // Summary view defaults to whichever store is active on the POS Terminal page (same
@@ -202,12 +200,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     });
   }, [owners, users]);
 
-  const getOwnerRoleLabel = (owner: { userId?: string }) => {
-    const linked = owner.userId ? users.find((u) => u.id === owner.userId) : undefined;
-    if (linked?.role === 'ADMIN') return 'Администратор';
-    if (linked?.role === 'PARTNER') return 'Партнёр';
-    return 'Владелец';
-  };
 
   const adminOwner = useMemo(() => {
     return owners.find(o => (!o.storeId && !users.find(u => u.id === o.userId)?.storeId) || users.find(u => u.id === o.userId)?.role === 'ADMIN') || owners[0];
@@ -603,7 +595,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                 {/* Overall summary cards for Admin and Partner */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {sortedOwners.map((owner) => {
-                    const roleLabel = getOwnerRoleLabel(owner);
                     const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
                     const ownerStoreId = getOwnerStoreId(owner);
                     const attachedStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
@@ -617,13 +608,16 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                       <div key={owner.id} className="p-3 rounded-xl bg-surface-raised border border-border flex flex-col justify-between gap-2.5 shadow-xs">
                         <div className="flex items-start justify-between gap-2">
                           <div>
-                            <div className="flex items-center gap-1.5">
-                              <span className={`text-[10px] font-bold px-1.5 py-0.5 rounded border uppercase ${
-                                roleLabel === 'Администратор' ? 'bg-accent/15 text-accent border-accent/30' : 'bg-info/15 text-info border-info/30'
-                              }`}>
-                                {roleLabel}
-                              </span>
-                              <span className="text-xs font-bold text-fg-muted">{owner.name}</span>
+                            <div className="flex items-center gap-2">
+                              <div className="w-6 h-6 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xs font-bold shrink-0">
+                                {owner.name.charAt(0).toUpperCase()}
+                              </div>
+                              <span className="text-xs sm:text-sm font-bold text-fg">{owner.name}</span>
+                              {attachedStore && (
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface border border-border text-fg-subtle font-semibold shrink-0">
+                                  {attachedStore.name}
+                                </span>
+                              )}
                             </div>
                             <p className="text-[11px] text-fg-subtle mt-1">
                               {isOwnerAdmin ? (
@@ -664,15 +658,12 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           <th className="py-2 px-3">Магазин / Точка</th>
                           <th className="py-2 px-3 text-right">Чистая прибыль</th>
                           {sortedOwners.map((owner) => {
-                            const roleLabel = getOwnerRoleLabel(owner);
                             const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
                             const ownerStoreId = getOwnerStoreId(owner);
                             const attachedStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
                             return (
                               <th key={owner.id} className="py-2 px-3 text-right">
-                                {roleLabel} ({owner.name}
-                                {attachedStore ? `, ${attachedStore.name}` : isOwnerAdmin ? ', Все магазины' : ''}
-                                {isOwnerAdmin ? '' : `, ${storeProfitShares.filter((sh) => sh.ownerId === owner.id).map((sh) => `${sh.sharePercent}%`).join('/') || '0%'}`})
+                                {owner.name} {attachedStore ? `(${attachedStore.name})` : isOwnerAdmin ? '(Все магазины)' : ''}
                               </th>
                             );
                           })}
@@ -833,63 +824,97 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
             {data.storeBreakdown.map((store) => {
               const expanded = expandedStoreId === store.storeId;
               return (
-                <div key={store.storeId} className="rounded-xl bg-surface border border-border overflow-hidden transition-all duration-200 hover:border-accent/40">
-                  <div className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-surface-raised/60 transition-colors">
-                    <button
-                      type="button"
-                      onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
-                      className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer group"
-                    >
-                      <StoreIcon className="w-4 h-4 text-accent shrink-0 group-hover:scale-110 transition-transform" />
-                      <span className="font-bold text-sm text-fg-muted truncate">{store.storeName}</span>
-                      <Badge tone="neutral">{store.salesCount} чеков</Badge>
-                    </button>
+                <div key={store.storeId} className="rounded-xl bg-surface border border-border overflow-hidden transition-all duration-200 hover:border-accent/40 shadow-xs">
+                  <div
+                    onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
+                    className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-surface-raised/60 transition-colors"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="p-2 rounded-xl bg-accent/10 border border-accent/20 text-accent shrink-0">
+                        <StoreIcon className="w-4 h-4" />
+                      </div>
+                      <div className="min-w-0">
+                        <div className="flex items-center gap-2">
+                          <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{store.storeName}</h4>
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-subtle font-semibold shrink-0">
+                            {store.salesCount} чеков
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-fg-subtle truncate">
+                          Выручка: {usd(store.revenueUsd)} · Касса: {usd(store.cashUsd)}
+                        </p>
+                      </div>
+                    </div>
+
                     <div className="flex items-center gap-2.5 shrink-0">
-                      <span className={`text-sm font-bold ${store.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(store.netProfitUsd)}</span>
+                      <div className="text-right">
+                        <span className={`text-xs sm:text-sm font-bold block ${store.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>
+                          {signedUsd(store.netProfitUsd)}
+                        </span>
+                        <span className="text-[10px] text-fg-subtle block">
+                          {tjs(store.netProfitTjs)}
+                        </span>
+                      </div>
+
                       <button
                         type="button"
-                        onClick={() => {
-                          useUIStore.getState().triggerStoreTransition({
-                            storeName: store.storeName,
-                            storeId: store.storeId,
-                            isCentral: false,
-                          });
-                          setSelectedStoreId(store.storeId);
-                          setActivePage('SALE');
-                          navigate('/sale');
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedStoreId(expanded ? null : store.storeId);
                         }}
-                        className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-[11px] font-semibold text-fg transition-all active:scale-95 shadow-2xs cursor-pointer"
-                        title="Перейти в режим розничных продаж этой точки"
+                        className="px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-accent/15 hover:text-accent border border-border hover:border-accent/30 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer"
                       >
-                        <StoreIcon className="w-3 h-3 text-accent" />
-                        <span>В кассу</span>
-                        <ArrowRight className="w-3 h-3" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
-                        className="p-1 rounded-lg hover:bg-surface text-fg-subtle hover:text-fg transition-colors cursor-pointer"
-                        title={expanded ? 'Свернуть' : 'Развернуть'}
-                      >
-                        <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+                        <span className="hidden sm:inline">{expanded ? 'Свернуть' : 'Детали'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
                       </button>
                     </div>
                   </div>
 
-                  <div className="px-3.5 pb-3.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2.5">
-                    <Metric label="Выручка" value={usd(store.revenueUsd)} sub={tjs(store.revenueTjs)} />
-                    <Metric label="Себестоимость" value={usd(store.cogsUsd)} sub={`${store.unitsSold} шт продано`} />
-                    <Metric label="Прибыль с продаж" value={signedUsd(store.profitUsd)} tone={store.profitUsd >= 0 ? 'accent' : 'danger'} />
-                    <Metric
-                      label="Расходы"
-                      value={`−${usd(store.expensesUsd)}`}
-                      sub={store.unpaidExpensesTjs > 0 ? `не оплачено ${tjs(store.unpaidExpensesTjs)}` : tjs(store.expensesTjs)}
-                      tone="danger"
-                    />
-                    <Metric label="Чистая прибыль" value={signedUsd(store.netProfitUsd)} tone={store.netProfitUsd >= 0 ? 'accent' : 'danger'} />
-                    <Metric label="Касса сейчас" value={usd(store.cashUsd)} />
-                    <Metric label="Товар на складе" value={`${store.stockCount} шт`} sub={usd(store.stockCostUsd)} />
-                    {store.refundPenaltiesUsd > 0 && <Metric label="Удержано при возвратах" value={`+${usd(store.refundPenaltiesUsd)}`} />}
+                  <div className="px-3.5 pb-3.5 pt-1 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Выручка</p>
+                      <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{usd(store.revenueUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">{tjs(store.revenueTjs)}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Себестоимость</p>
+                      <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{usd(store.cogsUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">{store.unitsSold} шт продано</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Прибыль с продаж</p>
+                      <p className={`text-xs sm:text-sm font-bold mt-0.5 ${store.profitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(store.profitUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">до вычета расходов</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Расходы точки</p>
+                      <p className="text-xs sm:text-sm font-bold text-danger mt-0.5">−{usd(store.expensesUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">
+                        {store.unpaidExpensesTjs > 0 ? `не оплачено ${tjs(store.unpaidExpensesTjs)}` : tjs(store.expensesTjs)}
+                      </p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Чистая прибыль</p>
+                      <p className={`text-xs sm:text-sm font-bold mt-0.5 ${store.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(store.netProfitUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">{tjs(store.netProfitTjs)}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Касса сейчас</p>
+                      <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{usd(store.cashUsd)}</p>
+                      <p className="text-[10px] text-fg-subtle">{tjs(store.cashTjs)}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Товар на складе</p>
+                      <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{store.stockCount} шт</p>
+                      <p className="text-[10px] text-fg-subtle">{usd(store.stockCostUsd)}</p>
+                    </div>
+                    <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                      <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Удержано возвратов</p>
+                      <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">
+                        {store.refundPenaltiesUsd > 0 ? `+${usd(store.refundPenaltiesUsd)}` : '$0.00'}
+                      </p>
+                      <p className="text-[10px] text-fg-subtle">штрафы / комиссии</p>
+                    </div>
                   </div>
 
                   {/* Partner / Admin profit allocation for this store */}
@@ -902,38 +927,40 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                     if (storeOwners.length === 0) return null;
 
                     return (
-                      <div className="px-3.5 pb-3.5 pt-2.5 border-t border-border/70">
+                      <div className="px-3.5 pb-3.5 pt-2.5 border-t border-border">
                         <div className="flex items-center justify-between gap-2 mb-2">
                           <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
                             <Users className="w-3.5 h-3.5 text-accent" />
-                            <span>Начислено партнерам с магазина ({store.storeName}):</span>
+                            <span>Распределение чистой прибыли:</span>
                           </span>
                           {!storePartner && (
                             <span className="text-[10px] text-fg-subtle italic">
-                              Партнёр не прикреплен (100% администратору)
+                              100% администратору
                             </span>
                           )}
                         </div>
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                           {storeOwners.map((owner) => {
-                            const roleLabel = getOwnerRoleLabel(owner);
                             const share = getOwnerShareForStore(owner, store.storeId);
                             const ownerStoreNet = +(store.netProfitUsd * share / 100).toFixed(2);
                             const ownerStoreNetTjs = +(store.netProfitTjs * share / 100).toFixed(2);
                             return (
-                              <div key={owner.id} className="p-2.5 rounded-lg bg-surface-raised border border-border flex items-center justify-between gap-2">
-                                <div className="flex items-center gap-1.5 min-w-0">
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${
-                                    roleLabel === 'Администратор' ? 'bg-accent/15 text-accent border-accent/30' : 'bg-info/15 text-info border-info/30'
-                                  }`}>
-                                    {roleLabel}
+                              <div key={owner.id} className="p-2.5 rounded-xl bg-surface-raised/60 border border-border flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-2 min-w-0">
+                                  <div className="w-6 h-6 rounded-full bg-accent/10 border border-accent/20 flex items-center justify-center text-accent text-xs font-bold shrink-0">
+                                    {owner.name.charAt(0).toUpperCase()}
+                                  </div>
+                                  <span className="font-semibold text-xs text-fg truncate">{owner.name}</span>
+                                  <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface border border-border text-fg-subtle font-semibold shrink-0">
+                                    {share}%
                                   </span>
-                                  <span className="font-semibold text-fg-muted truncate">{owner.name}</span>
-                                  <span className="text-[10px] text-fg-subtle shrink-0">({share}%)</span>
                                 </div>
-                                <span className={`font-bold shrink-0 ${ownerStoreNet >= 0 ? 'text-accent' : 'text-danger'}`}>
-                                  {signedUsd(ownerStoreNet)} <span className="text-[10px] font-normal text-fg-subtle">({tjs(ownerStoreNetTjs)})</span>
-                                </span>
+                                <div className="text-right shrink-0">
+                                  <span className={`font-bold text-xs block ${ownerStoreNet >= 0 ? 'text-accent' : 'text-danger'}`}>
+                                    {signedUsd(ownerStoreNet)}
+                                  </span>
+                                  <span className="text-[10px] text-fg-subtle block">{tjs(ownerStoreNetTjs)}</span>
+                                </div>
                               </div>
                             );
                           })}
@@ -970,32 +997,74 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
             })}
 
             {mainWarehouse && (
-              <div className="rounded-xl bg-surface border border-border overflow-hidden">
-                <button
-                  type="button"
+              <div className="rounded-xl bg-surface border border-border overflow-hidden shadow-xs">
+                <div
                   onClick={() => setExpandedStoreId(expandedStoreId === 'MAIN' ? null : 'MAIN')}
-                  className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-surface-raised transition-colors"
+                  className="w-full p-3 sm:p-3.5 flex items-center justify-between gap-3 cursor-pointer select-none hover:bg-surface-raised/60 transition-colors"
                 >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <Warehouse className="w-4 h-4 text-accent shrink-0" />
-                    <span className="font-bold text-sm text-fg-muted truncate">{mainWarehouse.name}</span>
-                    <Badge tone="accent">Главный склад</Badge>
-                  </span>
-                  <ChevronDown className={`w-4 h-4 text-fg-subtle shrink-0 transition-transform ${expandedStoreId === 'MAIN' ? 'rotate-180' : ''}`} />
-                </button>
-                <div className="px-3.5 pb-3.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2.5">
-                  <Metric label="Товар на складе" value={`${data.mainWarehouseStockCount} шт`} sub={usd(data.mainWarehouseStockCostUsd)} />
-                  <Metric label="Касса сейчас" value={usd(data.mainWarehouseCashUsd)} sub={tjs(data.mainWarehouseCashTjs)} />
-                  <Metric
-                    label="Общие расходы"
-                    value={`−${usd(data.mainWarehouseExpenses.expensesUsd)}`}
-                    sub={data.mainWarehouseExpenses.unpaidExpensesTjs > 0 ? `не оплачено ${tjs(data.mainWarehouseExpenses.unpaidExpensesTjs)}` : 'не привязаны к магазину'}
-                    tone="danger"
-                  />
-                  <Metric label="Долг поставщикам" value={usd(data.totalSupplierDebtUsd)} tone={data.totalSupplierDebtUsd > 0 ? 'danger' : 'default'} />
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="p-2 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-500 shrink-0">
+                      <Warehouse className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{mainWarehouse.name}</h4>
+                        <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-500 font-semibold shrink-0">
+                          ГЛАВНЫЙ СКЛАД
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-fg-subtle truncate">
+                        Товар на складе: {data.mainWarehouseStockCount} шт ({usd(data.mainWarehouseStockCostUsd)})
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setExpandedStoreId(expandedStoreId === 'MAIN' ? null : 'MAIN');
+                    }}
+                    className="px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-amber-500/15 hover:text-amber-500 border border-border hover:border-amber-500/30 font-bold text-xs flex items-center gap-1 transition-colors cursor-pointer shrink-0"
+                  >
+                    <span className="hidden sm:inline">{expandedStoreId === 'MAIN' ? 'Свернуть' : 'Детали'}</span>
+                    <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${expandedStoreId === 'MAIN' ? 'rotate-180' : ''}`} />
+                  </button>
                 </div>
+
+                <div className="px-3.5 pb-3.5 pt-1 grid grid-cols-2 sm:grid-cols-4 gap-2.5 text-xs">
+                  <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                    <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Товар на складе</p>
+                    <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{data.mainWarehouseStockCount} шт</p>
+                    <p className="text-[10px] text-fg-subtle">{usd(data.mainWarehouseStockCostUsd)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                    <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Касса сейчас</p>
+                    <p className="text-xs sm:text-sm font-bold text-fg mt-0.5">{usd(data.mainWarehouseCashUsd)}</p>
+                    <p className="text-[10px] text-fg-subtle">{tjs(data.mainWarehouseCashTjs)}</p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                    <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Общие расходы</p>
+                    <p className="text-xs sm:text-sm font-bold text-danger mt-0.5">−{usd(data.mainWarehouseExpenses.expensesUsd)}</p>
+                    <p className="text-[10px] text-fg-subtle">
+                      {data.mainWarehouseExpenses.unpaidExpensesTjs > 0
+                        ? `не оплачено ${tjs(data.mainWarehouseExpenses.unpaidExpensesTjs)}`
+                        : 'не привязаны к магазину'}
+                    </p>
+                  </div>
+                  <div className="p-2.5 rounded-xl bg-surface-raised/40 border border-border/80">
+                    <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">Долг поставщикам</p>
+                    <p className={`text-xs sm:text-sm font-bold mt-0.5 ${data.totalSupplierDebtUsd > 0 ? 'text-danger' : 'text-fg'}`}>
+                      {usd(data.totalSupplierDebtUsd)}
+                    </p>
+                    <p className="text-[10px] text-fg-subtle">
+                      {data.totalSupplierDebtUsd > 0 ? 'требует погашения' : 'задолженностей нет'}
+                    </p>
+                  </div>
+                </div>
+
                 {expandedStoreId === 'MAIN' && (
-                  <div className="px-3.5 pb-3.5 pt-3 border-t border-border">
+                  <div className="px-3.5 pb-3.5 pt-3 border-t border-border animate-in fade-in-50 duration-200">
                     <h5 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mb-2">Общие расходы по статьям</h5>
                     <ExpenseCategoryList data={data.mainWarehouseExpenses} />
                   </div>

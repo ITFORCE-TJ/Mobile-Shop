@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { stripRoleSuffix } from '../utils/formatUser';
 import { User } from '../types';
 
 interface AuthState {
@@ -51,6 +52,10 @@ function scheduleAutoLogout(token: string) {
 
 // No default-admin fallback: an unauthenticated visitor must see the login screen,
 // never a live session. Only a real, previously-issued, non-expired token restores one.
+// Session names are shown without role suffixes; a name that is only a suffix stays as it was.
+const withCleanName = <T extends { name?: string }>(user: T): T =>
+  user.name ? { ...user, name: stripRoleSuffix(user.name) || user.name } : user;
+
 const getInitialSession = (): { user: User | null; token: string | null } => {
   if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
     return { user: null, token: null };
@@ -65,14 +70,8 @@ const getInitialSession = (): { user: User | null; token: string | null } => {
         localStorage.removeItem('ms_user');
         return { user: null, token: null };
       }
-      let parsedUser = JSON.parse(savedUser);
-      if (parsedUser && parsedUser.name) {
-        parsedUser = {
-          ...parsedUser,
-          name: parsedUser.name.replace(/\s*\((Партн[её]р|Продавец|Администратор)[^)]*\)/gi, '').trim(),
-        };
-      }
-      return { user: parsedUser, token: savedToken };
+      const parsedUser = JSON.parse(savedUser);
+      return { user: parsedUser ? withCleanName(parsedUser) : parsedUser, token: savedToken };
     }
   } catch (e) {
     console.error(e);
@@ -88,12 +87,7 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: !!initialSession.user && !!initialSession.token,
 
   setAuth: (user: User, token: string) => {
-    const cleanUser = user
-      ? {
-          ...user,
-          name: user.name.replace(/\s*\((Партн[её]р|Продавец|Администратор)[^)]*\)/gi, '').trim(),
-        }
-      : user;
+    const cleanUser = user ? withCleanName(user) : user;
     localStorage.setItem('ms_jwt_token', token);
     localStorage.setItem('ms_user', JSON.stringify(cleanUser));
     scheduleAutoLogout(token);

@@ -17,6 +17,9 @@ import {
   Scan
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
+import { Dialog } from '../ui/Dialog';
+import { Button } from '../ui/Button';
+import { LoadingState } from '../ui/Skeleton';
 import { MonthPicker } from '../ui/MonthPicker';
 
 export const RepairPage: React.FC = () => {
@@ -68,9 +71,16 @@ export const RepairPage: React.FC = () => {
   const [viewingTicket, setViewingTicket] = useState<RepairTicket | null>(null);
   const [issueFinalCost, setIssueFinalCost] = useState<string>('');
 
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [statusBanner, setStatusBanner] = useState<StatusMessage | null>(null);
+  // Errors go to the fixed toast: an inline message at the top of the scroll area was out of
+  // sight while the user was at the bottom of the form.
+  const setStatusMessage = (m: { type: 'success' | 'error'; text: string } | null) =>
+    setStatusBanner(m ? { tone: m.type, text: m.text } : null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // The ticket whose status change is in flight: blocks a second tap on «В работу»/«Готов».
+  const [updatingTicketId, setUpdatingTicketId] = useState<string | null>(null);
+  const [listLoad, setListLoad] = useState<'loading' | 'done' | 'error'>('loading');
+  const [listLoadAttempt, setListLoadAttempt] = useState(0);
 
   // Retail stores only (Exclude Main Warehouse)
   const retailStores = useMemo(() => {
@@ -85,12 +95,19 @@ export const RepairPage: React.FC = () => {
     const thisMonth = getBusinessDateKey().substring(0, 7);
 
     let cancelled = false;
+    setListLoad('loading');
     fetchRepairsRange({
       period: selectedMonth === 'ALL' ? 'ALL' : 'SPECIFIC_MONTH',
       month: selectedMonth === 'ALL' ? undefined : selectedMonth,
-    }).catch((e) => { if (!cancelled) console.error('Failed to load repairs for period', e); });
+    })
+      .then(() => { if (!cancelled) setListLoad('done'); })
+      .catch((e) => {
+        if (cancelled) return;
+        console.error('Failed to load repairs for period', e);
+        setListLoad('error');
+      });
     return () => { cancelled = true; };
-  }, [selectedMonth, fetchRepairsRange, dataRefreshRevision]);
+  }, [selectedMonth, fetchRepairsRange, dataRefreshRevision, listLoadAttempt]);
 
   const isSeller = currentUser?.role === 'SELLER';
   const isPartner = currentUser?.role === 'PARTNER';
@@ -358,12 +375,19 @@ export const RepairPage: React.FC = () => {
     }
   };
 
-  const handleUpdateStatusQuick = async (ticketId: string, status: RepairStatus) => {
-    const res = await updateRepairStatus(ticketId, status);
-    if (res.success) {
-      setStatusBanner({ tone: 'success', text: 'Статус ремонта успешно обновлен' });
-    } else {
+  const handleUpdateStatusQuick = async (ticketId: string, status: RepairStatus): Promise<boolean> => {
+    if (updatingTicketId) return false;
+    setUpdatingTicketId(ticketId);
+    try {
+      const res = await updateRepairStatus(ticketId, status);
+      if (res.success) {
+        setStatusBanner({ tone: 'success', text: 'Статус ремонта обновлён' });
+        return true;
+      }
       setStatusBanner({ tone: 'error', text: res.message || 'Ошибка обновления статуса' });
+      return false;
+    } finally {
+      setUpdatingTicketId(null);
     }
   };
 
@@ -389,7 +413,9 @@ export const RepairPage: React.FC = () => {
 
       setSelectedTicket(null);
       if (res.success) {
-        setStatusBanner({ tone: 'success', text: `Ремонт #${selectedTicket.ticketNumber} выдан клиенту. Расход на ремонт ${finalCost} TJS зафиксирован и списан со счета магазина.` });
+        setStatusBanner({ tone: 'success', text: finalCost > 0
+          ? `Ремонт #${selectedTicket.ticketNumber} выдан клиенту. Расход на ремонт ${formatMoney(finalCost)} TJS списан с кассы магазина.`
+          : `Ремонт #${selectedTicket.ticketNumber} выдан клиенту без расхода.` });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка выдачи ремонта' });
       }
@@ -401,20 +427,20 @@ export const RepairPage: React.FC = () => {
   const getStatusBadge = (status: RepairStatus) => {
     switch (status) {
       case 'ACCEPTED':
-        return { label: 'ПРИНЯТ', color: 'bg-info/15 text-info border-info/30' };
+        return { label: 'Принят', color: 'bg-info/15 text-info border-info/30' };
       case 'IN_PROGRESS':
-        return { label: 'В РАБОТЕ', color: 'bg-warning/15 text-warning border-warning/30' };
+        return { label: 'В работе', color: 'bg-warning/15 text-warning border-warning/30' };
       case 'READY':
-        return { label: 'ГОТОВ К ВЫДАЧЕ', color: 'bg-accent/15 text-accent border-accent/30' };
+        return { label: 'Готов к выдаче', color: 'bg-accent/15 text-accent border-accent/30' };
       case 'ISSUED':
-        return { label: 'ВЫДАН КЛИЕНТУ', color: 'bg-surface-raised text-fg-subtle border-border' };
+        return { label: 'Выдан клиенту', color: 'bg-surface-raised text-fg-subtle border-border' };
       default:
         return { label: status, color: 'bg-surface-raised text-fg-subtle border-border' };
     }
   };
 
   return (
-    <div className="flex-1 flex flex-col h-full min-w-0 max-w-full overflow-hidden bg-bg text-fg-muted">
+    <div className="work-screen flex-1 flex flex-col h-full min-w-0 max-w-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
       {/* Row 1: Header Tabs Bar */}
@@ -490,19 +516,6 @@ export const RepairPage: React.FC = () => {
 
       {/* Main Content Area */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden bg-bg p-3 sm:p-4 min-w-0 max-w-full">
-        {statusMessage && (
-          <div
-            className={`max-w-xl mx-auto mb-3 p-3 rounded-xl text-xs flex items-center space-x-2 ${
-              statusMessage.type === 'success'
-                ? 'bg-accent/15 text-accent border border-accent/30'
-                : 'bg-danger/15 text-danger border border-danger/30'
-            }`}
-          >
-            <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{statusMessage.text}</span>
-          </div>
-        )}
-
         {activeTab === 'create' ? (
           <form onSubmit={handleCreateTicket} className="w-full max-w-xl mx-auto space-y-4 min-w-0">
             <div className="border border-border rounded-xl bg-surface p-3.5 sm:p-5 space-y-4 shadow-xs min-w-0">
@@ -521,6 +534,12 @@ export const RepairPage: React.FC = () => {
                     type="text"
                     value={receiptSearch ?? ''}
                     onChange={(e) => setReceiptSearch(e.target.value)}
+                    onKeyDown={(e) => {
+                      // A USB/Bluetooth scanner types the code and presses Enter.
+                      if (e.key === 'Enter') { e.preventDefault(); handleFindSoldDevice(receiptSearch); }
+                    }}
+                    enterKeyHint="search"
+                    aria-label="Номер чека или IMEI"
                     placeholder="Номер чека или IMEI..."
                     className="flex-1 min-w-0 w-full rounded-lg bg-surface border border-border px-2.5 sm:px-3 py-1.5 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none"
                   />
@@ -529,7 +548,7 @@ export const RepairPage: React.FC = () => {
                     onClick={() => handleFindSoldDevice(receiptSearch)}
                     className="shrink-0 px-2.5 sm:px-3 py-1.5 bg-accent hover:bg-accent-strong active:scale-95 text-xs font-bold rounded-lg text-accent-fg transition-all"
                   >
-                    НАЙТИ
+                    Найти
                   </button>
                   <button
                     type="button"
@@ -573,7 +592,9 @@ export const RepairPage: React.FC = () => {
                 <div className="min-w-0">
                   <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">Телефон *</label>
                   <input
-                    type="text"
+                    type="tel"
+                    inputMode="tel"
+                    autoComplete="tel"
                     required
                     value={clientPhone ?? ''}
                     onChange={(e) => setClientPhone(e.target.value)}
@@ -601,6 +622,7 @@ export const RepairPage: React.FC = () => {
                     <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">IMEI 1</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={imei ?? ''}
                       onChange={(e) => setImei(e.target.value)}
                       placeholder="354891100234561"
@@ -611,6 +633,7 @@ export const RepairPage: React.FC = () => {
                     <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">IMEI 2 (опционально / по желанию)</label>
                     <input
                       type="text"
+                      inputMode="numeric"
                       value={imei2 ?? ''}
                       onChange={(e) => setImei2(e.target.value)}
                       placeholder="354891100234562 (по желанию)"
@@ -636,10 +659,10 @@ export const RepairPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-xs font-bold text-accent-fg uppercase tracking-wider transition-all shadow-xs mt-2 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-sm font-bold text-accent-fg transition-all shadow-xs mt-2 disabled:opacity-60 flex items-center justify-center gap-1.5"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
-                <span className="truncate">{isSubmitting ? 'ОФОРМЛЕНИЕ…' : 'ОФОРМИТЬ И ВЫДАТЬ КВИТАНЦИЮ'}</span>
+                <span className="truncate">{isSubmitting ? 'Оформление…' : 'Оформить приём в ремонт'}</span>
               </button>
             </div>
           </form>
@@ -658,7 +681,14 @@ export const RepairPage: React.FC = () => {
             </div>
 
             {/* List of Tickets */}
-            {filteredRepairs.length === 0 ? (
+            {listLoad === 'loading' && filteredRepairs.length === 0 ? (
+              <LoadingState label="Загрузка ремонтов…" />
+            ) : listLoad === 'error' && filteredRepairs.length === 0 ? (
+              <div className="p-8 text-center space-y-3">
+                <p className="text-sm text-fg-muted">Не удалось загрузить ремонты за период. Проверьте подключение к интернету.</p>
+                <Button onClick={() => setListLoadAttempt((n) => n + 1)}>Повторить</Button>
+              </div>
+            ) : filteredRepairs.length === 0 ? (
               <div className="p-12 text-center text-fg-muted text-xs uppercase tracking-wider">
                 Квитанции на ремонт не найдены
               </div>
@@ -688,7 +718,7 @@ export const RepairPage: React.FC = () => {
                         <div>
                           <h4 className="text-sm font-bold text-fg-muted">{ticket.deviceModel || `${ticket.brand || ''} ${ticket.model || ''}`}</h4>
                           <p className="text-xs text-fg-muted mt-0.5">
-                            Клиент: <strong className="text-fg-muted">{ticket.customerName || 'Клиент'}</strong> ({ticket.customerPhone || 'N/A'})
+                            Клиент: <strong className="text-fg-muted">{ticket.customerName || 'Клиент'}</strong> ({ticket.customerPhone || 'телефон не указан'})
                           </p>
                           <p className="text-xs text-danger/90 mt-0.5">
                             Дефект: {ticket.problemDescription}
@@ -707,7 +737,7 @@ export const RepairPage: React.FC = () => {
                               : 'Задаётся при выдаче'}
                           </span>
                           {ticket.prepaymentTjs ? (
-                            <span className="text-[10px] text-accent block">(Аванс: {formatMoney(ticket.prepaymentTjs)} TJS)</span>
+                            <span className="text-[10px] text-fg-subtle block">Предоплата: {formatMoney(ticket.prepaymentTjs)} TJS</span>
                           ) : null}
                         </div>
 
@@ -715,26 +745,34 @@ export const RepairPage: React.FC = () => {
                         <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
                           {ticket.status === 'ACCEPTED' && (
                             <button
-                              onClick={() => handleUpdateStatusQuick(ticket.id, 'IN_PROGRESS')}
-                              className="px-3 py-1 rounded-lg bg-warning/15 hover:bg-warning/25 border border-warning/30 text-xs font-bold text-warning transition-colors"
+                              type="button"
+                              onClick={() => { void handleUpdateStatusQuick(ticket.id, 'IN_PROGRESS'); }}
+                              disabled={updatingTicketId !== null}
+                              className="px-3 py-1 rounded-lg bg-warning/15 hover:bg-warning/25 border border-warning/30 text-xs font-bold text-warning transition-colors disabled:opacity-50 flex items-center gap-1.5"
                             >
-                              В РАБОТУ
+                              {updatingTicketId === ticket.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                              В работу
                             </button>
                           )}
                           {ticket.status === 'IN_PROGRESS' && (
                             <button
-                              onClick={() => handleUpdateStatusQuick(ticket.id, 'READY')}
-                              className="px-3 py-1 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/30 text-xs font-bold text-accent transition-colors"
+                              type="button"
+                              onClick={() => { void handleUpdateStatusQuick(ticket.id, 'READY'); }}
+                              disabled={updatingTicketId !== null}
+                              className="px-3 py-1 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/30 text-xs font-bold text-accent transition-colors disabled:opacity-50 flex items-center gap-1.5"
                             >
-                              ГОТОВ
+                              {updatingTicketId === ticket.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                              Готов
                             </button>
                           )}
                           {ticket.status !== 'ISSUED' && (
                             <button
+                              type="button"
                               onClick={() => handleOpenIssueModal(ticket)}
-                              className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors"
+                              disabled={updatingTicketId === ticket.id}
+                              className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
                             >
-                              ВЫДАТЬ КЛИЕНТУ
+                              Выдать клиенту
                             </button>
                           )}
                         </div>
@@ -749,90 +787,101 @@ export const RepairPage: React.FC = () => {
       </div>
 
       {/* MODAL: ISSUE REPAIR TICKET */}
-      {selectedTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-4 text-xs">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <h3 className="text-sm font-bold uppercase text-fg-muted flex items-center space-x-2">
-                <PackageCheck className="w-4 h-4 text-accent" />
-                <span>ВЫДАЧА РЕМОНТА КЛИЕНТУ</span>
-              </h3>
-              <button onClick={() => setSelectedTicket(null)} className="text-fg-subtle hover:text-fg-muted">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-1">
-              <p className="font-bold text-fg-muted">Квитанция #{selectedTicket.ticketNumber}</p>
-              <p className="text-fg-muted">{selectedTicket.deviceModel || selectedTicket.model}</p>
-              <p className="text-fg-subtle">Клиент: {selectedTicket.customerName} ({selectedTicket.customerPhone})</p>
-            </div>
-
-            <div className="space-y-3">
-              <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold">Расход на ремонт (запчасти / работа мастера), TJS:</label>
-                <input
-                  step="0.01"
-                  type="number"
-                  min="0"
-                  placeholder="0.00"
-                  value={issueFinalCost}
-                  onChange={(e) => setIssueFinalCost(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent font-bold focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              {selectedTicket.prepaymentTjs ? (
-                <div className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 flex justify-between items-center text-xs">
-                  <span>Учтен аванс (предоплата):</span>
-                  <span className="font-bold text-accent">-{formatMoney(selectedTicket.prepaymentTjs)} TJS</span>
-                </div>
-              ) : null}
-              <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-[11px] text-fg-subtle">
-                Заданная цена расхода будет списана с кассы магазина как расход на ремонт (REPAIR_PARTS).
-              </div>
-            </div>
-
-            <div className="flex space-x-2 pt-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setSelectedTicket(null)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={handleConfirmIssueTicket}
-                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmitting ? 'Выдача…' : 'Подтвердить выдачу'}
-              </button>
-            </div>
+      <Dialog
+        open={selectedTicket !== null}
+        onClose={() => { if (!isSubmitting) setSelectedTicket(null); }}
+        title="Выдача ремонта клиенту"
+        subtitle={selectedTicket ? `Квитанция #${selectedTicket.ticketNumber}` : undefined}
+        footer={
+          <div className="w-full grid grid-cols-2 gap-2">
+            <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setSelectedTicket(null)}>Отмена</Button>
+            <Button fullWidth loading={isSubmitting} onClick={handleConfirmIssueTicket}>
+              {isSubmitting ? 'Выдача…' : (parseFloat(issueFinalCost) || 0) > 0 ? 'Подтвердить выдачу' : 'Выдать без расхода'}
+            </Button>
           </div>
-        </div>
-      )}
+        }
+      >
+        {selectedTicket && (
+          <div className="space-y-3 text-sm">
+            <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-1">
+              <p className="font-semibold text-fg-muted">{selectedTicket.deviceModel || selectedTicket.model}</p>
+              <p className="text-xs text-fg-subtle">Клиент: {selectedTicket.customerName} ({selectedTicket.customerPhone || 'телефон не указан'})</p>
+            </div>
+            <label className="block">
+              <span className="block text-fg-subtle mb-1 text-xs font-semibold">Расход на ремонт (запчасти / работа мастера), TJS</span>
+              <input
+                step="0.01"
+                type="number"
+                inputMode="decimal"
+                min="0"
+                placeholder="0.00"
+                value={issueFinalCost}
+                onChange={(e) => setIssueFinalCost(e.target.value)}
+                className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent font-bold focus:border-accent focus:outline-none"
+              />
+            </label>
+            {selectedTicket.prepaymentTjs ? (
+              <div className="p-2.5 rounded-xl bg-surface-raised border border-border flex justify-between items-center text-xs">
+                <span className="text-fg-subtle">Предоплата по квитанции (справочно)</span>
+                <span className="font-semibold text-fg-muted">{formatMoney(selectedTicket.prepaymentTjs)} TJS</span>
+              </div>
+            ) : null}
+            <p className="text-xs text-fg-subtle">
+              {(parseFloat(issueFinalCost) || 0) > 0
+                ? 'Сумма будет списана с кассы магазина как расход на запчасти и ремонт.'
+                : 'Расход не указан: ремонт будет выдан без списания с кассы.'}
+            </p>
+          </div>
+        )}
+      </Dialog>
 
       {/* MODAL: VIEW REPAIR CARD DETAILS */}
-      {viewingTicket && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-lg rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-4 text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b border-border pb-3">
-              <div className="flex items-center space-x-2">
-                <FileText className="w-4 h-4 text-accent" />
-                <h3 className="text-sm font-bold uppercase text-fg-muted">
-                  Квитанция на ремонт #{viewingTicket.ticketNumber}
-                </h3>
-                <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase border ${getStatusBadge(viewingTicket.status).color}`}>
-                  {getStatusBadge(viewingTicket.status).label}
-                </span>
-              </div>
-              <button onClick={() => setViewingTicket(null)} className="text-fg-subtle hover:text-fg-muted">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
+      <Dialog
+        open={viewingTicket !== null}
+        onClose={() => setViewingTicket(null)}
+        title={viewingTicket ? `Квитанция на ремонт #${viewingTicket.ticketNumber}` : 'Квитанция на ремонт'}
+        subtitle={viewingTicket ? getStatusBadge(viewingTicket.status).label : undefined}
+        maxWidth="lg"
+        footer={viewingTicket && viewingTicket.status !== 'ISSUED' ? (
+          <div className="w-full flex gap-2">
+            {viewingTicket.status === 'ACCEPTED' && (
+              <Button
+                variant="secondary"
+                fullWidth
+                loading={updatingTicketId === viewingTicket.id}
+                disabled={updatingTicketId !== null}
+                onClick={async () => { if (await handleUpdateStatusQuick(viewingTicket.id, 'IN_PROGRESS')) setViewingTicket(null); }}
+              >
+                В работу
+              </Button>
+            )}
+            {viewingTicket.status === 'IN_PROGRESS' && (
+              <Button
+                variant="secondary"
+                fullWidth
+                loading={updatingTicketId === viewingTicket.id}
+                disabled={updatingTicketId !== null}
+                onClick={async () => { if (await handleUpdateStatusQuick(viewingTicket.id, 'READY')) setViewingTicket(null); }}
+              >
+                Готов
+              </Button>
+            )}
+            <Button
+              fullWidth
+              disabled={updatingTicketId !== null}
+              onClick={() => {
+                const ticketToIssue = viewingTicket;
+                setViewingTicket(null);
+                handleOpenIssueModal(ticketToIssue);
+              }}
+            >
+              Выдать клиенту
+            </Button>
+          </div>
+        ) : undefined}
+      >
+        {viewingTicket && (
+          <div className="space-y-4 text-xs text-fg-muted">
             {/* Device Info */}
             <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-2">
               <div className="flex items-center justify-between">
@@ -842,7 +891,7 @@ export const RepairPage: React.FC = () => {
               <div className="grid grid-cols-2 gap-2 text-fg-muted text-xs">
                 <div>
                   <span className="text-fg-subtle block text-[10px] uppercase font-semibold">IMEI</span>
-                  <span className="font-mono text-fg-muted">{viewingTicket.imei || 'N/A'}</span>
+                  <span className="font-mono text-fg-muted">{viewingTicket.imei || '—'}</span>
                 </div>
                 {!isStoreScoped && (
                   <div>
@@ -858,7 +907,7 @@ export const RepairPage: React.FC = () => {
               <span className="text-fg-subtle block text-[10px] uppercase font-semibold">Данные клиента</span>
               <div className="flex items-center justify-between text-xs">
                 <span className="font-bold text-fg-muted">{viewingTicket.customerName || 'Не указано'}</span>
-                <span className="text-accent font-semibold">{viewingTicket.customerPhone || 'N/A'}</span>
+                <span className="text-accent font-semibold">{viewingTicket.customerPhone || 'не указан'}</span>
               </div>
             </div>
 
@@ -904,59 +953,15 @@ export const RepairPage: React.FC = () => {
                 </div>
                 {viewingTicket.prepaymentTjs ? (
                   <div>
-                    <span className="text-fg-subtle block text-[10px]">Предоплата (аванс):</span>
-                    <span className="font-bold text-accent">{formatMoney(viewingTicket.prepaymentTjs)} TJS</span>
+                    <span className="text-fg-subtle block text-[10px]">Предоплата (справочно):</span>
+                    <span className="font-bold text-fg-muted">{formatMoney(viewingTicket.prepaymentTjs)} TJS</span>
                   </div>
                 ) : null}
               </div>
             </div>
-
-            {/* Popup Action Buttons */}
-            <div className="flex space-x-2 pt-2">
-              <button
-                onClick={() => setViewingTicket(null)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase transition-colors"
-              >
-                Закрыть
-              </button>
-              {viewingTicket.status === 'ACCEPTED' && (
-                <button
-                  onClick={() => {
-                    handleUpdateStatusQuick(viewingTicket.id, 'IN_PROGRESS');
-                    setViewingTicket(null);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-warning/20 hover:bg-warning/30 border border-warning/40 text-warning text-xs font-bold uppercase transition-colors"
-                >
-                  В РАБОТУ
-                </button>
-              )}
-              {viewingTicket.status === 'IN_PROGRESS' && (
-                <button
-                  onClick={() => {
-                    handleUpdateStatusQuick(viewingTicket.id, 'READY');
-                    setViewingTicket(null);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-accent/20 hover:bg-accent/30 border border-accent/40 text-accent text-xs font-bold uppercase transition-colors"
-                >
-                  ГОТОВ
-                </button>
-              )}
-              {viewingTicket.status !== 'ISSUED' && (
-                <button
-                  onClick={() => {
-                    const ticketToIssue = viewingTicket;
-                    setViewingTicket(null);
-                    handleOpenIssueModal(ticketToIssue);
-                  }}
-                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold uppercase shadow-xs transition-colors"
-                >
-                  ВЫДАТЬ КЛИЕНТУ
-                </button>
-              )}
-            </div>
           </div>
-        </div>
-      )}
+        )}
+      </Dialog>
     </div>
   );
 };
