@@ -301,12 +301,19 @@ export async function buildComprehensiveReportWorkbook({
   const ExcelJS = (await import('exceljs')).default;
   const workbook = new ExcelJS.Workbook();
   workbook.creator = generatedBy || 'Mobile Shop';
-  workbook.company = 'Mobile Shop';
-  workbook.subject = `Финансовый отчёт — ${summary.periodLabel}`;
-  workbook.title = `Отчёт — ${summary.storeName}`;
+  const meta = workbook as unknown as { company?: string; subject?: string; title?: string };
+  meta.company = 'Mobile Shop';
+  meta.subject = `Финансовый отчёт — ${summary.periodLabel}`;
+  meta.title = `Отчёт — ${summary.storeName}`;
   workbook.created = new Date();
   workbook.modified = new Date();
   workbook.calcProperties.fullCalcOnLoad = true;
+
+  const cellFormula = (formula: string, result: number) => ({
+    formula,
+    result,
+    date1904: false,
+  });
 
   // Create every sheet before writing cross-sheet formulas.
   const salesSheet = workbook.addWorksheet('Продажи', {
@@ -472,10 +479,8 @@ export async function buildComprehensiveReportWorkbook({
   const lastSalesRow = Math.max(firstSalesRow, firstSalesRow + sales.length - 1);
   const salesRawTotalRow = salesSheet.addRow(['ИТОГО ПО СТРОКАМ:']);
   const salesRawTotalNumber = salesRawTotalRow.number;
-  const salesSum = (column: string, result: number) => ({
-    formula: sales.length ? `SUM(${column}${firstSalesRow}:${column}${lastSalesRow})` : '0',
-    result: +result.toFixed(2),
-  });
+  const salesSum = (column: string, result: number) =>
+    cellFormula(sales.length ? `SUM(${column}${firstSalesRow}:${column}${lastSalesRow})` : '0', +result.toFixed(2));
   salesRawTotalRow.getCell(14).value = salesSum('N', salesDataRevenueTjs);
   salesRawTotalRow.getCell(15).value = salesSum('O', salesDataRevenueUsd);
   salesRawTotalRow.getCell(16).value = salesSum('P', salesDataCogsTjs);
@@ -500,10 +505,7 @@ export async function buildComprehensiveReportWorkbook({
     [18, summary.grossProfitTjs], [19, summary.grossProfitUsd],
   ] as const) {
     const letter = salesSheet.getColumn(column).letter;
-    recognizedRow.getCell(column).value = {
-      formula: `${letter}${salesRawTotalNumber}+${letter}${reconciliationRow.number}`,
-      result: serverValue,
-    };
+    recognizedRow.getCell(column).value = cellFormula(`${letter}${salesRawTotalNumber}+${letter}${reconciliationRow.number}`, serverValue);
   }
   styleTotalRow(recognizedRow);
 
@@ -515,14 +517,8 @@ export async function buildComprehensiveReportWorkbook({
 
   const profitAfterReturnsRow = salesSheet.addRow(['ПРИБЫЛЬ С УЧЁТОМ ВОЗВРАТОВ:']);
   const profitAfterReturnsRowNumber = profitAfterReturnsRow.number;
-  profitAfterReturnsRow.getCell(18).value = {
-    formula: `R${recognizedRowNumber}+R${penaltyRowNumber}`,
-    result: summary.profitTjs,
-  };
-  profitAfterReturnsRow.getCell(19).value = {
-    formula: `S${recognizedRowNumber}+S${penaltyRowNumber}`,
-    result: summary.profitUsd,
-  };
+  profitAfterReturnsRow.getCell(18).value = cellFormula(`R${recognizedRowNumber}+R${penaltyRowNumber}`, summary.profitTjs);
+  profitAfterReturnsRow.getCell(19).value = cellFormula(`S${recognizedRowNumber}+S${penaltyRowNumber}`, summary.profitUsd);
   styleTotalRow(profitAfterReturnsRow, XLSX_GREEN);
 
   const bonusRow = salesSheet.addRow(['БОНУСЫ ПОСТАВЩИКОВ:']);
@@ -583,14 +579,14 @@ export async function buildComprehensiveReportWorkbook({
   const firstExpenseRow = 5;
   const lastExpenseRow = Math.max(firstExpenseRow, firstExpenseRow + expenses.length - 1);
   const rawExpenseTotalRow = expensesSheet.addRow(['ИТОГО ПО СТРОКАМ:']);
-  rawExpenseTotalRow.getCell(9).value = {
-    formula: expenses.length ? `SUM(I${firstExpenseRow}:I${lastExpenseRow})` : '0',
-    result: +expenseRowsTjs.toFixed(2),
-  };
-  rawExpenseTotalRow.getCell(11).value = {
-    formula: expenses.length ? `SUM(K${firstExpenseRow}:K${lastExpenseRow})` : '0',
-    result: +expenseRowsUsd.toFixed(2),
-  };
+  rawExpenseTotalRow.getCell(9).value = cellFormula(
+    expenses.length ? `SUM(I${firstExpenseRow}:I${lastExpenseRow})` : '0',
+    +expenseRowsTjs.toFixed(2)
+  );
+  rawExpenseTotalRow.getCell(11).value = cellFormula(
+    expenses.length ? `SUM(K${firstExpenseRow}:K${lastExpenseRow})` : '0',
+    +expenseRowsUsd.toFixed(2)
+  );
   styleTotalRow(rawExpenseTotalRow, XLSX_MUTED);
 
   const expenseReconciliationRow = expensesSheet.addRow(['СВЕРКА С СЕРВЕРОМ:']);
@@ -600,14 +596,8 @@ export async function buildComprehensiveReportWorkbook({
 
   const expenseTotalRow = expensesSheet.addRow(['ИТОГО РАСХОДОВ:']);
   const expenseTotalRowNumber = expenseTotalRow.number;
-  expenseTotalRow.getCell(9).value = {
-    formula: `I${rawExpenseTotalRow.number}+I${expenseReconciliationRow.number}`,
-    result: summary.expensesTjs,
-  };
-  expenseTotalRow.getCell(11).value = {
-    formula: `K${rawExpenseTotalRow.number}+K${expenseReconciliationRow.number}`,
-    result: summary.expensesUsd,
-  };
+  expenseTotalRow.getCell(9).value = cellFormula(`I${rawExpenseTotalRow.number}+I${expenseReconciliationRow.number}`, summary.expensesTjs);
+  expenseTotalRow.getCell(11).value = cellFormula(`K${rawExpenseTotalRow.number}+K${expenseReconciliationRow.number}`, summary.expensesUsd);
   styleTotalRow(expenseTotalRow, 'FFF59E0B');
   for (let rowNumber = rawExpenseTotalRow.number; rowNumber <= expenseTotalRowNumber; rowNumber += 1) {
     expensesSheet.getRow(rowNumber).getCell(9).numFmt = XLSX_MONEY_FORMAT;
@@ -627,31 +617,25 @@ export async function buildComprehensiveReportWorkbook({
 
   const summaryRows = [
     ['Количество проданных устройств', summary.unitsSold, ''],
-    ['Выручка', { formula: `'Продажи'!N${recognizedRowNumber}`, result: summary.revenueTjs }, { formula: `'Продажи'!O${recognizedRowNumber}`, result: summary.revenueUsd }],
-    ['Себестоимость', { formula: `'Продажи'!P${recognizedRowNumber}`, result: summary.cogsTjs }, { formula: `'Продажи'!Q${recognizedRowNumber}`, result: summary.cogsUsd }],
-    ['Прибыль от продаж', { formula: `'Продажи'!R${recognizedRowNumber}`, result: summary.grossProfitTjs }, { formula: `'Продажи'!S${recognizedRowNumber}`, result: summary.grossProfitUsd }],
-    ['Штрафы, удержанные при возвратах', { formula: `'Продажи'!R${penaltyRowNumber}`, result: summary.refundPenaltiesTjs }, { formula: `'Продажи'!S${penaltyRowNumber}`, result: summary.refundPenaltiesUsd }],
-    ['Прибыль с учётом возвратов', { formula: `'Продажи'!R${profitAfterReturnsRowNumber}`, result: summary.profitTjs }, { formula: `'Продажи'!S${profitAfterReturnsRowNumber}`, result: summary.profitUsd }],
-    ['Бонусы поставщиков', { formula: `'Продажи'!R${bonusRowNumber}`, result: summary.cashBonusesTjs }, { formula: `'Продажи'!S${bonusRowNumber}`, result: summary.cashBonusesUsd }],
-    ['Расходы', { formula: `'Расходы'!I${expenseTotalRowNumber}`, result: summary.expensesTjs }, { formula: `'Расходы'!K${expenseTotalRowNumber}`, result: summary.expensesUsd }],
+    ['Выручка', cellFormula(`'Продажи'!N${recognizedRowNumber}`, summary.revenueTjs), cellFormula(`'Продажи'!O${recognizedRowNumber}`, summary.revenueUsd)],
+    ['Себестоимость', cellFormula(`'Продажи'!P${recognizedRowNumber}`, summary.cogsTjs), cellFormula(`'Продажи'!Q${recognizedRowNumber}`, summary.cogsUsd)],
+    ['Прибыль от продаж', cellFormula(`'Продажи'!R${recognizedRowNumber}`, summary.grossProfitTjs), cellFormula(`'Продажи'!S${recognizedRowNumber}`, summary.grossProfitUsd)],
+    ['Штрафы, удержанные при возвратах', cellFormula(`'Продажи'!R${penaltyRowNumber}`, summary.refundPenaltiesTjs), cellFormula(`'Продажи'!S${penaltyRowNumber}`, summary.refundPenaltiesUsd)],
+    ['Прибыль с учётом возвратов', cellFormula(`'Продажи'!R${profitAfterReturnsRowNumber}`, summary.profitTjs), cellFormula(`'Продажи'!S${profitAfterReturnsRowNumber}`, summary.profitUsd)],
+    ['Бонусы поставщиков', cellFormula(`'Продажи'!R${bonusRowNumber}`, summary.cashBonusesTjs), cellFormula(`'Продажи'!S${bonusRowNumber}`, summary.cashBonusesUsd)],
+    ['Расходы', cellFormula(`'Расходы'!I${expenseTotalRowNumber}`, summary.expensesTjs), cellFormula(`'Расходы'!K${expenseTotalRowNumber}`, summary.expensesUsd)],
   ];
   for (const values of summaryRows) summarySheet.addRow(values);
 
   const netProfitRow = summarySheet.addRow(['ЧИСТАЯ ПРИБЫЛЬ ПОСЛЕ РАСХОДОВ']);
   const netProfitRowNumber = netProfitRow.number;
-  netProfitRow.getCell(2).value = {
-    formula: `B11+B12-B13`,
-    result: summary.netProfitTjs,
-  };
-  netProfitRow.getCell(3).value = {
-    formula: `C11+C12-C13`,
-    result: summary.netProfitUsd,
-  };
+  netProfitRow.getCell(2).value = cellFormula(`B11+B12-B13`, summary.netProfitTjs);
+  netProfitRow.getCell(3).value = cellFormula(`C11+C12-C13`, summary.netProfitUsd);
   styleTotalRow(netProfitRow, summary.netProfitUsd >= 0 ? XLSX_GREEN : XLSX_RED);
 
   const checkRow = summarySheet.addRow(['Контроль расхождения с серверным итогом']);
-  checkRow.getCell(2).value = { formula: `B${netProfitRowNumber}-${summary.netProfitTjs}`, result: 0 };
-  checkRow.getCell(3).value = { formula: `C${netProfitRowNumber}-${summary.netProfitUsd}`, result: 0 };
+  checkRow.getCell(2).value = cellFormula(`B${netProfitRowNumber}-${summary.netProfitTjs}`, 0);
+  checkRow.getCell(3).value = cellFormula(`C${netProfitRowNumber}-${summary.netProfitUsd}`, 0);
   checkRow.font = { italic: true, color: { argb: XLSX_MUTED } };
 
   for (let rowNumber = 6; rowNumber <= checkRow.number; rowNumber += 1) {
