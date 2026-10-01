@@ -517,7 +517,7 @@ export const SalePage: React.FC = () => {
               fullWidth
               leftIcon={CheckCircle2}
               loading={isSubmittingSale}
-              disabled={hasEmptyPrice || totalTjs <= 0}
+              disabled={hasEmptyPrice || totalTjs <= 0 || isSubmittingSale}
               onClick={handleFinishPayment}
               className="h-12 text-sm font-bold flex items-center justify-center"
             >

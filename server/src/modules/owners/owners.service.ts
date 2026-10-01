@@ -277,8 +277,17 @@ export class OwnersService {
   }
 
   public static async closeQuarter(quarterName: string, transferRemainingToCapital: boolean, userId: string) {
+    const cleanQuarterName = String(quarterName || '').trim();
+    if (!cleanQuarterName) throw new Error('Укажите название закрываемого квартала');
+
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, userId);
+
+      const existingClosure = await tx.quarterClosure.findFirst({ where: { quarterName: cleanQuarterName } });
+      if (existingClosure) {
+        throw new Error(`Квартал «${cleanQuarterName}» уже закрыт`);
+      }
+
       const owners = await tx.owner.findMany();
 
       // Snapshot the pre-close figures so quarterly history survives the reset below —
@@ -291,7 +300,7 @@ export class OwnersService {
         totalPaidProfitUsd: o.totalPaidProfitUsd,
         availableProfitUsd: o.availableProfitUsd,
       }));
-      await tx.quarterClosure.create({ data: { quarterName, closedByUserId: actor.id, snapshot: moneyJson(snapshot) } });
+      await tx.quarterClosure.create({ data: { quarterName: cleanQuarterName, closedByUserId: actor.id, snapshot: moneyJson(snapshot) } });
 
       // totalAccruedProfitUsd / totalPaidProfitUsd are lifetime counters — the same
       // fields drive the always-visible KPI cards on the main Owners dashboard, which
