@@ -60,7 +60,7 @@ export function registerExpenseRoutes(app: Express) {
     }
   });
 
-  app.post('/api/expenses', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/expenses', authenticateJwt, requireRoles('ADMIN', 'PARTNER', 'SELLER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
     try {
       const { category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance, payrollMonth } =
         req.body ?? {};
@@ -69,15 +69,21 @@ export function registerExpenseRoutes(app: Express) {
         return;
       }
 
+      // If non-admin (PARTNER or SELLER): expenses are always recorded as UNPAID (debt)
+      // and cannot directly deduct from cash balances. Admin pays them later.
+      const isAdmin = req.user!.role === 'ADMIN';
+      const effectivePaidFromCash = isAdmin ? Boolean(paidFromCashRegister) : false;
+      const effectiveSource = isAdmin ? sourceAccount : undefined;
+
       const expense = await createExpenseStandalone({
         category,
         amountTjs: D(amountTjs),
         targetType,
         storeId,
-        sourceAccount,
+        sourceAccount: effectiveSource,
         comment,
         description,
-        paidFromCashRegister,
+        paidFromCashRegister: effectivePaidFromCash,
         employeeId,
         isEmployeeAdvance,
         payrollMonth,
@@ -91,15 +97,8 @@ export function registerExpenseRoutes(app: Express) {
     }
   });
 
-  app.post('/api/expenses/:id/pay', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/expenses/:id/pay', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
-      if (req.user!.role === 'PARTNER') {
-        const existing = await prisma.expense.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
-        if (!existing || existing.storeId !== req.user!.storeId) {
-          res.status(403).json({ message: 'Нет доступа к расходам другого магазина' });
-          return;
-        }
-      }
       const storeId = typeof req.body?.storeId === 'string' ? req.body.storeId : undefined;
       const expense = await payExpense(req.params.id, req.user!.userId, storeId);
       RealtimeSyncGateway.broadcast('EXPENSE_UPDATED', { expenseId: expense.id }, expense.storeId ? { storeIds: [expense.storeId] } : undefined);

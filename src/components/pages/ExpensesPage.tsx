@@ -115,7 +115,7 @@ export const ExpensesPage: React.FC = () => {
   });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [description, setDescription] = useState('');
-  const [paidFromCashRegister, setPaidFromCashRegister] = useState(true);
+  const [paidFromCashRegister, setPaidFromCashRegister] = useState(isAdmin);
 
   useEffect(() => {
     if (isStoreScoped) {
@@ -302,15 +302,17 @@ export const ExpensesPage: React.FC = () => {
 
     const selectedEmp = selectedEmployeeId ? users.find(u => u.id === selectedEmployeeId) : undefined;
 
+    const isPaid = isAdmin ? paidFromCashRegister : false;
+
     setIsSubmitting(true);
     try {
       const res = await createExpense({
         category,
         amountTjs: val,
         storeId: isStoreScoped ? (currentUser?.storeId || '') : storeId,
-        sourceAccount: paidFromCashRegister ? 'Центральная касса' : undefined,
+        sourceAccount: isPaid ? 'Центральная касса' : undefined,
         description: description.trim(),
-        paidFromCashRegister,
+        paidFromCashRegister: isPaid,
         employeeId: selectedEmployeeId || undefined,
         employeeName: selectedEmp?.name,
         isEmployeeAdvance: category === 'EMPLOYEE_ADVANCE' || !!selectedEmployeeId,
@@ -321,7 +323,7 @@ export const ExpensesPage: React.FC = () => {
         setAmountTjs('');
         setDescription('');
         setSelectedEmployeeId('');
-        const paidNote = paidFromCashRegister ? 'оплачен из Центральной кассы' : 'записан как не оплаченный';
+        const paidNote = isPaid ? 'оплачен из Центральной кассы' : 'зафиксирован как долг (ожидает оплаты администратором)';
         setStatus({ tone: 'success', text: `Расход на сумму ${val} TJS ${paidNote}${selectedEmp ? ` (зачислен сотруднику ${selectedEmp.name})` : ''}` });
       } else {
         setStatus({ tone: 'error', text: res.message || 'Ошибка проведения расхода' });
@@ -505,14 +507,6 @@ export const ExpensesPage: React.FC = () => {
     setSortBy('DATE_DESC');
     setSearchQuery('');
   };
-
-  if (isSeller) {
-    return (
-      <div className="flex-1 flex flex-col bg-bg">
-        <RestrictedAccess message="Раздел расходов доступен только администраторам и партнёрам." />
-      </div>
-    );
-  }
 
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
@@ -1003,17 +997,17 @@ export const ExpensesPage: React.FC = () => {
                   <div className="text-right shrink-0">
                     <p className="text-sm font-semibold text-danger">-{formatMoney(exp.amountTjs)} TJS</p>
                     <p className="text-xs text-fg-subtle">≈ -${formatMoney(costUsd)}</p>
-                    {(currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER') && (
-                      <div className="flex items-center gap-1 mt-1.5 justify-end">
-                        {exp.status === 'UNPAID' && (
-                          <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
-                        )}
+                    <div className="flex items-center gap-1 mt-1.5 justify-end">
+                      {isAdmin && exp.status === 'UNPAID' && (
+                        <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
+                      )}
+                      {(isAdmin || isPartner) && (
                         <ActionMenu label="Действия с расходом" actions={[
                           { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
                           { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
                         ]} />
-                      </div>
-                    )}
+                      )}
+                    </div>
                   </div>
                 </div>
               );
@@ -1091,9 +1085,9 @@ export const ExpensesPage: React.FC = () => {
               type="submit"
               form="add-expense-form"
               loading={isSubmitting}
-              disabled={paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0)}
+              disabled={isAdmin && paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0)}
             >
-              Сохранить расход
+              {isAdmin && paidFromCashRegister ? 'Сохранить расход' : 'Зафиксировать расход (долг)'}
             </Button>
           </>
         }
@@ -1150,13 +1144,16 @@ export const ExpensesPage: React.FC = () => {
             />
           </FormField>
 
-          <ToggleRow
-            checked={paidFromCashRegister}
-            onChange={setPaidFromCashRegister}
-            label="Списать из Центральной кассы"
-          />
+          {/* Only ADMIN can choose to write off directly from Central Cash and see its balance */}
+          {isAdmin && (
+            <ToggleRow
+              checked={paidFromCashRegister}
+              onChange={setPaidFromCashRegister}
+              label="Списать из Центральной кассы"
+            />
+          )}
 
-          {paidFromCashRegister && (
+          {isAdmin && paidFromCashRegister && (
             <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
@@ -1176,7 +1173,7 @@ export const ExpensesPage: React.FC = () => {
             </div>
           )}
 
-          {paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0) && (
+          {isAdmin && paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0) && (
             <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
               Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ≈${formatMoney((parseFloat(amountTjs) || 0) / rate)} = {formatMoney(parseFloat(amountTjs) || 0)} TJS по курсу {rate}).
             </div>
@@ -1184,69 +1181,77 @@ export const ExpensesPage: React.FC = () => {
 
           <div className="flex items-center justify-between gap-2 px-0.5">
             <span className="text-xs text-fg-subtle">Статус оплаты</span>
-            {paidFromCashRegister
-              ? <Badge tone="success">Оплачено</Badge>
-              : <Badge tone="warning">Не оплачено</Badge>}
+            {isAdmin && paidFromCashRegister ? (
+              <Badge tone="success">Оплачено</Badge>
+            ) : (
+              <Badge tone="warning">Долг (не оплачено)</Badge>
+            )}
           </div>
-          {!paidFromCashRegister && (
-            <p className="text-xs text-fg-subtle px-0.5">Центральная касса не изменится. Оплатить расход можно позже кнопкой «Оплатить» в списке.</p>
+          {(!isAdmin || !paidFromCashRegister) && (
+            <p className="text-xs text-fg-subtle px-0.5">
+              {isAdmin
+                ? 'Центральная касса не изменится. Оплатить расход можно позже кнопкой «Оплатить» в списке.'
+                : 'Расход фиксируется как долг. Администратор проверит и произведёт оплату из кассы.'}
+            </p>
           )}
         </form>
       </Dialog>
 
-      <Dialog
-        open={!!payingExpense}
-        onClose={() => setPayingExpense(null)}
-        title="Оплатить расход"
-        maxWidth="sm"
-        footer={
-          <>
-            <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setPayingExpense(null)}>Отмена</Button>
-            <Button
-              variant="primary"
-              fullWidth
-              loading={isSubmitting}
-              disabled={(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense?.amountUsd ?? (payingExpense?.amountTjs ?? 0) / rate)}
-              onClick={handleConfirmPay}
-            >
-              Оплатить из Центральной кассы
-            </Button>
-          </>
-        }
-      >
-        {payingExpense && (
-          <div className="space-y-3.5">
-            <p className="text-sm text-fg-muted">
-              {getCategoryLabel(payingExpense.category, customCategories)}: <span className="font-semibold text-danger">{formatMoney(payingExpense.amountTjs)} TJS</span>
-            </p>
-            <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
-              <div className="flex items-center gap-2.5">
-                <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
-                  <Landmark className="w-4 h-4" />
+      {isAdmin && (
+        <Dialog
+          open={!!payingExpense}
+          onClose={() => setPayingExpense(null)}
+          title="Оплатить расход"
+          maxWidth="sm"
+          footer={
+            <>
+              <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setPayingExpense(null)}>Отмена</Button>
+              <Button
+                variant="primary"
+                fullWidth
+                loading={isSubmitting}
+                disabled={(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense?.amountUsd ?? (payingExpense?.amountTjs ?? 0) / rate)}
+                onClick={handleConfirmPay}
+              >
+                Оплатить из Центральной кассы
+              </Button>
+            </>
+          }
+        >
+          {payingExpense && (
+            <div className="space-y-3.5">
+              <p className="text-sm text-fg-muted">
+                {getCategoryLabel(payingExpense.category, customCategories)}: <span className="font-semibold text-danger">{formatMoney(payingExpense.amountTjs)} TJS</span>
+              </p>
+              <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+                <div className="flex items-center gap-2.5">
+                  <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
+                    <Landmark className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
+                    <p className="text-[11px] text-fg-subtle">
+                      {payingExpense.storeName ? `Филиал: ${payingExpense.storeName}` : 'Общий расход компании'}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
-                  <p className="text-[11px] text-fg-subtle">
-                    {payingExpense.storeName ? `Филиал: ${payingExpense.storeName}` : 'Общий расход компании'}
-                  </p>
+                <div className="text-right shrink-0">
+                  <span className="text-xs font-bold text-accent">
+                    ${formatMoney(centralCashStore?.cashBalanceUsd)}
+                  </span>
+                  <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
                 </div>
               </div>
-              <div className="text-right shrink-0">
-                <span className="text-xs font-bold text-accent">
-                  ${formatMoney(centralCashStore?.cashBalanceUsd)}
-                </span>
-                <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
-              </div>
-            </div>
 
-            {(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense.amountUsd ?? payingExpense.amountTjs / rate) && (
-              <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(payingExpense.amountUsd ?? payingExpense.amountTjs / rate)}).
-              </div>
-            )}
-          </div>
-        )}
-      </Dialog>
+              {(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense.amountUsd ?? payingExpense.amountTjs / rate) && (
+                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
+                  Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(payingExpense.amountUsd ?? payingExpense.amountTjs / rate)}).
+                </div>
+              )}
+            </div>
+          )}
+        </Dialog>
+      )}
 
       <Dialog
         open={isAddCategoryModalOpen}

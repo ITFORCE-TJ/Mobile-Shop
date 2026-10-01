@@ -109,10 +109,11 @@ export const Drawer: React.FC = () => {
           ],
         },
         {
-          title: 'Склад',
+          title: 'Склад и касса',
           items: [
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['SELLER'] },
           ],
         },
       ];
