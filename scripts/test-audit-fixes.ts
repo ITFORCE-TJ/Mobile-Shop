@@ -79,8 +79,8 @@ try {
   // store's cash and its ledger account together as every cash operation does.
   const cash = await prisma.financialAccount.findUniqueOrThrow({ where: { storeId: 'store-siyoma' } });
   await prisma.$transaction([
-    prisma.store.update({ where: { id: 'store-siyoma' }, data: { cashBalanceTjs: { increment: 1000 } } }),
-    prisma.financialAccount.update({ where: { id: cash.id }, data: { balanceTjs: { increment: 1000 } } }),
+    prisma.store.update({ where: { id: 'store-siyoma' }, data: { cashBalanceUsd: { increment: 100 } } }),
+    prisma.financialAccount.update({ where: { id: cash.id }, data: { balanceUsd: { increment: 100 }, balanceTjs: { increment: 1000 } } }),
   ]);
   const cashBefore = await prisma.financialAccount.findUniqueOrThrow({ where: { id: cash.id } });
 

@@ -1,7 +1,7 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { ActionMenu } from '../ui/ActionMenu';
 import { getBusinessDateKey } from '../../utils/businessDate';
-import { formatMoney } from '../../utils/money';
+import { formatMoney, sumMoney, moneyNumber } from '../../utils/money';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { Expense, ExpenseCategory } from '../../types';
@@ -87,7 +87,7 @@ export const ExpensesPage: React.FC = () => {
   const centralCashStore = useMemo(() => {
     const warehouses = stores.filter(s => s.isMainWarehouse);
     if (warehouses.length === 0) return stores[0] || null;
-    return warehouses.reduce((best, cur) => (cur.cashBalanceTjs || 0) > (best.cashBalanceTjs || 0) ? cur : best, warehouses[0]);
+    return warehouses.reduce((best, cur) => (cur.cashBalanceUsd || 0) > (best.cashBalanceUsd || 0) ? cur : best, warehouses[0]);
   }, [stores]);
 
   const [status, setStatus] = useState<StatusMessage | null>(null);
@@ -437,17 +437,17 @@ export const ExpensesPage: React.FC = () => {
     sortBy
   ]);
 
-  const totalExpensesTjs = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amountTjs || 0), 0), [filteredExpenses]);
+  const totalExpensesTjs = useMemo(() => sumMoney(filteredExpenses.map((e) => e.amountTjs || 0)), [filteredExpenses]);
   // Each expense keeps the USD amount computed at its own day's exchange rate — summing those
   // (falling back to that record's own rate, never today's, when amountUsd wasn't stored) is
   // what keeps this in sync with the reports page, instead of re-converting the TJS total at
   // today's rate and drifting whenever the rate has moved since the expense was recorded.
   const totalExpensesUsd = useMemo(
-    () => +filteredExpenses.reduce((acc, e) => acc + (e.amountUsd ?? ((e.amountTjs || 0) / (e.exchangeRate || rate))), 0).toFixed(2),
+    () => moneyNumber(sumMoney(filteredExpenses.map((e) => e.amountUsd ?? moneyNumber((e.amountTjs || 0) / (e.exchangeRate || rate))))),
     [filteredExpenses, rate]
   );
   const unpaidTotalTjs = useMemo(
-    () => filteredExpenses.reduce((acc, e) => acc + (e.status === 'UNPAID' ? e.amountTjs || 0 : 0), 0),
+    () => sumMoney(filteredExpenses.map((e) => (e.status === 'UNPAID' ? e.amountTjs || 0 : 0))),
     [filteredExpenses]
   );
   const unpaidCount = useMemo(() => filteredExpenses.filter(e => e.status === 'UNPAID').length, [filteredExpenses]);
@@ -1073,7 +1073,7 @@ export const ExpensesPage: React.FC = () => {
               type="submit"
               form="add-expense-form"
               loading={isSubmitting}
-              disabled={paidFromCashRegister && parseFloat(amountTjs) > (centralCashStore?.cashBalanceTjs ?? 0)}
+              disabled={paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0)}
             >
               Сохранить расход
             </Button>
@@ -1151,16 +1151,16 @@ export const ExpensesPage: React.FC = () => {
               </div>
               <div className="text-right shrink-0">
                 <span className="text-xs font-bold text-accent">
-                  {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                  ${formatMoney(centralCashStore?.cashBalanceUsd)}
                 </span>
                 <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
               </div>
             </div>
           )}
 
-          {paidFromCashRegister && parseFloat(amountTjs) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+          {paidFromCashRegister && (parseFloat(amountTjs) || 0) / rate > (centralCashStore?.cashBalanceUsd ?? 0) && (
             <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-              Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: {formatMoney(parseFloat(amountTjs) || 0)} TJS).
+              Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ≈${formatMoney((parseFloat(amountTjs) || 0) / rate)} = {formatMoney(parseFloat(amountTjs) || 0)} TJS по курсу {rate}).
             </div>
           )}
 
@@ -1188,7 +1188,7 @@ export const ExpensesPage: React.FC = () => {
               variant="primary"
               fullWidth
               loading={isSubmitting}
-              disabled={(centralCashStore?.cashBalanceTjs ?? 0) < (payingExpense?.amountTjs ?? 0)}
+              disabled={(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense?.amountUsd ?? (payingExpense?.amountTjs ?? 0) / rate)}
               onClick={handleConfirmPay}
             >
               Оплатить из Центральной кассы
@@ -1215,15 +1215,15 @@ export const ExpensesPage: React.FC = () => {
               </div>
               <div className="text-right shrink-0">
                 <span className="text-xs font-bold text-accent">
-                  {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                  ${formatMoney(centralCashStore?.cashBalanceUsd)}
                 </span>
                 <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
               </div>
             </div>
 
-            {(centralCashStore?.cashBalanceTjs ?? 0) < payingExpense.amountTjs && (
+            {(centralCashStore?.cashBalanceUsd ?? 0) < (payingExpense.amountUsd ?? payingExpense.amountTjs / rate) && (
               <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: {formatMoney(payingExpense.amountTjs)} TJS).
+                Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(payingExpense.amountUsd ?? payingExpense.amountTjs / rate)}).
               </div>
             )}
           </div>

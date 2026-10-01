@@ -1,4 +1,4 @@
-import { D, type MoneyInput } from '../../common/decimal';
+import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma, type TransactionClient } from '../../prisma/prisma.service';
 import { lockCashRegister, lockCentralCashRegister } from './account.service';
 import { postTransaction } from './financial-transaction.service';
@@ -73,7 +73,7 @@ export class CashCollectionService {
         status: isCancelled ? 'CANCELLED' : 'POSTED',
         createdAt: h.createdAt.toISOString(),
         createdByName: h.acceptedByName,
-        cancelledAt: isCancelled && tx?.updatedAt ? tx.updatedAt.toISOString() : null,
+        cancelledAt: isCancelled ? (tx?.cancelledAt ?? tx?.updatedAt)?.toISOString() ?? null : null,
       };
     });
   }
@@ -83,11 +83,12 @@ export class CashCollectionService {
    */
   public static async collect(input: {
     storeId: string;
-    amountTjs: MoneyInput;
+    amountUsd: MoneyInput;
     comment?: string;
     actorUserId: string;
   }): Promise<CashCollectionDto> {
-    const amountTjs = requirePositiveMoney(input.amountTjs, 'Сумма инкассации');
+    // Registers hold USD, so the handover moves dollars; the TJS figure is informational.
+    const amountUsd = requirePositiveMoney(input.amountUsd, 'Сумма инкассации');
 
     return prisma.$transaction(async (tx: TransactionClient) => {
       const actor = await resolveActor(tx, input.actorUserId);
@@ -107,12 +108,12 @@ export class CashCollectionService {
 
       // Check balance and decrement source store register
       const sourceGuard = await tx.store.updateMany({
-        where: { id: input.storeId, cashBalanceTjs: { gte: amountTjs } },
-        data: { cashBalanceTjs: { decrement: amountTjs } },
+        where: { id: input.storeId, cashBalanceUsd: { gte: amountUsd } },
+        data: { cashBalanceUsd: { decrement: amountUsd } },
       });
       if (sourceGuard.count !== 1) {
         throw new Error(
-          `В кассе «${sourceStore.name}» недостаточно средств: доступно ${sourceStore.cashBalanceTjs} сомони`
+          `В кассе «${sourceStore.name}» недостаточно средств: доступно $${sourceStore.cashBalanceUsd}`
         );
       }
 
@@ -124,10 +125,10 @@ export class CashCollectionService {
       );
       await tx.store.update({
         where: { id: centralStore.id },
-        data: { cashBalanceTjs: { increment: amountTjs } },
+        data: { cashBalanceUsd: { increment: amountUsd } },
       });
 
-      const amountUsd = roundMoney(D(amountTjs).div(exchangeRate));
+      const amountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
 
       // 3. Post financial ledger TRANSFER between store accounts
       const financialTx = await postTransaction(tx, {
@@ -136,9 +137,9 @@ export class CashCollectionService {
         numberPrefix: 'TR',
         accountId: sourceAccount.id,
         destinationAccountId: centralAccount.id,
-        balanceCurrency: 'TJS',
-        amount: amountTjs,
-        currency: 'TJS',
+        balanceCurrency: 'USD',
+        amount: amountUsd,
+        currency: 'USD',
         exchangeRate,
         amountTjs,
         amountUsd,
@@ -171,16 +172,16 @@ export class CashCollectionService {
           userName: actor.name,
           userRole: actor.role,
           action: 'CASH_COLLECTION',
-          details: `Инкассация ${amountTjs} сомони ($${amountUsd}) из магазина «${sourceStore.name}» в «${centralStore.name}»`,
-          financialDetails: {
-            amountTjs: Number(amountTjs),
-            amountUsd: Number(amountUsd),
-            exchangeRate: Number(exchangeRate),
+          details: `Инкассация $${amountUsd} (${amountTjs} сомони) из магазина «${sourceStore.name}» в «${centralStore.name}»`,
+          financialDetails: moneyJson({
+            amountTjs,
+            amountUsd,
+            exchangeRate,
             sourceStoreId: sourceStore.id,
             targetStoreId: centralStore.id,
             handoverId: handover.id,
             financialTransactionId: financialTx.id,
-          },
+          }),
         },
       });
 
@@ -219,7 +220,13 @@ export class CashCollectionService {
         include: { destinationAccount: true },
       });
       if (!origTx) throw new Error('Финансовая транзакция инкассации не найдена');
-      if (origTx.status === 'CANCELLED') throw new Error('Эта инкассация уже была отменена ранее');
+      // Claim the cancellation first: the row lock makes a concurrent cancel of the same
+      // collection wait here and then find it no longer POSTED, so cash moves back only once.
+      const claimed = await tx.financialTransaction.updateMany({
+        where: { id: origTx.id, status: 'POSTED' },
+        data: { status: 'CANCELLED', cancelledAt: new Date(), cancelledByUserId: actor.id },
+      });
+      if (claimed.count !== 1) throw new Error('Эта инкассация уже была отменена ранее');
 
       // 1. Lock central cash and verify it has sufficient cash to return
       const { store: centralStore, account: centralAccount } = await lockCentralCashRegister(
@@ -229,12 +236,12 @@ export class CashCollectionService {
       );
 
       const centralGuard = await tx.store.updateMany({
-        where: { id: centralStore.id, cashBalanceTjs: { gte: handover.amountTjs } },
-        data: { cashBalanceTjs: { decrement: handover.amountTjs } },
+        where: { id: centralStore.id, cashBalanceUsd: { gte: handover.amountUsd } },
+        data: { cashBalanceUsd: { decrement: handover.amountUsd } },
       });
       if (centralGuard.count !== 1) {
         throw new Error(
-          `В Центральной кассе недостаточно средств (${centralStore.cashBalanceTjs} сомони) для возврата инкассации`
+          `В Центральной кассе недостаточно средств ($${centralStore.cashBalanceUsd}) для возврата инкассации`
         );
       }
 
@@ -247,22 +254,17 @@ export class CashCollectionService {
       );
       await tx.store.update({
         where: { id: retailStore.id },
-        data: { cashBalanceTjs: { increment: handover.amountTjs } },
+        data: { cashBalanceUsd: { increment: handover.amountUsd } },
       });
 
-      // 3. Mark original transaction CANCELLED and post reversing TRANSFER
-      await tx.financialTransaction.update({
-        where: { id: origTx.id },
-        data: { status: 'CANCELLED' },
-      });
-
+      // 3. Post the reversing TRANSFER (the original was marked CANCELLED above)
       await postTransaction(tx, {
         type: 'TRANSFER',
         direction: 'NEUTRAL',
         numberPrefix: 'TR',
         accountId: centralAccount.id,
         destinationAccountId: retailAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: handover.amountTjs,
         currency: 'TJS',
         exchangeRate: handover.exchangeRate,
@@ -283,12 +285,13 @@ export class CashCollectionService {
           userName: actor.name,
           userRole: actor.role,
           action: 'CASH_COLLECTION_CANCEL',
-          details: `Отменена инкассация ${origTx.transactionNumber} на сумму ${handover.amountTjs} сомони; средства возвращены в кассу «${retailStore.name}»`,
-          financialDetails: {
+          details: `Отменена инкассация ${origTx.transactionNumber} на сумму $${handover.amountUsd} (${handover.amountTjs} сомони); средства возвращены в кассу «${retailStore.name}»`,
+          financialDetails: moneyJson({
             handoverId: handover.id,
             originalTransactionId: origTx.id,
-            amountTjs: Number(handover.amountTjs),
-          },
+            amountTjs: handover.amountTjs,
+            amountUsd: handover.amountUsd,
+          }),
         },
       });
 

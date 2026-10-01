@@ -378,7 +378,7 @@ export const SalesHistoryPage: React.FC = () => {
           </div>
 
             {isAdmin ? (
-              <div className="relative flex-1 min-w-[140px]">
+              <div className="relative flex-1 min-w-35">
                 <div className="h-9 px-2.5 rounded-lg border border-border bg-surface hover:border-accent/40 text-xs font-semibold text-fg-muted flex items-center gap-1.5 transition-colors">
                   <Store className="w-3.5 h-3.5 text-accent shrink-0" />
                   <select

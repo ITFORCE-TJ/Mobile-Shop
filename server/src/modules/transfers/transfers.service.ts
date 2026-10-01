@@ -201,7 +201,7 @@ export class TransfersService {
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, approvedByUserId);
       // .name (ledger description) and .isMainWarehouse (destination status) are the only
-      // fields actually read below — narrowed from `true` to avoid pulling cashBalanceTjs
+      // fields actually read below — narrowed from `true` to avoid pulling cashBalanceUsd
       // and the rest of the store row along for the ride.
       const transfer = await tx.transferRequest.findUnique({
         where: { id: transferId },

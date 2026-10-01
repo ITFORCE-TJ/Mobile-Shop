@@ -47,7 +47,7 @@ export class StoresService {
       if (!store) throw new Error('Магазин не найден');
       if (store.isMainWarehouse) throw new Error('Центральный (Главный) склад нельзя удалить. Он всегда остается в системе.');
       const cashAccount = await tx.financialAccount.findUnique({ where: { storeId } });
-      if (!D(store.cashBalanceTjs).isZero() || (cashAccount && (!D(cashAccount.balanceTjs).isZero() || !D(cashAccount.balanceUsd).isZero()))) {
+      if (!D(store.cashBalanceUsd).isZero() || (cashAccount && (!D(cashAccount.balanceTjs).isZero() || !D(cashAccount.balanceUsd).isZero()))) {
         throw new Error('Нельзя удалить филиал с ненулевым остатком кассы. Сначала выполните объединение филиалов.');
       }
 
@@ -93,8 +93,8 @@ export class StoresService {
    * the old→new values. A distinct ADJUSTMENT preserves cash reconciliation without
    * changing sales/expense-based profit reports.
    */
-  public static async adjustCashBalance(storeId: string, newBalanceTjs: MoneyInput, reason: string, userId: string) {
-    if (!D(newBalanceTjs).isFinite()) throw new Error('Укажите корректную сумму');
+  public static async adjustCashBalance(storeId: string, newBalanceUsd: MoneyInput, reason: string, userId: string) {
+    if (!D(newBalanceUsd).isFinite()) throw new Error('Укажите корректную сумму');
     if (!reason?.trim()) throw new Error('Укажите причину корректировки');
 
     return prisma.$transaction(async (tx) => {
@@ -103,15 +103,17 @@ export class StoresService {
       const store = await tx.store.findUnique({ where: { id: storeId } });
       if (!store) throw new Error('Магазин не найден');
 
-      const roundedBalance = D(D(D(newBalanceTjs).mul(100)).round()).div(100);
+      // Sets both the register and its ledger account to the counted USD balance — this is
+      // also how a register/account mismatch reported by lockCashRegister gets resolved.
+      const roundedBalance = roundMoney(newBalanceUsd);
       const account = await getStoreCashAccount(tx, storeId, store.name);
-      const delta = roundedBalance.minus(account.balanceTjs);
-      const updated = await tx.store.update({ where: { id: storeId }, data: { cashBalanceTjs: roundedBalance } });
+      const delta = roundedBalance.minus(account.balanceUsd);
+      const updated = await tx.store.update({ where: { id: storeId }, data: { cashBalanceUsd: roundedBalance } });
       if (!delta.isZero()) {
         const rate = await requireTodayRate(tx);
         await postTransaction(tx, { type: 'ADJUSTMENT', direction: delta.gt(0) ? 'IN' : 'OUT', numberPrefix: 'ADJ',
-          accountId: account.id, balanceCurrency: 'TJS', amount: delta.abs(), currency: 'TJS', exchangeRate: rate,
-          amountTjs: delta.abs(), amountUsd: roundMoney(delta.abs().div(rate)), categoryName: 'Корректировка кассы',
+          accountId: account.id, balanceCurrency: 'USD', amount: delta.abs(), currency: 'USD', exchangeRate: rate,
+          amountTjs: roundMoney(delta.abs().mul(rate)), amountUsd: delta.abs(), categoryName: 'Корректировка кассы',
           shopId: storeId, sourceType: 'STORE_ADJUSTMENT', sourceId: storeId, guardBalance: false,
           description: reason.trim(), createdByUserId: actor.id });
       }
@@ -122,8 +124,8 @@ export class StoresService {
           userName: actor.name,
           userRole: actor.role,
           action: 'STORE_CASH_ADJUSTMENT',
-          details: `Корректировка кассы "${store.name}": ${store.cashBalanceTjs} TJS → ${roundedBalance} TJS. Причина: ${reason.trim()}`,
-          financialDetails: moneyJson({ oldBalanceTjs: store.cashBalanceTjs, newBalanceTjs: roundedBalance }),
+          details: `Корректировка кассы "${store.name}": $${store.cashBalanceUsd} → $${roundedBalance}. Причина: ${reason.trim()}`,
+          financialDetails: moneyJson({ oldBalanceUsd: store.cashBalanceUsd, newBalanceUsd: roundedBalance, previousAccountBalanceUsd: account.balanceUsd }),
           targetId: storeId,
         },
       });
@@ -180,7 +182,7 @@ export class StoresService {
         await tx.financialAccount.delete({ where: { id: sourceAccount.id } });
       }
 
-      await tx.store.update({ where: { id: targetStoreId }, data: { cashBalanceTjs: { increment: source.cashBalanceTjs } } });
+      await tx.store.update({ where: { id: targetStoreId }, data: { cashBalanceUsd: { increment: source.cashBalanceUsd } } });
 
       try {
         await tx.store.delete({ where: { id: sourceStoreId } });
@@ -197,7 +199,7 @@ export class StoresService {
           userName: actor.name,
           userRole: actor.role,
           action: 'STORE_MERGE',
-          details: `Магазин "${source.name}" объединён с "${target.name}": перенесена касса ${source.cashBalanceTjs} TJS и вся история продаж/ремонтов/расходов`,
+          details: `Магазин "${source.name}" объединён с "${target.name}": перенесена касса $${source.cashBalanceUsd} и вся история продаж/ремонтов/расходов`,
         },
       });
 

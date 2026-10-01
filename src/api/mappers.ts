@@ -282,6 +282,7 @@ export function mapExpense(e: any, names: NameLookup): Expense {
     employeeId: e.employeeId ?? undefined,
     employeeName: e.employeeId ? names.get(e.employeeId) : undefined,
     isEmployeeAdvance: e.isEmployeeAdvance,
+    payrollMonth: e.payrollMonth ?? null,
   };
 }
 
@@ -296,6 +297,7 @@ export function mapOwner(o: any): Owner {
     totalPaidProfitUsd: o.totalPaidProfitUsd,
     totalReinvestedUsd: o.totalReinvestedUsd,
     availableProfitUsd: o.availableProfitUsd,
+    storeId: o.storeId ?? o.user?.storeId ?? undefined,
   };
 }
 
@@ -337,7 +339,7 @@ export function mapStore(s: any): Store {
     name: s.name,
     address: s.address ?? undefined,
     isMainWarehouse: s.isMainWarehouse,
-    cashBalanceTjs: s.cashBalanceTjs,
+    cashBalanceUsd: s.cashBalanceUsd,
     active: s.active,
   };
 }

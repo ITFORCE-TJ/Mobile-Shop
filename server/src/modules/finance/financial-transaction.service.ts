@@ -156,7 +156,7 @@ export async function cancelTransaction(tx: TransactionClient, transactionId: st
     numberPrefix: 'AJ',
     accountId: original.type === 'TRANSFER' ? original.destinationAccountId! : original.accountId,
     destinationAccountId: original.type === 'TRANSFER' ? original.accountId : undefined,
-    balanceCurrency: original.balanceCurrency as LedgerCurrency,
+    balanceCurrency: (original.balanceCurrency as LedgerCurrency) || 'USD',
     amount: original.amount,
     currency: original.currency as LedgerCurrency,
     exchangeRate: original.exchangeRate ?? undefined,

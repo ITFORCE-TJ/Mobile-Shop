@@ -6,7 +6,7 @@ describe('CashCollectionService validation and safety', () => {
     await expect(
       CashCollectionService.collect({
         storeId: 'store-siyoma',
-        amountTjs: 0,
+        amountUsd: 0,
         actorUserId: 'user-admin',
       })
     ).rejects.toThrow('Сумма инкассации должна быть больше нуля');
@@ -14,7 +14,7 @@ describe('CashCollectionService validation and safety', () => {
     await expect(
       CashCollectionService.collect({
         storeId: 'store-siyoma',
-        amountTjs: -50,
+        amountUsd: -50,
         actorUserId: 'user-admin',
       })
     ).rejects.toThrow('Сумма инкассации должна быть больше нуля');
@@ -24,7 +24,7 @@ describe('CashCollectionService validation and safety', () => {
     await expect(
       CashCollectionService.collect({
         storeId: 'non-existent-store-id',
-        amountTjs: 100,
+        amountUsd: 100,
         actorUserId: 'user-admin',
       })
     ).rejects.toThrow();

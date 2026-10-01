@@ -127,7 +127,7 @@ export class SuppliersService {
       // Supplier payments are funded strictly from the central cash register (Main Warehouse account).
       // amountUsd was collected in USD terms but store registers hold TJS; convert via today's rate if available.
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
+      const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceUsd: { gte: amountUsd } }, data: { cashBalanceUsd: { decrement: amountUsd } } });
       if (!D(cashGuard.count).eq(1)) throw new Error('В центральной кассе недостаточно наличных для оплаты поставщику');
 
       await postTransaction(tx, {
@@ -135,7 +135,7 @@ export class SuppliersService {
         direction: 'OUT',
         numberPrefix: 'SP',
         accountId: financeAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: amountUsd,
         currency: 'USD',
         exchangeRate,
@@ -237,7 +237,7 @@ export class SuppliersService {
         throw new Error('Оплата поставщикам производится только из Центральной кассы. Розничные кассы не используются для расчетов с поставщиками.');
       }
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
+      const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceUsd: { gte: amountUsd } }, data: { cashBalanceUsd: { decrement: amountUsd } } });
       if (!D(cashGuard.count).eq(1)) throw new Error('В центральной кассе недостаточно наличных для оплаты накладной');
 
       await postTransaction(tx, {
@@ -245,7 +245,7 @@ export class SuppliersService {
         direction: 'OUT',
         numberPrefix: 'SP',
         accountId: financeAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: amountUsd,
         currency: 'USD',
         exchangeRate,
@@ -417,10 +417,15 @@ export class SuppliersService {
             await replaceOwnerAllocations(tx, previous, data.ownerProfitAllocations, 1, true);
           }
           data.amountUsd = newAmountUsd;
-          await tx.ledgerEntry.updateMany({
-            where: { referenceId: id, type: 'SUPPLIER_BONUS' },
-            data: { amountUsd: newAmountUsd, description: `Денежный бонус от ${bonus.supplier.name}: +$${newAmountUsd}` },
-          });
+          // Append-only journal: reverse the old amount and book the new one.
+          if (!D(newAmountUsd).eq(oldAmountUsd)) {
+            await tx.ledgerEntry.createMany({
+              data: [
+                { type: 'SUPPLIER_BONUS', description: `Сторно (правка бонуса от ${bonus.supplier.name}): −$${oldAmountUsd}`, amountUsd: D(oldAmountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
+                { type: 'SUPPLIER_BONUS', description: `Денежный бонус от ${bonus.supplier.name}: +$${newAmountUsd}`, amountUsd: newAmountUsd, exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
+              ],
+            });
+          }
         }
       } else if (bonus.bonusType === 'FREE_DEVICES' && input.freeDevice) {
         const bonusDevice = bonus.freeDevices[0];
@@ -496,7 +501,9 @@ export class SuppliersService {
         }
       } else if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.amountUsd) {
         await replaceOwnerAllocations(tx, readOwnerAllocations(bonus.ownerProfitAllocations), [], 1, true);
-        await tx.ledgerEntry.deleteMany({ where: { referenceId: id, type: 'SUPPLIER_BONUS' } });
+        await tx.ledgerEntry.create({
+          data: { type: 'SUPPLIER_BONUS', description: `Сторно (удаление бонуса от ${bonus.supplier.name}): −$${bonus.amountUsd}`, amountUsd: D(bonus.amountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
+        });
       }
 
       await tx.supplierBonus.delete({ where: { id } });

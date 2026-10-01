@@ -1,9 +1,10 @@
-import { D, decimalMax, moneyJson, type MoneyInput } from '../../common/decimal';
+import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
-import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
 import { moneyEquals, requireFiniteNumber, requireNonNegativeMoney, requirePositiveMoney, roundMoney } from '../../common/money';
 import { allocateOwnerProfit } from '../sales/profit';
+import { getOwnersForStore } from '../finance/owner-allocations';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 
@@ -36,8 +37,7 @@ export class ExchangesService {
 
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, input.processedByUserId);
-      const rate = await getRateForDate(new Date());
-      if (!rate) throw new Error('Сначала задайте курс валют');
+      const rate = await requireTodayRate(tx);
 
       const sale = await tx.sale.findUnique({ where: { id: input.saleId }, include: { saleItems: true } });
       if (!sale) throw new Error('Продажа не найдена');
@@ -55,6 +55,11 @@ export class ExchangesService {
       if (!matchedItem) throw new Error('В указанном чеке не найдена позиция с этим IMEI');
 
       if (replacementDevice.id === matchedItem.deviceId) throw new Error('Нельзя обменять устройство на него же');
+      // The credit is for the very device sold on this receipt, so it can't exceed what the
+      // customer paid for it — anything above would hand out cash the sale never took in.
+      if (D(exchangeInValueTjs).gt(matchedItem.salePriceTjs)) {
+        throw new Error(`Зачётная стоимость не может превышать цену этой позиции в чеке (${matchedItem.salePriceTjs} TJS)`);
+      }
 
       const exchangeInValueUsd = roundMoney(D(exchangeInValueTjs).div(rate));
       const newPriceUsd = roundMoney(D(newPriceTjs).div(rate));
@@ -106,9 +111,14 @@ export class ExchangesService {
         },
       });
 
-      const newTotalTjs = decimalMax(0, D(sale.totalTjs).plus(diffTjs));
-      const newTotalUsd = roundMoney(D(sale.totalUsd).plus(D(diffTjs).div(rate)));
-      const exchangeProfitUsd = roundMoney(D(newPriceUsd).minus(replacementDevice.costBasisUsd));
+      const diffUsd = roundMoney(D(newPriceUsd).minus(exchangeInValueUsd));
+      const newTotalTjs = D(sale.totalTjs).plus(diffTjs);
+      const newTotalUsd = roundMoney(D(sale.totalUsd).plus(diffUsd));
+      // Same rule as a sale: a replacement that cost nothing is a bonus device, so its price
+      // goes to the bonus pool instead of straight to the owners.
+      const isBonusReplacement = Boolean((replacementDevice.isBonus || replacementDevice.bonusCampaign) && D(replacementDevice.costBasisUsd).eq(0));
+      const exchangeProfitUsd = isBonusReplacement ? D(0) : roundMoney(D(newPriceUsd).minus(replacementDevice.costBasisUsd));
+      const bonusProfitUsd = isBonusReplacement ? newPriceUsd : D(0);
 
       await tx.saleItem.update({
         where: { id: matchedItem.id },
@@ -124,8 +134,27 @@ export class ExchangesService {
           salePriceUsd: newPriceUsd,
           purchaseCostUsd: replacementDevice.purchasePriceUsd,
           costBasisUsd: replacementDevice.costBasisUsd,
+          isBelowCost: !isBonusReplacement && D(newPriceUsd).lt(replacementDevice.costBasisUsd),
+          isBonus: isBonusReplacement,
         },
       });
+
+      if (isBonusReplacement) {
+        await tx.bonusPoolEntry.create({
+          data: {
+            deviceId: replacementDevice.id,
+            saleId: sale.id,
+            imei: replacementDevice.imei,
+            brand: replacementDevice.brand,
+            model: replacementDevice.model,
+            salePriceUsd: newPriceUsd,
+            salePriceTjs: newPriceTjs,
+            profitUsd: newPriceUsd,
+            profitTjs: newPriceTjs,
+            status: 'PENDING',
+          },
+        });
+      }
 
       const updatedSale = await tx.sale.update({
         where: { id: sale.id },
@@ -163,10 +192,13 @@ export class ExchangesService {
 
       const store = await tx.store.findUnique({ where: { id: sale.storeId } });
       const cashDelta = paymentMethod === 'CASH' ? diffTjs : 0;
+      // In USD the settlement is exactly the new price minus the credit, both at today's rate —
+      // the same figures the exchange books as revenue, so register and report agree to the cent.
+      const cashDeltaUsd = paymentMethod === 'CASH' ? diffUsd : D(0);
       if (!D(cashDelta).eq(0) && store) {
-        const cashGuard = D(cashDelta).lt(0)
-          ? await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceTjs: { gte: D(cashDelta).abs() } }, data: { cashBalanceTjs: { increment: cashDelta } } })
-          : await tx.store.updateMany({ where: { id: sale.storeId }, data: { cashBalanceTjs: { increment: cashDelta } } });
+        const cashGuard = D(cashDeltaUsd).lt(0)
+          ? await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceUsd: { gte: D(cashDeltaUsd).abs() } }, data: { cashBalanceUsd: { increment: cashDeltaUsd } } })
+          : await tx.store.updateMany({ where: { id: sale.storeId }, data: { cashBalanceUsd: { increment: cashDeltaUsd } } });
         if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для выплаты разницы клиенту');
 
         const cashAccount = await getStoreCashAccount(tx, sale.storeId, store.name);
@@ -175,12 +207,12 @@ export class ExchangesService {
           direction: D(cashDelta).gt(0) ? 'IN' : 'OUT',
           numberPrefix: D(cashDelta).gt(0) ? 'CR' : 'RF',
           accountId: cashAccount.id,
-          balanceCurrency: 'TJS',
+          balanceCurrency: 'USD',
           amount: D(cashDelta).abs(),
           currency: 'TJS',
           exchangeRate: rate,
           amountTjs: D(cashDelta).abs(),
-          amountUsd: roundMoney(D(D(cashDelta).abs()).div(rate)),
+          amountUsd: D(cashDeltaUsd).abs(),
           categoryName: D(cashDelta).gt(0) ? 'Продажа' : 'Возврат покупателю',
           shopId: sale.storeId,
           sourceType: 'SALE',
@@ -193,9 +225,9 @@ export class ExchangesService {
       // Incremental exchange profit is the new device's selling price minus its cost.
       // The original sale profit remains booked; the returned device comes back as an
       // asset at the agreed trade-in value, which offsets the customer's trade-in credit.
-      const owners = await tx.owner.findMany();
+      const owners = await getOwnersForStore(tx, sale.storeId);
       const ownerProfitAllocations = allocateOwnerProfit(exchangeProfitUsd, owners);
-      await Promise.all(ownerProfitAllocations.map(({ ownerId, amountUsd: delta }) => {
+      await Promise.all(ownerProfitAllocations.filter(({ amountUsd }) => !D(amountUsd).isZero()).map(({ ownerId, amountUsd: delta }) => {
         return tx.owner.update({
           where: { id: ownerId },
           data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
@@ -207,7 +239,7 @@ export class ExchangesService {
           type: 'EXCHANGE_SETTLEMENT',
           description: `Обмен по чеку #${sale.receiptNumber}: ${returnedDevice.model} → ${replacementDevice.model}`,
           amountTjs: diffTjs,
-          amountUsd: roundMoney(D(diffTjs).div(rate)),
+          amountUsd: diffUsd,
           exchangeRate: rate,
           storeId: sale.storeId,
           storeName: store?.name,
@@ -225,7 +257,7 @@ export class ExchangesService {
           details: `Чек #${sale.receiptNumber}: обмен ${returnedDevice.model} (IMEI ${returnedDevice.imei}) на ${replacementDevice.model} (IMEI ${replacementDevice.imei}). Расчет: ${D(diffTjs).gte(0) ? '+' : ''}${diffTjs} TJS`,
           // returnedDeviceId/returnedCostBasisUsd let a later refund of this sale restore the
           // traded-in device's original cost basis (see exchangeCostRestorations).
-          financialDetails: moneyJson({ returnedDeviceId: returnedDevice.id, returnedCostBasisUsd: returnedDevice.costBasisUsd, exchangeInValueTjs, exchangeInValueUsd, newPriceTjs, newPriceUsd, differenceTjs: diffTjs, exchangeProfitUsd, ownerProfitAllocations: moneyJson(ownerProfitAllocations) }),
+          financialDetails: moneyJson({ returnedDeviceId: returnedDevice.id, returnedCostBasisUsd: returnedDevice.costBasisUsd, exchangeInValueTjs, exchangeInValueUsd, newPriceTjs, newPriceUsd, differenceTjs: diffTjs, exchangeProfitUsd, bonusProfitUsd, ownerProfitAllocations: moneyJson(ownerProfitAllocations) }),
           receiptNumber: sale.receiptNumber,
           targetId: sale.id,
         },

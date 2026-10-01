@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { decimal, moneyNumber, sumMoney } from '../../utils/money';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
@@ -16,6 +17,7 @@ import {
   PiggyBank,
   ChevronDown,
   Users,
+  Sparkles,
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
@@ -39,7 +41,7 @@ interface ExpenseBreakdown {
 interface StoreBreakdown extends ExpenseBreakdown {
   storeId: string; storeName: string; revenueUsd: number; revenueTjs: number; cogsUsd: number; cogsTjs: number;
   profitUsd: number; profitTjs: number; refundPenaltiesUsd: number; netProfitUsd: number; netProfitTjs: number;
-  unitsSold: number; salesCount: number; cashTjs: number;
+  unitsSold: number; salesCount: number; cashUsd: number; cashTjs: number;
   stockCount: number; stockCostUsd: number; stockCostTjs: number;
   topModels: { name: string; count: number; revenueUsd: number; profitUsd: number }[];
 }
@@ -300,11 +302,8 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
         netProfitTjs: data.netProfitTjs, netProfitUsd: data.netProfitUsd,
       };
     } else {
-      const expensesTjs = reportExpenses.reduce((total, expense) => total + (expense.amountTjs || 0), 0);
-      const expensesUsd = reportExpenses.reduce(
-        (total, expense) => total + (expense.amountUsd ?? ((expense.amountTjs || 0) / (expense.exchangeRate || rate))),
-        0,
-      );
+      const expensesTjs = sumMoney(reportExpenses.map((expense) => expense.amountTjs || 0));
+      const expensesUsd = sumMoney(reportExpenses.map((expense) => expense.amountUsd ?? moneyNumber((expense.amountTjs || 0) / (expense.exchangeRate || rate))));
       const revenueTjs = breakdown?.revenueTjs ?? 0;
       const revenueUsd = breakdown?.revenueUsd ?? 0;
       const cogsTjs = breakdown?.cogsTjs ?? 0;
@@ -325,7 +324,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
         expensesTjs: +expensesTjs.toFixed(2),
         expensesUsd: +expensesUsd.toFixed(2),
         netProfitTjs: +(profitTjs - expensesTjs).toFixed(2),
-        netProfitUsd: +(profitUsd - expensesUsd).toFixed(2),
+        netProfitUsd: moneyNumber(decimal(profitUsd).minus(expensesUsd)),
       };
     }
 
@@ -397,29 +396,61 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
               </div>
             </div>
 
-            {/* How net profit is built — the same numbers as the cards, laid out as a sum. */}
-            <div className="p-3.5 rounded-xl bg-surface border border-border space-y-1.5 text-sm">
-              <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mb-1">Как считается чистая прибыль</h4>
-              {[
-                ...(data.refundsCount
-                  ? [
-                      { label: 'Продажи и обмены', value: usd(data.revenueUsd + data.refundsRevenueUsd) },
-                      { label: `Возвраты за период (${data.refundsCount})`, value: `−${usd(data.refundsRevenueUsd)}` },
-                    ]
-                  : [{ label: 'Выручка', value: usd(data.revenueUsd) }]),
-                { label: 'Себестоимость проданного', value: `−${usd(data.cogsUsd)}` },
-                ...(data.periodRefundPenaltiesUsd ? [{ label: 'Удержано при возвратах', value: `+${usd(data.periodRefundPenaltiesUsd)}` }] : []),
-                ...(data.periodCashBonusesUsd ? [{ label: 'Бонусы поставщиков', value: `+${usd(data.periodCashBonusesUsd)}` }] : []),
-                { label: 'Расходы', value: `−${usd(data.expensesUsd)}` },
-              ].map((row) => (
-                <div key={row.label} className="flex items-center justify-between text-fg-muted">
-                  <span>{row.label}</span>
-                  <span className="font-semibold">{row.value}</span>
+            {/* How net profit is built — clearly distinguishing core operations from separate bonus income */}
+            <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2.5 text-sm">
+              <div className="flex items-center justify-between pb-1 border-b border-border">
+                <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">Как считается чистая прибыль</h4>
+                <span className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded-md border border-accent/20">
+                  Операционная деятельность
+                </span>
+              </div>
+              <div className="space-y-1.5">
+                {[
+                  ...(data.refundsCount
+                    ? [
+                        { label: 'Продажи и обмены', value: usd(data.revenueUsd + data.refundsRevenueUsd) },
+                        { label: `Возвраты за период (${data.refundsCount})`, value: `−${usd(data.refundsRevenueUsd)}` },
+                      ]
+                    : [{ label: 'Выручка', value: usd(data.revenueUsd) }]),
+                  { label: 'Себестоимость проданного', value: `−${usd(data.cogsUsd)}` },
+                  ...(data.periodRefundPenaltiesUsd ? [{ label: 'Удержано при возвратах', value: `+${usd(data.periodRefundPenaltiesUsd)}` }] : []),
+                  { label: 'Расходы (включая зарплату)', value: `−${usd(data.expensesUsd)}` },
+                ].map((row) => (
+                  <div key={row.label} className="flex items-center justify-between text-fg-muted">
+                    <span>{row.label}</span>
+                    <span className="font-semibold">{row.value}</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex items-center justify-between pt-1.5 border-t border-border font-bold">
+                <span>Операционная чистая прибыль</span>
+                <span className={(data.netProfitUsd - (data.periodCashBonusesUsd || 0)) >= 0 ? 'text-accent' : 'text-danger'}>
+                  {signedUsd(+(data.netProfitUsd - (data.periodCashBonusesUsd || 0)).toFixed(2))}
+                </span>
+              </div>
+
+              {/* Separate Bonus Income Section */}
+              <div className="pt-2 border-t border-dashed border-border/80 space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-semibold text-info flex items-center gap-1.5">
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>Бонусы поставщиков (отдельный учет)</span>
+                  </span>
+                  <span className="text-xs font-bold text-info">
+                    +{usd(data.periodCashBonusesUsd || 0)}
+                  </span>
                 </div>
-              ))}
-              <div className="flex items-center justify-between pt-1.5 mt-1 border-t border-border font-bold">
-                <span>Чистая прибыль</span>
-                <span className={data.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}>{signedUsd(data.netProfitUsd)}</span>
+                <div className="flex items-center justify-between text-[11px] text-fg-subtle">
+                  <span>Доход от бонусных устройств (в бонусном пуле)</span>
+                  <span className="font-medium text-fg-muted">{usd(data.giftDeviceProfitUsd || 0)}</span>
+                </div>
+                <div className="flex items-center justify-between pt-1 border-t border-border font-bold text-xs">
+                  <span>Итого совокупный результат</span>
+                  <span className={data.netProfitUsd >= 0 ? 'text-fg font-black' : 'text-danger font-black'}>
+                    {signedUsd(data.netProfitUsd)}
+                  </span>
+                </div>
               </div>
             </div>
 
@@ -673,7 +704,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                       tone="danger"
                     />
                     <Metric label="Чистая прибыль" value={signedUsd(store.netProfitUsd)} tone={store.netProfitUsd >= 0 ? 'accent' : 'danger'} />
-                    <Metric label="Касса сейчас" value={tjs(store.cashTjs)} />
+                    <Metric label="Касса сейчас" value={usd(store.cashUsd)} />
                     <Metric label="Товар на складе" value={`${store.stockCount} шт`} sub={usd(store.stockCostUsd)} />
                     {store.refundPenaltiesUsd > 0 && <Metric label="Удержано при возвратах" value={`+${usd(store.refundPenaltiesUsd)}`} />}
                   </div>

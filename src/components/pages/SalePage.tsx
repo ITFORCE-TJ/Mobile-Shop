@@ -67,6 +67,7 @@ export const SalePage: React.FC = () => {
   const [completedReceiptNumber, setCompletedReceiptNumber] = useState<number | null>(null);
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
+  const isRealAdmin = currentUser?.role === 'ADMIN';
   const isSeller = currentUser?.role === 'SELLER';
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
   const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
@@ -208,7 +209,7 @@ export const SalePage: React.FC = () => {
 
   const totalTjs = sumMoney(cart.map(item => item.salePriceTjs && item.salePriceTjs > 0 ? item.salePriceTjs : 0));
   const hasEmptyPrice = cart.some(item => item.salePriceTjs === undefined || item.salePriceTjs <= 0);
-  const totalUsd = todayRate ? +(totalTjs / todayRate.rate).toFixed(2) : 0;
+  const totalUsd = todayRate ? moneyNumber(decimal(totalTjs).div(todayRate.rate)) : 0;
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
 
   const isItemBelowCost = (item: CartItem) => {
@@ -415,12 +416,12 @@ export const SalePage: React.FC = () => {
 
                 {isExpanded && (
                   <div className="bg-surface/60 border-t border-border px-4 py-2 space-y-2">
-                    {hasCostVariance && (
+                    {isRealAdmin && hasCostVariance && (
                       <p className="text-xs text-warning font-medium">Рекомендуется первым продать экземпляр за ${maxCost}</p>
                     )}
                     {sortedDevices.map((dev) => {
                       const devCost = dev.purchaseCostUsd ?? dev.costBasisUsd ?? 0;
-                      const isHighestCost = hasCostVariance && devCost === maxCost;
+                      const isHighestCost = isRealAdmin && hasCostVariance && devCost === maxCost;
                       return (
                         <button
                           key={dev.id}
@@ -433,9 +434,11 @@ export const SalePage: React.FC = () => {
                             <p className="text-xs font-semibold text-fg-muted">
                               IMEI: {dev.imei}{dev.imei2 ? ` / ${dev.imei2}` : ''}
                             </p>
-                            <p className="text-xs text-fg-subtle mt-0.5">
-                              Закупка: ${devCost}
-                            </p>
+                            {isRealAdmin && devCost > 0 && (
+                              <p className="text-xs text-fg-subtle mt-0.5">
+                                Закупка: ${devCost}
+                              </p>
+                            )}
                           </div>
                           <Badge tone={isHighestCost ? 'warning' : 'accent'}>Выбрать</Badge>
                         </button>

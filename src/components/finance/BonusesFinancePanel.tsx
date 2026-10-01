@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import { decimal, moneyNumber } from '../../utils/money';
 import { useAppFields } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
 import { mapSale, buildNameLookup } from '../../api/mappers';
@@ -302,8 +303,8 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
         const itemCost = item.costBasisUsd ?? item.purchaseCostUsd ?? 0;
         const isBonusDevice = itemCost === 0 || bonusDeviceIds.has(item.deviceId) || bonusDeviceIds.has(item.imei);
         if (isBonusDevice) {
-          const salePriceUsd = item.salePriceUsd || (sale.exchangeRate ? item.salePriceTjs / sale.exchangeRate : item.salePriceTjs / rate);
-          const salePriceTjs = item.salePriceTjs || (sale.exchangeRate ? salePriceUsd * sale.exchangeRate : salePriceUsd * rate);
+          const salePriceUsd = item.salePriceUsd || moneyNumber(decimal(item.salePriceTjs).div(sale.exchangeRate || rate));
+          const salePriceTjs = item.salePriceTjs || moneyNumber(decimal(salePriceUsd).mul(sale.exchangeRate || rate));
           results.push({
             saleId: sale.id,
             receiptNumber: sale.receiptNumber,
@@ -509,7 +510,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
         </div>
 
         {/* QUARTERLY BONUS PROFIT POOL (РУЧНОЕ РАСПРЕДЕЛЕНИЕ И ОБНУЛЕНИЕ) */}
-        <div className="rounded-2xl border-2 border-emerald-500/30 bg-gradient-to-br from-emerald-500/10 via-surface to-surface overflow-hidden shadow-xs">
+        <div className="rounded-2xl border-2 border-emerald-500/30 bg-linear-to-br from-emerald-500/10 via-surface to-surface overflow-hidden shadow-xs">
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="space-y-1">
@@ -1458,6 +1459,13 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                 <div className="p-2 rounded-lg bg-danger/10 border border-danger/30 text-danger text-[11px] flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
                   <span>Сумма распределения превышает остаток пула (${poolPendingUsd.toFixed(2)})</span>
+                </div>
+              )}
+
+              {totalAllocatedUsd > 0 && remainingPoolUsd > 0 && (
+                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-[11px] flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Нераспределённый остаток ${remainingPoolUsd.toFixed(2)} будет списан из пула</span>
                 </div>
               )}
 

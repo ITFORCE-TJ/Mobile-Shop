@@ -97,7 +97,7 @@ export const TopBar: React.FC = () => {
                   title="Сменить магазин"
                 >
                   <Store className="w-3.5 h-3.5" />
-                  <span className="max-w-[120px] sm:max-w-none truncate">{activeRetailStore?.name || 'Магазин'}</span>
+                  <span className="max-w-30 sm:max-w-none truncate">{activeRetailStore?.name || 'Магазин'}</span>
                 </button>
                 <button
                   type="button"

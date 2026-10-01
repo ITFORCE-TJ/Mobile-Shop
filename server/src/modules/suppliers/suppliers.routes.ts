@@ -10,10 +10,9 @@ import { dateRangeForPeriod, type ReportPeriod } from '../reports/reports.servic
 const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'];
 
 export function registerSupplierRoutes(app: Express) {
-  // Suppliers/invoices/bonuses are ADMIN+PARTNER-only, matching Sidebar's declared
-  // access for the Suppliers/Bonuses pages — a SELLER has no legitimate need to read
-  // supplier debt/payment data and must not be able to via a direct API call.
-  app.get('/api/suppliers', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (_req, res, next) => {
+  // Suppliers and invoices contain confidential purchase costs and debt,
+  // and are restricted strictly to ADMIN.
+  app.get('/api/suppliers', authenticateJwt, requireRoles('ADMIN'), async (_req, res, next) => {
     try {
       res.json(await prisma.supplier.findMany({ orderBy: { name: 'asc' } }));
     } catch (error) {
@@ -21,7 +20,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.get('/api/supplier-invoices', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.get('/api/supplier-invoices', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       // A caller looking up one specific invoice (scanning a device to find its приход)
       // needs to reach any point in history — so it runs its own targeted search instead
@@ -80,7 +79,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.post('/api/suppliers', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/suppliers', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const supplier = await SuppliersService.create(req.body ?? {}, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -90,7 +89,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.post('/api/suppliers/:id/payments', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/suppliers/:id/payments', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, sourceAccount, sourceAccountId, storeId, note } = req.body ?? {};
       if (!amountUsd) {
@@ -99,7 +98,7 @@ export function registerSupplierRoutes(app: Express) {
       }
       const centralStore = await prisma.store.findFirst({
         where: { isMainWarehouse: true, active: true },
-        orderBy: { cashBalanceTjs: 'desc' },
+        orderBy: { cashBalanceUsd: 'desc' },
       }) ?? await prisma.store.findFirst({ where: { active: true } });
       const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
       if (!resolvedStoreId) {
@@ -122,7 +121,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.post('/api/supplier-invoices/:id/payments', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/supplier-invoices/:id/payments', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, sourceAccount, sourceAccountId, storeId } = req.body ?? {};
       if (!amountUsd) {
@@ -131,7 +130,7 @@ export function registerSupplierRoutes(app: Express) {
       }
       const centralStore = await prisma.store.findFirst({
         where: { isMainWarehouse: true, active: true },
-        orderBy: { cashBalanceTjs: 'desc' },
+        orderBy: { cashBalanceUsd: 'desc' },
       }) ?? await prisma.store.findFirst({ where: { active: true } });
       const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
       if (!resolvedStoreId) {
@@ -183,7 +182,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.put('/api/suppliers/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.put('/api/suppliers/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const supplier = await SuppliersService.update(req.params.id, req.body ?? {}, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -193,7 +192,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.delete('/api/suppliers/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.delete('/api/suppliers/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await SuppliersService.delete(req.params.id, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -203,7 +202,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.put('/api/supplier-invoices/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.put('/api/supplier-invoices/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const invoice = await SuppliersService.updateInvoice(req.params.id, req.body ?? {}, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -213,7 +212,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.delete('/api/supplier-invoices/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.delete('/api/supplier-invoices/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await SuppliersService.deleteInvoice(req.params.id, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});

@@ -1,7 +1,50 @@
 import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma } from '../../prisma/prisma.service';
+import type { TransactionClient } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
 import { requireNonNegativeMoney, roundMoney } from '../../common/money';
+import { allocateMoney } from '../../common/allocation';
+import type { OwnerProfitAllocation } from '../sales/profit';
+
+/**
+ * A refunded sale takes back the bonus profit its devices already paid out. Each owner
+ * returns what they actually received for these entries: the distribution's allocations,
+ * scaled by how much of that pool was handed out (a partial distribution annuls the rest).
+ * Returns negative per-owner deltas; the caller applies them with the rest of the refund.
+ */
+export async function reverseDistributedBonus(tx: TransactionClient, saleId: string, note: string, actorName: string): Promise<OwnerProfitAllocation[]> {
+  const entries = await tx.bonusPoolEntry.findMany({ where: { saleId, status: 'DISTRIBUTED', annulledAt: null } });
+  const deltas = new Map<string, ReturnType<typeof D>>();
+  const byDistribution = new Map<string, typeof entries>();
+  for (const entry of entries) {
+    if (!entry.distributionId) throw new Error('Не найдено распределение бонусной прибыли для этого чека. Требуется сверка');
+    byDistribution.set(entry.distributionId, [...(byDistribution.get(entry.distributionId) ?? []), entry]);
+  }
+  for (const [distributionId, saleEntries] of byDistribution) {
+    const log = await tx.bonusDistributionLog.findUnique({ where: { id: distributionId } });
+    const allocations = Array.isArray(log?.allocations) ? (log!.allocations as { ownerId?: unknown; amountUsd?: unknown }[]) : [];
+    if (!log || !allocations.length || allocations.some((a) => typeof a?.ownerId !== 'string' || typeof a?.amountUsd !== 'number')) {
+      throw new Error('Не сохранено распределение бонусной прибыли для этого чека. Требуется сверка');
+    }
+    const pool = (await tx.bonusPoolEntry.findMany({ where: { distributionId }, select: { profitUsd: true } }))
+      .reduce((sum, e) => sum.plus(e.profitUsd), D(0));
+    const share = saleEntries.reduce((sum, e) => sum.plus(e.profitUsd), D(0));
+    if (pool.lte(0)) continue;
+    const paidOut = roundMoney(D(log.totalAmountUsd).mul(share).div(pool));
+    const perOwner = allocateMoney(paidOut, allocations.map((a) => a.amountUsd as number));
+    allocations.forEach((a, i) => {
+      const ownerId = a.ownerId as string;
+      deltas.set(ownerId, (deltas.get(ownerId) ?? D(0)).minus(perOwner[i]));
+    });
+  }
+  if (entries.length) {
+    await tx.bonusPoolEntry.updateMany({
+      where: { id: { in: entries.map((e) => e.id) } },
+      data: { annulledAt: new Date(), annulledBy: actorName, annulledNote: note },
+    });
+  }
+  return Array.from(deltas, ([ownerId, amountUsd]) => ({ ownerId, amountUsd: roundMoney(amountUsd) }));
+}
 
 export interface DistributeBonusInput {
   periodName: string;
@@ -128,8 +171,10 @@ export class BonusesService {
         });
       }
 
-      await tx.bonusPoolEntry.updateMany({
-        where: { status: 'PENDING' },
+      // Exactly the entries summed above: one added meanwhile waits for the next distribution,
+      // and a concurrent distribution of the same entries is rejected instead of doubled.
+      const distributed = await tx.bonusPoolEntry.updateMany({
+        where: { id: { in: pendingEntries.map((e) => e.id) }, status: 'PENDING' },
         data: {
           status: 'DISTRIBUTED',
           distributionId: log.id,
@@ -138,6 +183,24 @@ export class BonusesService {
           distributionNote: input.note?.trim() || input.periodName.trim(),
         },
       });
+      if (distributed.count !== pendingEntries.length) throw new Error('Бонусный пул изменился во время распределения. Обновите данные и повторите');
+
+      // Every pending entry is closed by this distribution, so whatever wasn't handed out is
+      // written off explicitly instead of silently vanishing from the pool.
+      const remainderUsd = roundMoney(D(totalPoolUsd).minus(totalAllocatedUsd));
+      if (remainderUsd.gt(0)) {
+        await tx.bonusDistributionLog.create({
+          data: {
+            periodName: input.periodName.trim(),
+            totalAmountUsd: remainderUsd,
+            type: 'ANNULMENT',
+            allocations: [],
+            note: `Нераспределённый остаток бонусного пула при распределении «${input.periodName.trim()}»`,
+            performedByUserId: actor.id,
+            performedByName: actor.name,
+          },
+        });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -145,10 +208,11 @@ export class BonusesService {
           userName: actor.name,
           userRole: actor.role,
           action: 'BONUS_PROFIT_DISTRIBUTED',
-          details: `Распределена бонусная прибыль за ${input.periodName}: $${totalAllocatedUsd} среди ${normalizedAllocations.length} партнёров`,
+          details: `Распределена бонусная прибыль за ${input.periodName}: $${totalAllocatedUsd} среди ${normalizedAllocations.length} партнёров${remainderUsd.gt(0) ? `; нераспределённый остаток $${remainderUsd} списан` : ''}`,
           financialDetails: moneyJson({
             periodName: input.periodName,
             totalAllocatedUsd,
+            annulledRemainderUsd: remainderUsd,
             allocations: normalizedAllocations,
           }),
         },

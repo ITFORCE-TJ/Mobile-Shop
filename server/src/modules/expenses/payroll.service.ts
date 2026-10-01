@@ -19,7 +19,8 @@ async function readSummary(tx: TransactionClient, employeeId: string, month: str
         AND (p.month = ${month} OR (p.expense_id IS NULL AND e."createdAt" >= ${range.gte} AND e."createdAt" < ${range.lt}))
         THEN e."amountTjs" ELSE 0 END), 0) AS salary,
       COALESCE(SUM(CASE WHEN (e.category = 'EMPLOYEE_ADVANCE' OR e."isEmployeeAdvance")
-        AND e."createdAt" >= ${range.gte} AND e."createdAt" < ${range.lt}
+        AND (e."payrollMonth" = ${month}
+          OR (e."payrollMonth" IS NULL AND e."createdAt" >= ${range.gte} AND e."createdAt" < ${range.lt}))
         THEN e."amountTjs" ELSE 0 END), 0) AS advances
     FROM expenses e LEFT JOIN payroll_payouts p ON p.expense_id = e.id
     WHERE e."employeeId" = ${employeeId} AND e.status = 'PAID' AND e."cancelledAt" IS NULL`;

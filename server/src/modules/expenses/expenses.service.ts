@@ -2,7 +2,7 @@ import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma } from '../../prisma/prisma.service';
 import type { TransactionClient } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
-import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { requireTodayRate, getBusinessDateKey } from '../exchange-rate/exchange-rate.service';
 import { requirePositiveMoney, roundMoney } from '../../common/money';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction, cancelTransaction } from '../finance/financial-transaction.service';
@@ -24,6 +24,8 @@ interface CreateExpenseInput {
   paidFromCashRegister?: boolean;
   employeeId?: string;
   isEmployeeAdvance?: boolean;
+  /** 'YYYY-MM' payroll month an advance is deducted from; defaults to the current month. */
+  payrollMonth?: string;
   createdByUserId: string;
 }
 
@@ -31,11 +33,11 @@ async function getCentralStore(tx: TransactionClient) {
   return (
     (await tx.store.findFirst({
       where: { isMainWarehouse: true, active: true },
-      orderBy: { cashBalanceTjs: 'desc' },
+      orderBy: { cashBalanceUsd: 'desc' },
     })) ??
     (await tx.store.findFirst({
       where: { isMainWarehouse: true },
-      orderBy: { cashBalanceTjs: 'desc' },
+      orderBy: { cashBalanceUsd: 'desc' },
     }))
   );
 }
@@ -45,8 +47,14 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
   if (input.employeeId) await tx.$queryRaw`SELECT id FROM users WHERE id = ${input.employeeId} FOR UPDATE`;
   const actor = await resolveActor(tx, input.createdByUserId);
   const amountTjs = requirePositiveMoney(input.amountTjs, 'Сумма расхода');
-  const rate = await getRateForDate(new Date());
-  if (!rate) throw new Error('Сначала задайте курс валют на сегодня');
+  const isAdvance = Boolean(input.isEmployeeAdvance) || input.category === 'EMPLOYEE_ADVANCE';
+  if (input.payrollMonth !== undefined && input.payrollMonth !== null && !/^\d{4}-(0[1-9]|1[0-2])$/.test(String(input.payrollMonth))) {
+    throw new Error('Укажите месяц зарплаты в формате ГГГГ-ММ');
+  }
+  // An advance counts against the payroll month it is given for, which can differ from the
+  // day it is handed out (a September advance paid on 1 October still belongs to September).
+  const payrollMonth = isAdvance ? (input.payrollMonth || getBusinessDateKey().slice(0, 7)) : null;
+  const rate = await requireTodayRate(tx);
   const amountUsd = roundMoney(D(amountTjs).div(rate));
   const resolvedTargetType = input.targetType || (input.storeId ? 'STORE' : 'BUSINESS');
 
@@ -65,7 +73,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
   const resolvedSource = writesOffCash
     ? (input.sourceAccount || (cashStore?.isMainWarehouse ? 'Центральная касса' : `Касса ${cashStore?.name ?? ''}`))
     : input.sourceAccount || null;
-  const ownerProfitAllocations = await currentOwnerAllocations(tx, amountUsd);
+  const ownerProfitAllocations = await currentOwnerAllocations(tx, amountUsd, input.storeId);
 
   const expense = await tx.expense.create({
     data: {
@@ -85,14 +93,15 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       paidAt: writesOffCash ? new Date() : null,
       employeeId: input.employeeId,
       isEmployeeAdvance: input.isEmployeeAdvance ?? false,
+      payrollMonth,
     },
   });
 
   if (writesOffCash) {
     if (!cashStore) throw new Error('Касса для списания расхода не найдена');
     const cashGuard = await tx.store.updateMany({
-      where: { id: cashStore.id, cashBalanceTjs: { gte: amountTjs } },
-      data: { cashBalanceTjs: { decrement: amountTjs } },
+      where: { id: cashStore.id, cashBalanceUsd: { gte: amountUsd } },
+      data: { cashBalanceUsd: { decrement: amountUsd } },
     });
     if (!D(cashGuard.count).eq(1)) {
       throw new Error(cashStore.isMainWarehouse
@@ -107,7 +116,7 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
       direction: 'OUT',
       numberPrefix: 'CE',
       accountId: cashAccount.id,
-      balanceCurrency: 'TJS',
+      balanceCurrency: 'USD',
       amount: amountTjs,
       currency: 'TJS',
       exchangeRate: rate,
@@ -176,9 +185,13 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
     const cashStore = centralStore || fallbackStore;
     if (!cashStore) throw new Error('Центральная касса не найдена');
 
+    // The expense was fixed in USD on the day it was registered; paying it later takes exactly
+    // that USD amount out of the register.
+    const rate = existing.exchangeRate || (await requireTodayRate(tx));
+    const paidUsd = existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(rate));
     const cashGuard = await tx.store.updateMany({
-      where: { id: cashStore.id, cashBalanceTjs: { gte: existing.amountTjs } },
-      data: { cashBalanceTjs: { decrement: existing.amountTjs } },
+      where: { id: cashStore.id, cashBalanceUsd: { gte: paidUsd } },
+      data: { cashBalanceUsd: { decrement: paidUsd } },
     });
     if (!D(cashGuard.count).eq(1)) {
       throw new Error(cashStore.isMainWarehouse
@@ -187,9 +200,7 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
       );
     }
 
-    const rate = existing.exchangeRate || (await getRateForDate(new Date()));
-    if (!rate) throw new Error('Не найден курс валют для расхода');
-    const amountUsd = existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(rate));
+    const amountUsd = paidUsd;
     const description = existing.comment || existing.description || `Расход: ${existing.category}`;
 
     const cashAccount = await getStoreCashAccount(tx, cashStore.id, cashStore.name);
@@ -198,7 +209,7 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
       direction: 'OUT',
       numberPrefix: 'CE',
       accountId: cashAccount.id,
-      balanceCurrency: 'TJS',
+      balanceCurrency: 'USD',
       amount: existing.amountTjs,
       currency: 'TJS',
       exchangeRate: rate,
@@ -262,8 +273,7 @@ export async function updateExpense(
     }
 
     const actor = await resolveActor(tx, actorId);
-    const rate = existing.exchangeRate || (await getRateForDate(new Date()));
-    if (!rate) throw new Error('Не найден курс валют для пересчёта расхода');
+    const rate = existing.exchangeRate || (await requireTodayRate(tx));
 
     const newAmountTjs = input.amountTjs !== undefined ? requirePositiveMoney(input.amountTjs, 'Сумма расхода') : existing.amountTjs;
     const newAmountUsd = roundMoney(D(newAmountTjs).div(rate));
@@ -290,7 +300,7 @@ export async function updateExpense(
       if (oldCashStoreId) {
         await tx.store.update({
           where: { id: oldCashStoreId },
-          data: { cashBalanceTjs: { increment: existing.amountTjs } },
+          data: { cashBalanceUsd: { increment: existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(rate)) } },
         });
       }
     }
@@ -302,8 +312,8 @@ export async function updateExpense(
       const targetStore = isCentral ? (centralStore || newStore) : (newStore || centralStore);
       if (!targetStore) throw new Error('Касса для списания расхода не найдена');
       const cashGuard = await tx.store.updateMany({
-        where: { id: targetStore.id, cashBalanceTjs: { gte: newAmountTjs } },
-        data: { cashBalanceTjs: { decrement: newAmountTjs } },
+        where: { id: targetStore.id, cashBalanceUsd: { gte: newAmountUsd } },
+        data: { cashBalanceUsd: { decrement: newAmountUsd } },
       });
       if (!D(cashGuard.count).eq(1)) {
         throw new Error(targetStore.isMainWarehouse
@@ -321,7 +331,7 @@ export async function updateExpense(
     let ownerProfitAllocations;
     if (existing.amountUsd === null || !D(newAmountUsd).eq(existing.amountUsd)) {
       const previous = readOwnerAllocations(existing.ownerProfitAllocations);
-      ownerProfitAllocations = await currentOwnerAllocations(tx, newAmountUsd);
+      ownerProfitAllocations = await currentOwnerAllocations(tx, newAmountUsd, existing.storeId);
       await replaceOwnerAllocations(tx, previous, ownerProfitAllocations, -1);
     }
 
@@ -338,14 +348,31 @@ export async function updateExpense(
       },
     });
 
-    // Update corresponding ledger entries
-    await tx.ledgerEntry.updateMany({
-      where: { referenceId: id },
+    // The journal is append-only: reverse the original entry and book the edited one, so the
+    // history still shows what was recorded before the edit.
+    const ledgerType = (category: string) => (category === 'Зарплата' || category === 'SALARY' ? 'SALARY' : 'EXPENSE');
+    await tx.ledgerEntry.create({
       data: {
+        type: ledgerType(existing.category),
+        description: `Сторно (правка расхода): ${existing.comment || existing.description || `Расход: ${existing.category}`}`,
+        amountTjs: existing.amountTjs,
+        amountUsd: existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(rate)),
+        exchangeRate: rate,
+        storeId: existing.storeId,
+        userName: actor.name,
+        referenceId: id,
+      },
+    });
+    await tx.ledgerEntry.create({
+      data: {
+        type: ledgerType(newCategory),
+        description: newComment || newDescription || `Расход: ${newCategory}`,
         amountTjs: D(newAmountTjs).negated(),
         amountUsd: D(newAmountUsd).negated(),
-        description: newComment || newDescription || `Расход: ${newCategory}`,
+        exchangeRate: rate,
         storeId: newStoreId,
+        userName: actor.name,
+        referenceId: id,
       },
     });
 
@@ -355,7 +382,7 @@ export async function updateExpense(
         direction: 'OUT',
         numberPrefix: 'CE',
         accountId: newCashAccountId,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: newAmountTjs,
         currency: 'TJS',
         exchangeRate: rate,
@@ -405,7 +432,7 @@ export async function deleteExpense(id: string, actorId: string) {
       if (targetStoreId) {
         await tx.store.update({
           where: { id: targetStoreId },
-          data: { cashBalanceTjs: { increment: existing.amountTjs } },
+          data: { cashBalanceUsd: { increment: existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(existing.exchangeRate || (await requireTodayRate(tx)))) } },
         });
       }
     }
@@ -419,6 +446,18 @@ export async function deleteExpense(id: string, actorId: string) {
     if (existingTransaction) {
       await cancelTransaction(tx, existingTransaction.id, actor.id);
     }
+    await tx.ledgerEntry.create({
+      data: {
+        type: existing.category === 'Зарплата' || existing.category === 'SALARY' ? 'SALARY' : 'EXPENSE',
+        description: `Сторно (отмена расхода): ${existing.comment || existing.description || `Расход: ${existing.category}`}`,
+        amountTjs: existing.amountTjs,
+        amountUsd: existing.amountUsd,
+        exchangeRate: existing.exchangeRate,
+        storeId: existing.storeId,
+        userName: actor.name,
+        referenceId: id,
+      },
+    });
 
     await tx.auditLog.create({
       data: {

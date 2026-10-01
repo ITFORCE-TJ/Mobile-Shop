@@ -19,14 +19,14 @@ export function registerCashCollectionRoutes(app: Express) {
 
   app.post('/api/cash-collections', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const { storeId, amountTjs, comment } = req.body ?? {};
-      if (!storeId || amountTjs === undefined || amountTjs === null) {
-        res.status(400).json({ message: 'storeId и amountTjs обязательны' });
+      const { storeId, amountUsd, comment } = req.body ?? {};
+      if (!storeId || amountUsd === undefined || amountUsd === null) {
+        res.status(400).json({ message: 'Укажите магазин и сумму инкассации в долларах (amountUsd)' });
         return;
       }
       const result = await CashCollectionService.collect({
         storeId,
-        amountTjs,
+        amountUsd,
         comment: typeof comment === 'string' ? comment.trim() : undefined,
         actorUserId: req.user!.userId,
       });

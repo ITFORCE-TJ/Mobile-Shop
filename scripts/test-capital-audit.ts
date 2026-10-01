@@ -38,7 +38,7 @@ try {
     const owner = await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } });
     const store = await db.store.findFirstOrThrow({ where: { isMainWarehouse: true } });
     const account = await db.financialAccount.findUnique({ where: { storeId: store.id } });
-    return { capital: owner.capitalBalanceUsd.toString(), profit: owner.availableProfitUsd.toString(), paid: owner.totalPaidProfitUsd.toString(), reinvested: owner.totalReinvestedUsd.toString(), cash: store.cashBalanceTjs.toString(), account: account?.balanceTjs.toString(), tx: await db.ownerTransaction.count(), ledger: await db.ledgerEntry.count(), audit: await db.auditLog.count(), finance: await db.financialTransaction.count() };
+    return { capital: owner.capitalBalanceUsd.toString(), profit: owner.availableProfitUsd.toString(), paid: owner.totalPaidProfitUsd.toString(), reinvested: owner.totalReinvestedUsd.toString(), cash: store.cashBalanceUsd.toString(), account: account?.balanceUsd.toString(), tx: await db.ownerTransaction.count(), ledger: await db.ledgerEntry.count(), audit: await db.auditLog.count(), finance: await db.financialTransaction.count() };
   };
   const post = (kind: string, amountUsd: unknown, key?: string) => api('POST', `/owners/owner-admin/${kind}`, { amountUsd }, key);
   const ok = async (kind: string, amount: unknown) => {
@@ -48,14 +48,14 @@ try {
   await db.owner.updateMany({ data: { availableProfitUsd: 100, totalAccruedProfitUsd: 100 } });
   await ok('investment', '100.01');
   let s = await state();
-  assert.equal(s.capital, '100.01'); assert.equal(s.cash, '1000.1'); assert.equal(s.account, s.cash);
+  assert.equal(s.capital, '100.01'); assert.equal(s.cash, '100.01'); assert.equal(s.account, s.cash);
   assert.equal(s.tx, 1); assert.equal(s.finance, 1); assert.equal(s.profit, '100');
   pass('investment: exact Decimal amounts, cash/account reconciliation, one history row');
   await ok('withdrawal', '0.01');
-  s = await state(); assert.equal(s.capital, '100'); assert.equal(s.cash, '1000'); assert.equal(s.account, s.cash);
+  s = await state(); assert.equal(s.capital, '100'); assert.equal(s.cash, '100'); assert.equal(s.account, s.cash);
   pass('withdrawal: capital and both cash balances decrease exactly');
   await ok('payout', '10.01');
-  s = await state(); assert.equal(s.capital, '100'); assert.equal(s.profit, '89.99'); assert.equal(s.paid, '10.01'); assert.equal(s.cash, '899.9'); assert.equal(s.account, s.cash);
+  s = await state(); assert.equal(s.capital, '100'); assert.equal(s.profit, '89.99'); assert.equal(s.paid, '10.01'); assert.equal(s.cash, '89.99'); assert.equal(s.account, s.cash);
   pass('profit payout: profit reduced once without reducing capital');
   const beforeReinvest = await state();
   await ok('reinvest', '9.99');

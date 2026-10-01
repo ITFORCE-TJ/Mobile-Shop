@@ -376,7 +376,7 @@ export const BonusesPage: React.FC = () => {
                   <div className="pt-1 text-[11px] text-fg-muted flex items-center space-x-2">
                     <Smartphone className="w-3.5 h-3.5 text-warning shrink-0" />
                     <span className="truncate">
-                      {bonus.freeDevices.map(d => `${d.brand} ${d.model} (${d.imei}) [Себестоимость: $${d.costBasisUsd}]`).join(', ')}
+                      {bonus.freeDevices.map(d => `${d.brand} ${d.model} (${d.imei})${currentUser?.role === 'ADMIN' ? ` [Себестоимость: $${d.costBasisUsd}]` : ''}`).join(', ')}
                     </span>
                   </div>
                 )}

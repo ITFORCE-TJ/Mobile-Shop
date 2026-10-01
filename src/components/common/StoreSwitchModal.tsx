@@ -1,4 +1,5 @@
 import React from 'react';
+import { formatMoney } from '../../utils/money';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Store } from '../../types';
@@ -223,7 +224,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
                     <div className="flex items-center gap-3 text-[11px] text-fg-subtle flex-wrap font-mono">
                       <span className="flex items-center gap-1">
                         <Coins className="w-3 h-3 text-fg-subtle" />
-                        Касса: {(store.cashBalanceTjs || 0).toLocaleString()} TJS
+                        Касса: ${formatMoney(store.cashBalanceUsd)}
                       </span>
                       <span>·</span>
                       <span className="flex items-center gap-1">

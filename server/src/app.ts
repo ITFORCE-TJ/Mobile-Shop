@@ -235,7 +235,15 @@ app.get('/api/devices', authenticateJwt, async (req: AuthenticatedRequest, res, 
       ...(search ? { take: 5 } : {}),
     });
 
-    res.json(devices);
+    const sanitizedDevices = req.user!.role === 'ADMIN'
+      ? devices
+      : devices.map((d) => ({
+          ...d,
+          purchasePriceUsd: 0,
+          costBasisUsd: 0,
+        }));
+
+    res.json(sanitizedDevices);
   } catch (error) {
     next(error);
   }
@@ -273,7 +281,7 @@ app.patch('/api/devices/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'),
   }
 });
 
-app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
+app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { supplierId, invoiceNumber, date, storeId, groups } = req.body ?? {};
     if (!supplierId || !invoiceNumber || !storeId || !Array.isArray(groups) || groups.length === 0) {

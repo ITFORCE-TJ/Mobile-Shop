@@ -123,14 +123,14 @@ function getTimelineBadge(type: string) {
 
 interface DeviceRowProps {
   device: Device;
-  isAdminOrPartner: boolean;
+  isAdmin?: boolean;
   storeName?: string;
   isMainWarehouse?: boolean;
   rate: number;
   onClick: () => void;
 }
 
-const DeviceRow: React.FC<DeviceRowProps> = ({ device, isAdminOrPartner, storeName, isMainWarehouse, rate, onClick }) => (
+const DeviceRow: React.FC<DeviceRowProps> = ({ device, isAdmin, storeName, isMainWarehouse, rate, onClick }) => (
   <button
     onClick={onClick}
     className="w-full text-left px-3.5 sm:px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors hover:bg-surface-raised/50"
@@ -164,7 +164,7 @@ const DeviceRow: React.FC<DeviceRowProps> = ({ device, isAdminOrPartner, storeNa
     <div className="text-right shrink-0 flex items-center gap-2">
       {(device.purchaseCostUsd === 0 || device.isBonus) ? (
         <Badge tone="accent">Бонус</Badge>
-      ) : isAdminOrPartner && device.purchaseCostUsd > 0 ? (
+      ) : isAdmin && device.purchaseCostUsd > 0 ? (
         <div className="text-right">
           <span className="text-xs font-bold text-fg-muted block">${formatMoney(device.purchaseCostUsd)}</span>
           <span className="text-[10px] text-fg-subtle block">≈ {formatMoney(device.purchaseCostUsd * rate)} TJS</span>
@@ -203,6 +203,7 @@ export const InventoryPage: React.FC = () => {
 
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
   const isSeller = currentUser?.role === 'SELLER';
+  const isAdmin = currentUser?.role === 'ADMIN';
   const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
@@ -731,7 +732,7 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         {/* Row 2: Dynamic Summary Stats Cards */}
-        <div className={`grid gap-2 sm:gap-3 ${isAdminOrPartner ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+        <div className={`grid gap-2 sm:gap-3 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
           <StatCard
             label="Единиц в наличии"
             value={`${filteredUnitsCount} шт.`}
@@ -751,7 +752,7 @@ export const InventoryPage: React.FC = () => {
             subvalue={isFiltered ? `из ${distinctModelCount} всего` : undefined}
             icon={Layers}
           />
-          {isAdminOrPartner && (
+          {isAdmin && (
             <StatCard
               label="Стоимость склада"
               value={`$${formatMoney(filteredStockValueUsd)}`}
@@ -981,30 +982,32 @@ export const InventoryPage: React.FC = () => {
                 {/* Second row of filters: Price range & Sort */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t border-border text-xs">
                   {/* Price Range */}
-                  <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                      Себестоимость ($ USD)
-                    </label>
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="От $"
-                        value={minPriceUsd}
-                        onChange={(e) => setMinPriceUsd(e.target.value)}
-                        className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                      />
-                      <span className="text-fg-subtle">—</span>
-                      <input
-                        type="number"
-                        min="0"
-                        placeholder="До $"
-                        value={maxPriceUsd}
-                        onChange={(e) => setMaxPriceUsd(e.target.value)}
-                        className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                      />
+                  {isAdmin && (
+                    <div>
+                      <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
+                        Себестоимость ($ USD)
+                      </label>
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="От $"
+                          value={minPriceUsd}
+                          onChange={(e) => setMinPriceUsd(e.target.value)}
+                          className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                        />
+                        <span className="text-fg-subtle">—</span>
+                        <input
+                          type="number"
+                          min="0"
+                          placeholder="До $"
+                          value={maxPriceUsd}
+                          onChange={(e) => setMaxPriceUsd(e.target.value)}
+                          className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                        />
+                      </div>
                     </div>
-                  </div>
+                  )}
 
                   {/* Quick price presets */}
                   <div>
@@ -1059,8 +1062,12 @@ export const InventoryPage: React.FC = () => {
                       <option value="COUNT_ASC">По количеству: меньше → больше</option>
                       <option value="NAME_ASC">По названию бренда: А → Я</option>
                       <option value="NAME_DESC">По названию бренда: Я → А</option>
-                      <option value="PRICE_DESC">По себестоимости: дорогие → дешевые</option>
-                      <option value="PRICE_ASC">По себестоимости: дешевые → дорогие</option>
+                      {isAdmin && (
+                        <>
+                          <option value="PRICE_DESC">По себестоимости: дорогие → дешевые</option>
+                          <option value="PRICE_ASC">По себестоимости: дешевые → дорогие</option>
+                        </>
+                      )}
                     </select>
                   </div>
                 </div>
@@ -1077,7 +1084,7 @@ export const InventoryPage: React.FC = () => {
                       {' '}· {brandGroups.length} {brandGroups.length === 1 ? 'бренд' : 'брендов'}
                     </span>
                   )}
-                  {isAdminOrPartner && filteredDevices.length > 0 && (
+                  {isAdmin && filteredDevices.length > 0 && (
                     <span className="opacity-80">
                       {' '}· ${formatMoney(filteredDevices.reduce((acc, d) => acc + (d.purchaseCostUsd || 0), 0))} USD
                     </span>
@@ -1213,7 +1220,7 @@ export const InventoryPage: React.FC = () => {
                         <span className="text-sm font-bold text-amber-400 block">
                           {stat.unitCount} шт.
                         </span>
-                        {isAdminOrPartner && (
+                        {isAdmin && (
                           <span className="text-[11px] text-fg-subtle block">
                             ${stat.valueUsd.toLocaleString()} · ≈ {Math.round(stat.valueUsd * rate).toLocaleString()} TJS
                           </span>
@@ -1274,7 +1281,7 @@ export const InventoryPage: React.FC = () => {
                               </span>
                             </div>
                             <p className="text-[11px] text-fg-subtle truncate">
-                              Розничная торговая точка · Касса: {formatMoney(store.cashBalanceTjs)} TJS
+                              Розничная торговая точка · Касса: ${formatMoney(store.cashBalanceUsd)}
                             </p>
                           </div>
                         </div>
@@ -1284,7 +1291,7 @@ export const InventoryPage: React.FC = () => {
                             <span className="text-xs sm:text-sm font-bold text-fg-muted block">
                               {stat.unitCount} шт.
                             </span>
-                            {isAdminOrPartner && (
+                            {isAdmin && (
                               <span className="text-[10px] text-fg-subtle block">
                                 ${formatMoney(stat.valueUsd)} · ≈ {formatMoney(stat.valueUsd * rate)} TJS
                               </span>
@@ -1399,7 +1406,7 @@ export const InventoryPage: React.FC = () => {
                             {bGroup.totalCount === 1 ? 'телефон' : bGroup.totalCount < 5 ? 'телефона' : 'телефонов'}
                           </span>
                         </div>
-                        {isAdminOrPartner && (
+                        {isAdmin && (
                           <div className="text-[10px] text-fg-subtle font-mono mt-0.5">
                             <span className="font-bold text-fg-muted">${formatMoney(bGroup.totalValueUsd)}</span>
                             <span className="hidden sm:inline"> · ≈ {formatMoney(bGroup.totalValueUsd * rate)} TJS</span>
@@ -1454,7 +1461,7 @@ export const InventoryPage: React.FC = () => {
                               <div className="flex items-center gap-2 shrink-0">
                                 <div className="text-right">
                                   <Badge tone="accent">{mGroup.count} шт.</Badge>
-                                  {isAdminOrPartner && (
+                                  {isAdmin && (
                                     <span className="block text-[10px] text-fg-subtle font-mono mt-0.5">
                                       ${formatMoney(mGroup.valueUsd)}
                                     </span>
@@ -1475,7 +1482,7 @@ export const InventoryPage: React.FC = () => {
                                     <DeviceRow
                                       key={dev.id}
                                       device={dev}
-                                      isAdminOrPartner={isAdminOrPartner}
+                                      isAdmin={isAdmin}
                                       storeName={selectedLocationId === 'ALL' ? storeName : undefined}
                                       isMainWarehouse={isWh}
                                       rate={rate}
@@ -1538,7 +1545,7 @@ export const InventoryPage: React.FC = () => {
                           <DeviceRow
                             key={dev.id}
                             device={dev}
-                            isAdminOrPartner={isAdminOrPartner}
+                            isAdmin={isAdmin}
                             storeName={selectedLocationId === 'ALL' ? storeName : undefined}
                             isMainWarehouse={isWh}
                             rate={rate}
@@ -1565,7 +1572,7 @@ export const InventoryPage: React.FC = () => {
                     <th className="p-3">ОЗУ / Память / Цвет</th>
                     <th className="p-3">IMEI / Штрихкод</th>
                     <th className="p-3">Локация</th>
-                    {isAdminOrPartner && <th className="p-3 text-right">Себестоимость</th>}
+                    {isAdmin && <th className="p-3 text-right">Себестоимость</th>}
                     <th className="p-3">Статус</th>
                     <th className="p-3 text-center">Действие</th>
                   </tr>
@@ -1631,7 +1638,7 @@ export const InventoryPage: React.FC = () => {
                             <span>{isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин'}</span>
                           </span>
                         </td>
-                        {isAdminOrPartner && (
+                        {isAdmin && (
                           <td className="p-3 text-right">
                             {dev.purchaseCostUsd === 0 || dev.isBonus ? (
                               <Badge tone="accent">Бонус ($0)</Badge>
@@ -1678,7 +1685,7 @@ export const InventoryPage: React.FC = () => {
                   <DeviceRow
                     key={dev.id}
                     device={dev}
-                    isAdminOrPartner={isAdminOrPartner}
+                    isAdmin={isAdmin}
                     storeName={selectedLocationId === 'ALL' ? storeName : undefined}
                     isMainWarehouse={isWh}
                     rate={rate}
@@ -1710,7 +1717,7 @@ export const InventoryPage: React.FC = () => {
           return (
             <div className="space-y-3.5">
               {/* Device Quick Hero Banner */}
-              <div className="p-3.5 rounded-2xl bg-gradient-to-r from-surface to-surface-raised border border-border flex items-center justify-between gap-3">
+              <div className="p-3.5 rounded-2xl bg-linear-to-r from-surface to-surface-raised border border-border flex items-center justify-between gap-3">
                 <div className="flex items-center gap-3 min-w-0">
                   <div className="w-11 h-11 rounded-2xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 shadow-xs">
                     <Smartphone className="w-6 h-6" />
@@ -1942,8 +1949,8 @@ export const InventoryPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Financial Audit for Admin / Partner */}
-              {isAdminOrPartner && (
+              {/* Financial Audit for Admin Only */}
+              {isAdmin && (
                 <div className="p-3.5 rounded-xl bg-surface-raised border border-border space-y-2.5">
                   <div className="flex items-center justify-between">
                     <span className="text-[10px] uppercase font-bold text-fg-subtle flex items-center gap-1.5 tracking-wider">

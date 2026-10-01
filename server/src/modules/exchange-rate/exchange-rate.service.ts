@@ -22,17 +22,14 @@ export async function getRateForDate(date: Date) {
 export async function requireTodayRate(
   db: Pick<TransactionClient, 'exchangeRate'> = prisma,
 ) {
+  // Writes snapshot this rate onto the record, so an older day's rate must never stand in
+  // for today's: it would misstate every USD amount and the owner profit derived from it.
+  // Reads that tolerate a missing day use getRateForDate instead.
   const rate = await db.exchangeRate.findUnique({ where: { date: getBusinessDateKey() } });
-  if (rate?.rate && D(rate.rate).gt(0)) {
-    return rate.rate;
+  if (!rate?.rate || D(rate.rate).lte(0)) {
+    throw new Error('Сначала задайте курс USD/TJS на сегодня');
   }
-  const latest = await db.exchangeRate.findFirst({
-    orderBy: { date: 'desc' },
-  });
-  if (!latest?.rate || D(latest.rate).lte(0)) {
-    throw new Error('Сначала задайте курс USD/TJS в настройках системы');
-  }
-  return latest.rate;
+  return rate.rate;
 }
 
 export async function setTodayRate(rate: MoneyInput, userId: string) {

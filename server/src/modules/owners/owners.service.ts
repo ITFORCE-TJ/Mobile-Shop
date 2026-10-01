@@ -41,7 +41,8 @@ export class OwnersService {
 
       const targetStore = await OwnersService.resolveTargetStore(tx, destination);
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      await tx.store.update({ where: { id: targetStore.id }, data: { cashBalanceTjs: { increment: cashAmountTjs } } });
+      // The register is kept in USD, so owner money moves dollar for dollar — capital and cash never drift with the rate.
+      await tx.store.update({ where: { id: targetStore.id }, data: { cashBalanceUsd: { increment: amountUsd } } });
 
       const updated = await tx.owner.update({ where: { id: ownerId }, data: { capitalBalanceUsd: { increment: amountUsd } } });
       const ownerTx = await tx.ownerTransaction.create({
@@ -53,7 +54,7 @@ export class OwnersService {
         direction: 'IN',
         numberPrefix: 'OD',
         accountId: cashAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: amountUsd,
         currency: 'USD',
         exchangeRate,
@@ -89,7 +90,7 @@ export class OwnersService {
 
       const targetStore = await OwnersService.resolveTargetStore(tx, source);
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      const cashGuard = await tx.store.updateMany({ where: { id: targetStore.id, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
+      const cashGuard = await tx.store.updateMany({ where: { id: targetStore.id, cashBalanceUsd: { gte: amountUsd } }, data: { cashBalanceUsd: { decrement: amountUsd } } });
       if (!D(cashGuard.count).eq(1)) throw new Error(`В кассе "${targetStore.name}" недостаточно наличных для изъятия`);
 
       const updated = await tx.owner.findUniqueOrThrow({ where: { id: ownerId } });
@@ -102,7 +103,7 @@ export class OwnersService {
         direction: 'OUT',
         numberPrefix: 'OW',
         accountId: cashAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: amountUsd,
         currency: 'USD',
         exchangeRate,
@@ -141,7 +142,7 @@ export class OwnersService {
 
       const targetStore = await OwnersService.resolveTargetStore(tx, source);
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      const cashGuard = await tx.store.updateMany({ where: { id: targetStore.id, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
+      const cashGuard = await tx.store.updateMany({ where: { id: targetStore.id, cashBalanceUsd: { gte: amountUsd } }, data: { cashBalanceUsd: { decrement: amountUsd } } });
       if (!D(cashGuard.count).eq(1)) throw new Error(`В кассе "${targetStore.name}" недостаточно наличных для выплаты прибыли`);
 
       const updated = await tx.owner.findUniqueOrThrow({ where: { id: ownerId } });
@@ -154,7 +155,7 @@ export class OwnersService {
         direction: 'OUT',
         numberPrefix: 'OW',
         accountId: cashAccount.id,
-        balanceCurrency: 'TJS',
+        balanceCurrency: 'USD',
         amount: amountUsd,
         currency: 'USD',
         exchangeRate,
@@ -212,19 +213,41 @@ export class OwnersService {
       if (sharePercent.lt(0) || sharePercent.gt(100)) throw new Error('Доля владельца должна быть от 0 до 100%');
       return { ownerId: share.ownerId, sharePercent };
     });
-    if (!D(new Set(normalized.map((share) => share.ownerId)).size).eq(normalized.length)) throw new Error('Владелец не может быть указан дважды');
-    const total = normalized.reduce((sum, s) => D(sum).plus(s.sharePercent), D(0));
-    if (D(D(D(total).minus(100)).abs()).gt(0.000001)) {
-      throw new Error(`Сумма долей должна равняться 100% (сейчас ${total}%)`);
-    }
-
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, userId);
       await tx.$queryRaw`SELECT id FROM owners ORDER BY id FOR UPDATE`;
       const owners = await tx.owner.findMany();
       const actualIds = new Set(owners.map((owner) => owner.id));
-      if (normalized.length !== owners.length || normalized.some((share) => !actualIds.has(share.ownerId))) {
-        throw new Error('Необходимо указать долю каждого владельца');
+      if (normalized.some((share) => !actualIds.has(share.ownerId))) {
+        throw new Error('Неизвестный владелец в списке долей');
+      }
+
+      const hasStoreSpecific = owners.some((o: any) => Boolean(o.storeId));
+      if (!hasStoreSpecific) {
+        if (normalized.length !== owners.length) {
+          throw new Error('Необходимо указать долю каждого владельца');
+        }
+        const total = normalized.reduce((sum, s) => D(sum).plus(s.sharePercent), D(0));
+        if (D(D(D(total).minus(100)).abs()).gt(0.000001)) {
+          throw new Error(`Сумма долей должна равняться 100% (сейчас ${total}%)`);
+        }
+      } else {
+        // If an admin and a store partner are provided, ensure their sum equals 100%
+        const adminShareItem = normalized.find((s) => {
+          const owner = owners.find((o: any) => o.id === s.ownerId);
+          return !(owner as any)?.storeId;
+        });
+        const storePartnerItems = normalized.filter((s) => {
+          const owner = owners.find((o: any) => o.id === s.ownerId);
+          return Boolean((owner as any)?.storeId);
+        });
+
+        if (adminShareItem && storePartnerItems.length === 1) {
+          const storeSum = D(adminShareItem.sharePercent).plus(storePartnerItems[0].sharePercent);
+          if (D(D(D(storeSum).minus(100)).abs()).gt(0.000001)) {
+            throw new Error(`Сумма долей администратора и партнёра магазина должна равняться 100% (сейчас ${storeSum}%)`);
+          }
+        }
       }
 
       if (rebalanceBalances) {
@@ -307,11 +330,13 @@ export class OwnersService {
       // carry no "this quarter" qualifier. Closing a quarter must not zero them; only
       // the yet-unclaimed availableProfitUsd is affected, and only if the admin opts
       // to sweep it into capital instead of leaving it payable into next quarter.
+      const swept: { ownerId: string; name: string; amountUsd: MoneyInput }[] = [];
       if (transferRemainingToCapital) {
         const sweptOwners = owners.filter((owner) => D((owner.availableProfitUsd || 0)).gt(0));
         if (sweptOwners.length > 0) {
           const exchangeRate = await requireTodayRate(tx);
-          await Promise.all(sweptOwners.map(async (owner) => {
+          const mainWarehouse = await OwnersService.getMainWarehouse(tx);
+          for (const owner of sweptOwners) {
             const remaining = owner.availableProfitUsd || 0;
             const guard = await tx.owner.updateMany({
               where: { id: owner.id, availableProfitUsd: remaining },
@@ -322,19 +347,22 @@ export class OwnersService {
               },
             });
             if (guard.count !== 1) throw new Error('Прибыль изменилась во время закрытия квартала. Обновите данные и повторите');
-            // Mirrors what a manual REINVEST produces — without this, capital visibly
-            // grows with no matching entry in the transaction history feed.
+            // Same records a manual REINVEST produces: owner history, journal and audit amounts.
+            const note = `Автоматическое реинвестирование остатка при закрытии квартала ${cleanQuarterName}`;
             await tx.ownerTransaction.create({
               data: {
                 ownerId: owner.id,
                 type: 'REINVEST',
                 amountUsd: remaining,
                 exchangeRate,
+                sourceOrDestination: mainWarehouse.name,
                 createdByUserId: actor.id,
-                note: `Автоматическое реинвестирование остатка при закрытии квартала ${quarterName}`,
+                note,
               },
             });
-          }));
+            await tx.ledgerEntry.create({ data: { type: 'OWNER_REINVESTMENT', description: `${owner.name}: ${note} — $${remaining}`, amountUsd: remaining, exchangeRate, storeId: mainWarehouse.id, storeName: mainWarehouse.name, userName: actor.name } });
+            swept.push({ ownerId: owner.id, name: owner.name, amountUsd: remaining });
+          }
         }
       }
 
@@ -344,7 +372,8 @@ export class OwnersService {
           userName: actor.name,
           userRole: actor.role,
           action: 'QUARTER_CLOSE',
-          details: `Закрыт квартальный период (${quarterName})${transferRemainingToCapital ? ', неполученный остаток прибыли зачислен в капитал' : ', неполученный остаток прибыли перенесён на следующий период'}`,
+          details: `Закрыт квартальный период (${cleanQuarterName})${transferRemainingToCapital ? ', неполученный остаток прибыли зачислен в капитал' : ', неполученный остаток прибыли перенесён на следующий период'}`,
+          financialDetails: moneyJson({ quarterName: cleanQuarterName, transferRemainingToCapital, sweptToCapital: swept }),
         },
       });
 
@@ -393,8 +422,8 @@ export class OwnersService {
    * recreates a link the administrator deliberately removed.
    */
   public static async listWithResolvedNames() {
-    const owners = await prisma.owner.findMany({ include: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: 'asc' } });
-    return owners.map((o) => ({ ...o, name: o.user?.name ?? o.name }));
+    const owners = await prisma.owner.findMany({ include: { user: { select: { id: true, name: true, storeId: true } } }, orderBy: { createdAt: 'asc' } });
+    return owners.map((o: any) => ({ ...o, name: o.user?.name ?? o.name, storeId: o.storeId ?? o.user?.storeId ?? null }));
   }
 
   /** Explicitly (re)links an owner's capital record to a specific login account. */

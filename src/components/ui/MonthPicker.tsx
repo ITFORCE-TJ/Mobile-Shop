@@ -118,7 +118,7 @@ export const MonthPicker: React.FC<MonthPickerProps> = ({ value, onChange, onOpe
         <div
           ref={popoverRef}
           style={{ top: `${coords.top}px`, left: `${coords.left}px` }}
-          className="fixed z-[9999] w-56 rounded-xl border border-border bg-surface shadow-2xl p-2.5 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
+          className="fixed z-9999 w-56 rounded-xl border border-border bg-surface shadow-2xl p-2.5 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100"
         >
           <div className="flex items-center justify-between mb-2 pb-1.5 border-b border-border">
             <button

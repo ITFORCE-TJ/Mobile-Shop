@@ -84,7 +84,8 @@ export interface Store {
   name: string;
   address?: string;
   isMainWarehouse?: boolean;
-  cashBalanceTjs: number;
+  /** Registers are kept in USD (TJS takings converted at the day's rate). */
+  cashBalanceUsd: number;
   active: boolean;
 }
 
@@ -346,6 +347,8 @@ export interface Expense {
   employeeId?: string;
   employeeName?: string;
   isEmployeeAdvance?: boolean;
+  /** 'YYYY-MM' payroll month an advance is deducted from. */
+  payrollMonth?: string | null;
 }
 
 export interface Owner {
@@ -358,6 +361,7 @@ export interface Owner {
   totalPaidProfitUsd: number;
   totalReinvestedUsd: number;
   availableProfitUsd: number;
+  storeId?: string | null;
 }
 
 export interface OwnerTransaction {

@@ -14,7 +14,7 @@ export interface SellerStat { sellerId: string; sellerName: string; salesCount: 
 export interface StoreBreakdown extends ExpenseBreakdown {
   storeId: string; storeName: string; revenueUsd: number; revenueTjs: number; cogsUsd: number; cogsTjs: number;
   profitUsd: number; profitTjs: number; refundPenaltiesUsd: number; netProfitUsd: number; netProfitTjs: number;
-  unitsSold: number; salesCount: number; refundsCount: number; cashTjs: number;
+  unitsSold: number; salesCount: number; refundsCount: number; cashUsd: number; cashTjs: number;
   stockCount: number; stockCostUsd: number; stockCostTjs: number;
   grossMarginPercent: number; avgCheckUsd: number; avgCheckTjs: number;
   cashCollectedTjs: number; cashCollectionsCount: number;

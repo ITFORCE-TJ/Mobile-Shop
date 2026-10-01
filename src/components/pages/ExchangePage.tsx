@@ -42,6 +42,8 @@ export const ExchangePage: React.FC = () => {
   const [receiptChoice, setReceiptChoice] = useState<{ sale: Sale; items: SaleItem[] } | null>(null);
 
   const [exchangeInValueTjs, setExchangeInValueTjs] = useState<number>(0);
+  // What the customer paid for the returned item — the trade-in credit can't exceed it.
+  const [soldPriceTjs, setSoldPriceTjs] = useState<number>(0);
 
   const [deviceSearchQuery, setDeviceSearchQuery] = useState('');
   const [replacementDevice, setReplacementDevice] = useState<Device | null>(null);
@@ -115,6 +117,7 @@ export const ExchangePage: React.FC = () => {
   const applySelectedOldDevice = (dev: Device, amountTjs: number) => {
     setSelectedOldDevice(dev);
     setExchangeInValueTjs(amountTjs);
+    setSoldPriceTjs(amountTjs);
     if (replacementDevice && replacementDevice.locationId !== dev.locationId) {
       setReplacementDevice(null);
       setNewPriceTjs(0);
@@ -240,6 +243,11 @@ export const ExchangePage: React.FC = () => {
 
     if (exchangeInValueTjs <= 0) {
       setStatus({ tone: 'error', text: 'Залоговая оценочная стоимость сдаваемого аппарата должна быть больше 0' });
+      return;
+    }
+
+    if (soldPriceTjs > 0 && exchangeInValueTjs > soldPriceTjs) {
+      setStatus({ tone: 'error', text: `Зачётная стоимость не может превышать цену этой позиции в чеке (${formatMoney(soldPriceTjs)} TJS)` });
       return;
     }
 

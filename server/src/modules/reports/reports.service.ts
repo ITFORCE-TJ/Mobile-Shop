@@ -123,11 +123,22 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     prisma.supplier.aggregate({ _sum: { totalDebtUsd: true } }),
     prisma.supplier.findMany({ where: { totalDebtUsd: { gt: 0 } }, orderBy: { totalDebtUsd: 'desc' }, take: 8,
       select: { id: true, name: true, totalPurchasedUsd: true, totalPaidUsd: true, totalDebtUsd: true } }),
-    prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true, cashBalanceTjs: true } }),
+    prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true, cashBalanceUsd: true } }),
     prisma.store.findMany({ where: { isMainWarehouse: false, ...(storeFilter ? { id: storeFilter } : {}) },
-      select: { id: true, name: true, cashBalanceTjs: true } }),
+      select: { id: true, name: true, cashBalanceUsd: true } }),
   ]);
-  const rate = rateRow || 9.5;
+  // Today's (or the latest known) rate only values USD figures in TJS for display; every
+  // money total below sums each record's own stored USD amount.
+  const rate = rateRow ? D(rateRow) : D(0);
+  const toUsd = (tjs: MoneyInput, ownRate?: MoneyInput | null) => {
+    const r = D(ownRate || rate);
+    return r.gt(0) ? D(tjs).div(r) : D(0);
+  };
+  // Bonus-device profit recorded on a sale or exchange. It is real profit for the period
+  // (the device cost nothing), even though owners receive it later from the bonus pool.
+  const bonusProfitOf = (logs: { action: string; financialDetails: unknown }[]) => logs
+    .filter((log) => ['SALE', 'SALE_BELOW_COST', 'EXCHANGE'].includes(log.action))
+    .reduce((sum, log) => sum.plus(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0), D(0));
 
   // Second wave: each of these depends on an id from wave one (sale ids / store ids), so it
   // has to wait — but they are still independent of each other.
@@ -166,7 +177,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
 
   // Revenue and profit are built from three kinds of events, each reported in the period
   // it happened — the same moments owner profit is accrued, so monthly figures match the
-  // Owners page and a closed month never changes when a sale is refunded later.
+  // Owners page (bonus-device profit included here reaches owners when the bonus pool is
+  // distributed) and a closed month never changes when a sale is refunded later.
   const profitEvents: ProfitEvent[] = [];
   for (const sale of periodSalesAllStores) {
     const saleRate = sale.exchangeRate || rate;
@@ -180,7 +192,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         storeId: sale.storeId,
         revenueUsd: D(detailNumber(original.details, 'amountUsd') ?? sale.totalUsd),
         revenueTjs: D(detailNumber(original.details, 'amountTjs') ?? sale.totalTjs),
-        profitUsd: D(original.profitUsd),
+        profitUsd: D(original.profitUsd).plus(detailNumber(original.details, 'bonusProfitUsd') ?? 0),
         rate: saleRate,
       });
     }
@@ -199,7 +211,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       storeId,
       revenueUsd: D(newPriceUsd).minus(detailNumber(log.financialDetails, 'exchangeInValueUsd') ?? 0),
       revenueTjs: D(newPriceTjs).minus(detailNumber(log.financialDetails, 'exchangeInValueTjs') ?? 0),
-      profitUsd: D(profitUsd),
+      profitUsd: D(profitUsd).plus(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0),
       rate: newPriceUsd ? D(newPriceTjs).div(newPriceUsd) : rate,
     });
   }
@@ -207,7 +219,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
   for (const sale of refundedSalesAllStores) {
     const logs = profitsBySale.get(sale.id) ?? [];
     const cost = sale.saleItems.reduce((sum, item) => D(sum).plus(item.costBasisUsd), D(0));
-    const reversedProfitUsd = calculateRecognizedProfit(logs, D(sale.totalUsd).minus(cost));
+    const hasOriginal = originalSaleProfit(sale.id)?.profitUsd !== undefined;
+    const reversedProfitUsd = D(calculateRecognizedProfit(logs, D(sale.totalUsd).minus(cost))).plus(hasOriginal ? bonusProfitOf(logs) : 0);
     const refundLog = logs.find((log) => log.action === 'REFUND');
     const resoldTradeInAdjustmentUsd = detailNumber(refundLog?.financialDetails, 'resoldTradeInAdjustmentUsd') ?? 0;
     refundsRevenueUsd = refundsRevenueUsd.plus(sale.totalUsd);
@@ -240,7 +253,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     sale.saleItems.forEach((item) => {
       unitsSold++;
       const itemCostUsd = item.costBasisUsd ?? item.purchaseCostUsd ?? 0;
-      const itemPriceUsd = item.salePriceUsd || D((D(item.salePriceTjs).div(saleRate)).toFixed(2));
+      const itemPriceUsd = item.salePriceUsd || roundMoney(toUsd(item.salePriceTjs, saleRate));
       const itemProfitUsd = D((D(itemPriceUsd).minus(itemCostUsd)).toFixed(2));
 
       const modelKey = `${item.brand} ${item.model}`.trim();
@@ -265,7 +278,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
   const grossMarginPercent = D(revenueUsd).gt(0) ? D((D((D(grossProfitUsd).div(revenueUsd))).mul(100)).toFixed(1)) : 0;
 
   const expensesTjs = periodExpenses.reduce((acc, e) => D(acc).plus((e.amountTjs || 0)), D(0));
-  const expensesUsd = D(periodExpenses.reduce((acc, e) => D(acc).plus((e.amountUsd ?? (D((e.amountTjs || 0)).div((e.exchangeRate || rate))))), D(0)).toFixed(2));
+  const expensesUsd = roundMoney(periodExpenses.reduce((acc, e) => D(acc).plus(e.amountUsd ?? toUsd(e.amountTjs || 0, e.exchangeRate)), D(0)));
 
   const periodCashBonuses = allBonuses.filter((b) => !storeFilter && b.bonusType === 'CASH_DISCOUNT' && b.amountUsd && dateWithinRange(b.dateReceived, dateRange));
   const periodCashBonusesUsd = periodCashBonuses.reduce((acc, b) => D(acc).plus((b.amountUsd || 0)), D(0));
@@ -284,16 +297,36 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     refundPenaltiesByStore.set(s.storeId, { usd: D(prev.usd).plus((s.penaltyFeeUsd || 0)), tjs: D(prev.tjs).plus((s.penaltyFeeTjs || 0)) });
   }
 
-  const netProfitUsd = D((D(D(D(grossProfitUsd).minus(expensesUsd)).plus(periodCashBonusesUsd)).plus(periodRefundPenaltiesUsd)).toFixed(2));
-  const netProfitTjs = roundMoney(D(D(D(grossProfitTjs).minus(expensesTjs)).plus(periodCashBonusesTjs)).plus(periodRefundPenaltiesTjs));
+  // Exchange-rate result of refunds: registers hold USD, so TJS handed back at a later rate
+  // costs a different number of dollars than the sale booked (see RefundService).
+  const refundFx = (sale: { id: string }) => {
+    const refundLog = (profitsBySale.get(sale.id) ?? []).find((log) => log.action === 'REFUND');
+    const usd = D(detailNumber(refundLog?.financialDetails, 'fxGainUsd') ?? 0);
+    return { usd, tjs: usd.mul(detailNumber(refundLog?.financialDetails, 'exchangeRate') ?? rate) };
+  };
+  const periodRefundFxUsd = refundedSales.reduce((acc, s) => acc.plus(refundFx(s).usd), D(0));
+  const periodRefundFxTjs = refundedSales.reduce((acc, s) => acc.plus(refundFx(s).tjs), D(0));
+  const refundFxByStore = new Map<string, { usd: ReturnType<typeof D>; tjs: ReturnType<typeof D> }>();
+  for (const s of refundedSalesAllStores) {
+    const prev = refundFxByStore.get(s.storeId) || { usd: D(0), tjs: D(0) };
+    const fx = refundFx(s);
+    refundFxByStore.set(s.storeId, { usd: prev.usd.plus(fx.usd), tjs: prev.tjs.plus(fx.tjs) });
+  }
+
+  const netProfitUsd = roundMoney(D(grossProfitUsd).minus(expensesUsd).plus(periodCashBonusesUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd));
+  const netProfitTjs = roundMoney(D(grossProfitTjs).minus(expensesTjs).plus(periodCashBonusesTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs));
 
   const totalSupplierDebtUsd = D(supplierDebtAgg._sum.totalDebtUsd ?? 0);
   const totalSupplierDebtTjs = roundMoney(D(totalSupplierDebtUsd).mul(rate));
 
   const mainWarehouseStockCostUsd = D(mainWarehouseStock.reduce((sum, d) => D(sum).plus((d.costBasisUsd ?? d.purchasePriceUsd ?? 0)), D(0)).toFixed(2));
   const mainWarehouseStockCostTjs = roundMoney(D(mainWarehouseStockCostUsd).mul(rate));
-  const mainWarehouseCashTjs = mainWarehouseStore?.cashBalanceTjs || 0;
-  const mainWarehouseCashUsd = D((D(mainWarehouseCashTjs).div(rate)).toFixed(2));
+  const mainWarehouseCashTjs = (mainWarehouseStore as any)?.cashBalanceTjs !== undefined && (mainWarehouseStore as any)?.cashBalanceTjs !== null
+    ? (mainWarehouseStore as any).cashBalanceTjs
+    : roundMoney(D(mainWarehouseStore?.cashBalanceUsd ?? 0).mul(rate));
+  const mainWarehouseCashUsd = mainWarehouseStore?.cashBalanceUsd !== undefined && mainWarehouseStore?.cashBalanceUsd !== null
+    ? D(mainWarehouseStore.cashBalanceUsd)
+    : D((D(mainWarehouseCashTjs).div(rate)).toFixed(2));
 
   const salesByStore = groupByStore(keptSalesAllStores);
   const profitEventsByStore = groupByStore(profitEvents);
@@ -312,7 +345,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     let tjs = D(0);
     let unpaidTjs = D(0);
     for (const e of rows) {
-      const eUsd = e.amountUsd ?? (D((e.amountTjs || 0)).div((e.exchangeRate || rate)));
+      const eUsd = e.amountUsd ?? toUsd(e.amountTjs || 0, e.exchangeRate);
       usd = D(usd).plus(eUsd);
       tjs = D(tjs).plus(e.amountTjs || 0);
       if (e.status === 'UNPAID') unpaidTjs = D(unpaidTjs).plus(e.amountTjs || 0);
@@ -345,7 +378,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         storeUnits += sale.saleItems.length;
         for (const item of sale.saleItems) {
           const name = `${item.brand} ${item.model}`.trim();
-          const itemPriceUsd = item.salePriceUsd || D((D(item.salePriceTjs).div(saleRate)).toFixed(2));
+          const itemPriceUsd = item.salePriceUsd || roundMoney(toUsd(item.salePriceTjs, saleRate));
           const itemCostUsd = item.costBasisUsd ?? item.purchaseCostUsd ?? 0;
           const prev = storeModels.get(name) ?? { name, count: 0, revenueUsd: D(0), profitUsd: D(0) };
           storeModels.set(name, { name, count: prev.count + 1, revenueUsd: D(prev.revenueUsd).plus(itemPriceUsd), profitUsd: D(D(prev.profitUsd).plus(itemPriceUsd)).minus(itemCostUsd) });
@@ -357,6 +390,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       // Same "с учетом возвратов" treatment as the overall totals: a refund reverses the
       // sale's margin in the refund's own period; the withheld penalty is retained profit.
       const storePenalty = refundPenaltiesByStore.get(store.id) || { usd: D(0), tjs: D(0) };
+      const storeFx = refundFxByStore.get(store.id) || { usd: D(0), tjs: D(0) };
       return {
         storeId: store.id,
         storeName: store.name,
@@ -364,12 +398,13 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         revenueTjs: roundMoney(storeRevenueTjs),
         cogsUsd: D(storeCogsUsd.toFixed(2)),
         cogsTjs: roundMoney(storeCogsTjs),
-        profitUsd: D((D(storeProfitUsd).plus(storePenalty.usd)).toFixed(2)),
-        profitTjs: roundMoney(D(storeProfitTjs).plus(storePenalty.tjs)),
+        profitUsd: roundMoney(D(storeProfitUsd).plus(storePenalty.usd).plus(storeFx.usd)),
+        profitTjs: roundMoney(D(storeProfitTjs).plus(storePenalty.tjs).plus(storeFx.tjs)),
         refundPenaltiesUsd: roundMoney(storePenalty.usd),
+        refundFxUsd: roundMoney(storeFx.usd),
         ...storeExpenses,
-        netProfitUsd: D((D(D(storeProfitUsd).plus(storePenalty.usd)).minus(storeExpenses.expensesUsd)).toFixed(2)),
-        netProfitTjs: roundMoney(D(D(storeProfitTjs).plus(storePenalty.tjs)).minus(storeExpenses.expensesTjs)),
+        netProfitUsd: roundMoney(D(storeProfitUsd).plus(storePenalty.usd).plus(storeFx.usd).minus(storeExpenses.expensesUsd)),
+        netProfitTjs: roundMoney(D(storeProfitTjs).plus(storePenalty.tjs).plus(storeFx.tjs).minus(storeExpenses.expensesTjs)),
         topModels: [...storeModels.values()]
           .map((m) => ({ ...m, revenueUsd: D(D(m.revenueUsd).toFixed(2)), profitUsd: D(D(m.profitUsd).toFixed(2)) }))
           .sort((a, b) => b.count - a.count || D(b.profitUsd).comparedTo(a.profitUsd))
@@ -377,7 +412,9 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         unitsSold: storeUnits,
         salesCount: storeSales.length,
         refundsCount: refundedSalesAllStores.filter((sale) => sale.storeId === store.id).length,
-        cashTjs: store.cashBalanceTjs,
+        cashTjs: (store as any).cashBalanceTjs !== undefined && (store as any).cashBalanceTjs !== null
+          ? (store as any).cashBalanceTjs
+          : roundMoney(D(store.cashBalanceUsd || 0).mul(rate)),
         stockCount: stock.length,
         stockCostUsd: D(stockCostUsd.toFixed(2)),
         stockCostTjs: roundMoney(D(stockCostUsd).mul(rate)),
@@ -408,12 +445,14 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     // "Прибыль (с учетом возвратов)" — the single recognized-profit figure the summary card,
     // the per-store cards (storeBreakdown.profitUsd/Tjs below) and netProfitUsd/Tjs all build
     // on, so they can no longer disagree the way the old client-side per-item calc did.
-    profitUsd: D((D(grossProfitUsd).plus(periodRefundPenaltiesUsd)).toFixed(2)),
-    profitTjs: roundMoney(D(grossProfitTjs).plus(periodRefundPenaltiesTjs)),
+    profitUsd: roundMoney(D(grossProfitUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd)),
+    profitTjs: roundMoney(D(grossProfitTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs)),
     expensesTjs,
     expensesUsd,
     periodRefundPenaltiesUsd: roundMoney(periodRefundPenaltiesUsd),
     periodRefundPenaltiesTjs: roundMoney(periodRefundPenaltiesTjs),
+    periodRefundFxUsd: roundMoney(periodRefundFxUsd),
+    periodRefundFxTjs: roundMoney(periodRefundFxTjs),
     netProfitUsd,
     netProfitTjs,
     periodCashBonusesUsd: roundMoney(periodCashBonusesUsd),

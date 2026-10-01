@@ -86,22 +86,35 @@ export const TabletNavRail: React.FC = () => {
     }
 
     if (isCentralCashMode) {
-      return [
+      const items: { id: PageId; label: string; icon: any }[] = [
         { id: 'FINANCE' as PageId, label: 'Финансы', icon: Landmark },
         { id: 'SALES_HISTORY' as PageId, label: 'Продажи', icon: History },
         { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
         { id: 'BONUSES' as PageId, label: 'Бонусы', icon: Gift },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
-        { id: 'PURCHASE' as PageId, label: 'Приход', icon: PlusCircle },
-        { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
-        { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
-        { id: 'SUPPLIERS' as PageId, label: 'Поставщ.', icon: Truck },
-        { id: 'OWNERS' as PageId, label: 'Партнеры', icon: Users },
-        { id: 'EMPLOYEES' as PageId, label: 'Кадры', icon: UserCheck },
-        { id: 'AUDIT_LOG' as PageId, label: 'Аудит', icon: FileText },
-        { id: 'NOTIFICATIONS' as PageId, label: 'Увед.', icon: Bell },
-        { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
       ];
+      if (userRole === 'ADMIN') {
+        items.push({ id: 'PURCHASE' as PageId, label: 'Приход', icon: PlusCircle });
+      }
+      items.push(
+        { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+        { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench }
+      );
+      if (userRole === 'ADMIN') {
+        items.push({ id: 'SUPPLIERS' as PageId, label: 'Поставщ.', icon: Truck });
+      }
+      items.push({ id: 'OWNERS' as PageId, label: 'Партнеры', icon: Users });
+      if (userRole === 'ADMIN') {
+        items.push(
+          { id: 'EMPLOYEES' as PageId, label: 'Кадры', icon: UserCheck },
+          { id: 'AUDIT_LOG' as PageId, label: 'Аудит', icon: FileText }
+        );
+      }
+      items.push(
+        { id: 'NOTIFICATIONS' as PageId, label: 'Увед.', icon: Bell },
+        { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings }
+      );
+      return items;
     }
 
     // Retail Store Selling Mode for Admin

@@ -3,7 +3,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
 import { createExpense } from '../expenses/expenses.service';
 import { requireNonNegativeMoney, roundMoney } from '../../common/money';
-import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
 
 interface CreateRepairInput {
   storeId: string;
@@ -45,8 +45,7 @@ export class RepairsService {
       let estimatedCostUsd: MoneyInput | undefined;
       let intakeRate: MoneyInput | undefined;
       if (input.estimatedCostTjs) {
-        intakeRate = (await getRateForDate(new Date())) ?? undefined;
-        if (!intakeRate) throw new Error('Сначала задайте курс валют на сегодня');
+        intakeRate = await requireTodayRate(tx);
         estimatedCostUsd = roundMoney(D(input.estimatedCostTjs).div(intakeRate));
       }
 
@@ -142,8 +141,7 @@ export class RepairsService {
       let finalCostUsd = ticket.finalCostUsd ?? undefined;
       let operationRate = ticket.exchangeRate ?? undefined;
       if (needsUsdSnapshot) {
-        operationRate = (await getRateForDate(new Date())) ?? undefined;
-        if (!operationRate) throw new Error('Сначала задайте курс валют на сегодня');
+        operationRate = await requireTodayRate(tx);
         finalCostUsd = roundMoney(D(costVal).div(operationRate));
       }
 

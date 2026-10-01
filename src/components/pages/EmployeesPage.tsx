@@ -4,7 +4,7 @@ import { decimal, moneyNumber } from '../../utils/money';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppFields } from '../../context/AppContext';
-import { User, Role } from '../../types';
+import { User, Role, Expense } from '../../types';
 import {
   Users,
   Plus,
@@ -31,6 +31,10 @@ const ROLE_CONFIG: Record<Role, { label: string; bg: string; color: string; bord
   PARTNER: { label: 'Партнер (Владелец)', bg: 'bg-info/15', color: 'text-info', border: 'border-info/30' },
   SELLER: { label: 'Продавец-кассир', bg: 'bg-surface-raised', color: 'text-fg-subtle', border: 'border-border' }
 };
+
+// An advance counts in the payroll month it was given for; everything else in the month it was recorded.
+const payrollMonthOf = (e: Expense) =>
+  ((e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance) && e.payrollMonth) || getBusinessDateKey(new Date(e.date)).substring(0, 7);
 
 export const EmployeesPage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
@@ -61,6 +65,8 @@ export const EmployeesPage: React.FC = () => {
   const [advanceIssueUser, setAdvanceIssueUser] = useState<User | null>(null);
   const [advanceAmountInput, setAdvanceAmountInput] = useState<string>('');
   const [advanceNoteInput, setAdvanceNoteInput] = useState<string>('');
+  // Payroll month the advance is deducted from — it can be handed out in a different month.
+  const [advancePayrollMonth, setAdvancePayrollMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
 
   // Financial History & Payroll Report state
   const [financialHistoryUser, setFinancialHistoryUser] = useState<User | null>(null);
@@ -169,7 +175,7 @@ export const EmployeesPage: React.FC = () => {
     for (const u of users) ensure(u.id);
 
     for (const e of expenses) {
-      if (!e.date.startsWith(selectedPayrollMonth)) continue;
+      if (payrollMonthOf(e) !== selectedPayrollMonth) continue;
       const isAdvance = e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance;
       const isSalary = e.category === 'SALARY';
       if (!isAdvance && !isSalary) continue;
@@ -272,8 +278,13 @@ export const EmployeesPage: React.FC = () => {
       return;
     }
 
-    if (role === 'SELLER' && (!storeId || !storeId.trim())) {
-      setStatusMessage({ type: 'error', text: 'Для продавца привязка к магазину обязательна (*)' });
+    if ((role === 'SELLER' || role === 'PARTNER') && (!storeId || !storeId.trim())) {
+      setStatusMessage({
+        type: 'error',
+        text: role === 'PARTNER'
+          ? 'Для создания партнера обязательно выберите магазин филиала (*)'
+          : 'Для продавца привязка к магазину обязательна (*)'
+      });
       return;
     }
 
@@ -292,7 +303,7 @@ export const EmployeesPage: React.FC = () => {
           login: login.trim(),
           passwordHash: password.trim() ? password.trim() : editingUser.passwordHash,
           role,
-          storeId: role === 'SELLER' ? storeId : undefined,
+          storeId: (role === 'SELLER' || role === 'PARTNER') ? (storeId || undefined) : undefined,
           isActive,
           baseSalaryTjs: baseSal,
           salesCommissionPercent: commPct
@@ -310,7 +321,7 @@ export const EmployeesPage: React.FC = () => {
           login: login.trim(),
           passwordHash: password.trim(),
           role,
-          storeId: role === 'SELLER' ? storeId : undefined,
+          storeId: (role === 'SELLER' || role === 'PARTNER') ? (storeId || undefined) : undefined,
           active: true,
           baseSalaryTjs: baseSal,
           salesCommissionPercent: commPct
@@ -347,7 +358,8 @@ export const EmployeesPage: React.FC = () => {
         paidFromCashRegister: true,
         employeeId: advanceIssueUser.id,
         employeeName: advanceIssueUser.name,
-        isEmployeeAdvance: true
+        isEmployeeAdvance: true,
+        payrollMonth: advancePayrollMonth,
       });
 
       if (res.success) {
@@ -355,6 +367,7 @@ export const EmployeesPage: React.FC = () => {
         setAdvanceIssueUser(null);
         setAdvanceAmountInput('');
         setAdvanceNoteInput('');
+        setAdvancePayrollMonth(getBusinessDateKey().substring(0, 7));
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка выдачи аванса' });
       }
@@ -378,7 +391,7 @@ export const EmployeesPage: React.FC = () => {
     const empExpenses = expenses.filter(e =>
       (e.employeeId === salaryPayoutUser.id || (e.isEmployeeAdvance && e.employeeName === salaryPayoutUser.name)) &&
       (e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance) &&
-      e.date.startsWith(currentMonth)
+      payrollMonthOf(e) === currentMonth
     );
     const totalAdvances = empExpenses.reduce((sum, e) => sum + (e.amountTjs || 0), 0);
     const advanceDeduction = deductAdvancesChecked ? Math.min(totalAdvances, grossVal) : 0;
@@ -435,7 +448,7 @@ export const EmployeesPage: React.FC = () => {
       const commAmt = Math.round(salesRev * (commPct / 100));
       const grossAccrued = baseSal + commAmt;
 
-      const uExpenses = expenses.filter(e => (e.employeeId === u.id || (e.isEmployeeAdvance && e.employeeName === u.name)) && e.date.startsWith(selectedPayrollMonth));
+      const uExpenses = expenses.filter(e => (e.employeeId === u.id || (e.isEmployeeAdvance && e.employeeName === u.name)) && payrollMonthOf(e) === selectedPayrollMonth);
       const advances = uExpenses.filter(e => e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance).reduce((acc, e) => acc + (e.amountTjs || 0), 0);
       const paidSalary = uExpenses.filter(e => e.category === 'SALARY').reduce((acc, e) => acc + (e.amountTjs || 0), 0);
       const netPayable = Math.max(0, grossAccrued - advances - paidSalary);
@@ -548,7 +561,7 @@ export const EmployeesPage: React.FC = () => {
                           </span>
                         );
                       }
-                      if (u.role === 'SELLER') {
+                      if (u.role === 'SELLER' || u.role === 'PARTNER') {
                         return <span className="text-danger font-medium">Магазин не привязан</span>;
                       }
                       return <span className="text-fg-muted">Все филиалы</span>;
@@ -804,12 +817,12 @@ export const EmployeesPage: React.FC = () => {
                   className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
                 >
                   <option value="SELLER">Продавец (ограничен своим магазином, без себестоимости)</option>
-                  <option value="PARTNER">Партнер (все магазины, финансы, отчеты)</option>
+                  <option value="PARTNER">Партнер филиала (доля прибыли, финансы магазина)</option>
                   <option value="ADMIN">Администратор (полный доступ)</option>
                 </select>
               </div>
 
-              {role === 'SELLER' && (
+              {(role === 'SELLER' || role === 'PARTNER') && (
                 <div>
                   <label className="block text-warning text-[10px] uppercase mb-1 font-bold">
                     ПРИВЯЗКА К МАГАЗИНУ <span className="text-danger font-bold">* (ОБЯЗАТЕЛЬНО)</span>
@@ -818,13 +831,18 @@ export const EmployeesPage: React.FC = () => {
                     required
                     value={storeId ?? ''}
                     onChange={(e) => setStoreId(e.target.value)}
-                    className="w-full rounded-lg bg-surface-raised border border-warning/40 px-3 py-2 text-fg-muted font-bold focus:border-warning focus:outline-none"
+                    className="w-full rounded-lg bg-surface-raised border border-warning/40 px-3 py-2 text-fg font-bold focus:border-warning focus:outline-none cursor-pointer"
                   >
-                    <option value="" disabled>-- ВЫБЕРИТЕ МАГАЗИН --</option>
+                    <option value="">-- ВЫБЕРИТЕ ТОЧКУ ПРОДАЖ / МАГАЗИН * --</option>
                     {stores.filter(s => !s.isMainWarehouse).map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
                     ))}
                   </select>
+                  <p className="text-[10px] text-fg-subtle mt-1">
+                    {role === 'PARTNER'
+                      ? 'Партнёр обязательно прикрепляется к филиалу и получает долю от прибыли этого магазина.'
+                      : 'Продавец работает только с кассой и складом выбранного магазина.'}
+                  </p>
                 </div>
               )}
 
@@ -980,6 +998,15 @@ export const EmployeesPage: React.FC = () => {
               </div>
 
               <div>
+                <label className="block text-fg-subtle text-[10px] uppercase mb-1 font-bold">В СЧЁТ ЗАРПЛАТЫ ЗА МЕСЯЦ *</label>
+                <MonthPicker
+                  value={advancePayrollMonth}
+                  onChange={setAdvancePayrollMonth}
+                  className="w-full h-9 px-3 rounded-lg bg-bg border border-border text-fg-muted text-xs font-semibold"
+                />
+              </div>
+
+              <div>
                 <label className="block text-fg-subtle text-[10px] uppercase mb-1 font-bold">ПРИМЕЧАНИЕ / НА ЧТО ВЫДАНО</label>
                 <input
                   type="text"
@@ -1036,7 +1063,7 @@ export const EmployeesPage: React.FC = () => {
               const empExpenses = expenses.filter(e =>
                 (e.employeeId === salaryPayoutUser.id || (e.isEmployeeAdvance && e.employeeName === salaryPayoutUser.name)) &&
                 (e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance) &&
-                getBusinessDateKey(new Date(e.date)).startsWith(thisMonth)
+                payrollMonthOf(e) === thisMonth
               );
               const totalAdvances = empExpenses.reduce((sum, e) => sum + (e.amountTjs || 0), 0);
 

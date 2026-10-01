@@ -1,9 +1,11 @@
 import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
-import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
+import { reverseDistributedBonus } from '../bonuses/bonuses.service';
 import { moneyEquals, requireNonNegativeMoney, roundMoney } from '../../common/money';
 import { exchangeCostRestorations, refundOwnerProfit } from './profit';
+import { getOwnersForStore } from '../finance/owner-allocations';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 
@@ -30,8 +32,7 @@ export class RefundService {
       // Idempotency guard: a sale can only be refunded once.
       if (sale.status === 'REFUNDED') throw new Error('Этот чек уже был возвращён');
 
-      const rate = (await getRateForDate(new Date())) ?? sale.exchangeRate;
-      if (!rate || D(rate).lte(0)) throw new Error('Не найден курс валют для возврата');
+      const rate = await requireTodayRate(tx);
       const penaltyFeeTjs = requestedPenaltyTjs;
       // For a DEBT sale, only the cash/card portion actually collected up front can be
       // handed back — the still-unpaid remainder was never real money in the register.
@@ -42,13 +43,23 @@ export class RefundService {
       if (!moneyEquals(requestedRefundTjs, expectedRefundTjs)) {
         throw new Error('Сумма возврата должна равняться фактически полученной сумме по чеку за вычетом штрафа');
       }
-      const penaltyUsd = roundMoney(D(penaltyFeeTjs).div(rate));
       const actualRefundTjs = requestedRefundTjs;
+      // Registers hold USD, so the TJS handed back today costs today's dollars, while the sale
+      // booked its revenue at its own day's rates. That difference is an exchange-rate result
+      // and is booked to the owners, so cash and profit never drift apart. Example: 1000 TJS
+      // sold at 10 ($100) and refunded at 11 costs $90.91 — a $9.09 gain.
+      const collectedTodayUsd = roundMoney(D(amountActuallyCollectedTjs).div(rate));
+      const penaltyUsd = roundMoney(D(penaltyFeeTjs).div(rate));
+      const actualRefundUsd = roundMoney(D(collectedTodayUsd).minus(penaltyUsd));
+      const bookedCollectedUsd = D(sale.totalTjs).gt(0)
+        ? roundMoney(D(sale.totalUsd ?? D(sale.totalTjs).div(sale.exchangeRate || rate)).mul(amountActuallyCollectedTjs).div(sale.totalTjs))
+        : D(0);
+      const fxGainUsd = roundMoney(D(bookedCollectedUsd).minus(collectedTodayUsd));
       const profitLogs = await tx.auditLog.findMany({
         where: { targetId: sale.id, action: { in: ['SALE', 'SALE_BELOW_COST', 'EXCHANGE'] } },
         select: { action: true, financialDetails: true },
       });
-      const owners = await tx.owner.findMany();
+      const owners = await getOwnersForStore(tx, sale.storeId);
 
       const updatedSale = await tx.sale.update({
         where: { id: input.saleId },
@@ -95,7 +106,7 @@ export class RefundService {
         }
       }
       resoldTradeInAdjustmentUsd = roundMoney(resoldTradeInAdjustmentUsd);
-      const ownerProfitAllocations = refundOwnerProfit(profitLogs, owners, D(penaltyUsd).plus(resoldTradeInAdjustmentUsd));
+      const ownerProfitAllocations = refundOwnerProfit(profitLogs, owners, D(penaltyUsd).plus(resoldTradeInAdjustmentUsd).plus(fxGainUsd));
 
       await tx.deviceTimelineEvent.createMany({
         data: sale.saleItems.map((item) => ({
@@ -108,7 +119,7 @@ export class RefundService {
 
       const store = await tx.store.findUnique({ where: { id: sale.storeId } });
       if (input.paymentMethod === 'CASH') {
-        const cashGuard = await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceTjs: { gte: actualRefundTjs } }, data: { cashBalanceTjs: { decrement: actualRefundTjs } } });
+        const cashGuard = await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceUsd: { gte: actualRefundUsd } }, data: { cashBalanceUsd: { decrement: actualRefundUsd } } });
         if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для возврата');
         const cashAccount = await getStoreCashAccount(tx, sale.storeId, store?.name);
         await postTransaction(tx, {
@@ -116,12 +127,12 @@ export class RefundService {
           direction: 'OUT',
           numberPrefix: 'RF',
           accountId: cashAccount.id,
-          balanceCurrency: 'TJS',
+          balanceCurrency: 'USD',
           amount: actualRefundTjs,
           currency: 'TJS',
           exchangeRate: rate,
           amountTjs: actualRefundTjs,
-          amountUsd: roundMoney(D(actualRefundTjs).div(rate)),
+          amountUsd: actualRefundUsd,
           categoryName: 'Возврат покупателю',
           shopId: sale.storeId,
           sourceType: 'SALE',
@@ -131,31 +142,39 @@ export class RefundService {
         });
       }
 
-      await Promise.all(ownerProfitAllocations.map(({ ownerId, amountUsd: delta }) => {
-        return tx.owner.update({
+      // Bonus profit already handed out to owners for this sale's devices goes back too —
+      // the devices return to stock and will earn it again when resold.
+      const refundNote = `Возврат по чеку #${sale.receiptNumber}: ${input.reason}`;
+      const bonusReversalAllocations = await reverseDistributedBonus(tx, sale.id, refundNote, actor.name);
+      const ownerDeltas = new Map<string, MoneyInput>();
+      for (const { ownerId, amountUsd } of [...ownerProfitAllocations, ...bonusReversalAllocations]) {
+        ownerDeltas.set(ownerId, roundMoney(D(ownerDeltas.get(ownerId) ?? 0).plus(amountUsd)));
+      }
+      for (const [ownerId, delta] of ownerDeltas) {
+        if (D(delta).isZero()) continue;
+        const updated = await tx.owner.updateMany({
           where: { id: ownerId },
           data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
         });
-      }));
-
-      if (tx.bonusPoolEntry) {
-        await tx.bonusPoolEntry.updateMany({
-          where: { saleId: sale.id, status: 'PENDING' },
-          data: {
-            status: 'ANNULLED',
-            annulledAt: new Date(),
-            annulledBy: actor.name,
-            annulledNote: `Возврат по чеку #${sale.receiptNumber}: ${input.reason}`,
-          },
-        });
+        if (updated.count !== 1) throw new Error('Партнёр из распределения прибыли не найден. Восстановите его учётную запись перед возвратом.');
       }
+
+      await tx.bonusPoolEntry.updateMany({
+        where: { saleId: sale.id, status: 'PENDING' },
+        data: {
+          status: 'ANNULLED',
+          annulledAt: new Date(),
+          annulledBy: actor.name,
+          annulledNote: refundNote,
+        },
+      });
 
       await tx.ledgerEntry.create({
         data: {
           type: 'REFUND',
           description: `Возврат по чеку #${sale.receiptNumber}: ${input.reason}`,
           amountTjs: D(actualRefundTjs).negated(),
-          amountUsd: D(roundMoney(D(actualRefundTjs).div(rate))).negated(),
+          amountUsd: D(actualRefundUsd).negated(),
           exchangeRate: rate,
           storeId: sale.storeId,
           storeName: store?.name,
@@ -174,7 +193,7 @@ export class RefundService {
           userRole: actor.role,
           action: 'REFUND',
           details: `Чек #${sale.receiptNumber}: возврат на сумму ${actualRefundTjs} TJS. ${D(penaltyFeeTjs).gt(0) ? `Удержан штраф: ${penaltyFeeTjs} TJS.` : ''} Причина: ${input.reason}`,
-          financialDetails: moneyJson({ amountTjs: actualRefundTjs, penaltyTjs: penaltyFeeTjs, penaltyUsd, resoldTradeInAdjustmentUsd, ownerProfitAllocations: moneyJson(ownerProfitAllocations) }),
+          financialDetails: moneyJson({ amountTjs: actualRefundTjs, amountUsd: actualRefundUsd, exchangeRate: rate, penaltyTjs: penaltyFeeTjs, penaltyUsd, fxGainUsd, resoldTradeInAdjustmentUsd, ownerProfitAllocations: moneyJson(ownerProfitAllocations), bonusReversalAllocations: moneyJson(bonusReversalAllocations) }),
           receiptNumber: sale.receiptNumber,
           targetId: sale.id,
         },

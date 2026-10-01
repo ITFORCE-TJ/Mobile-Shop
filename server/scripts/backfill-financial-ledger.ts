@@ -65,8 +65,8 @@ async function main() {
         name: `Касса ${store.name}`,
         type: 'CASH',
         storeId: store.id,
-        balanceTjs: store.cashBalanceTjs,
-        openingBalanceTjs: store.cashBalanceTjs,
+        balanceUsd: store.cashBalanceUsd,
+        openingBalanceUsd: store.cashBalanceUsd,
       },
     });
     accountByStoreId.set(store.id, account.id);

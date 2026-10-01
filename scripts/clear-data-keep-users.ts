@@ -28,7 +28,7 @@ async function main() {
     // No CASCADE: if a kept table referenced one of these, Postgres refuses instead of
     // silently emptying the kept table too.
     prisma.$executeRawUnsafe(`TRUNCATE TABLE ${tables.join(', ')} RESTART IDENTITY`),
-    prisma.store.updateMany({ data: { cashBalanceTjs: 0 } }),
+    prisma.store.updateMany({ data: { cashBalanceUsd: 0 } }),
     prisma.financialAccount.updateMany({ data: { balanceTjs: 0, balanceUsd: 0 } }),
     prisma.owner.updateMany({
       data: { capitalBalanceUsd: 0, totalAccruedProfitUsd: 0, totalPaidProfitUsd: 0, totalReinvestedUsd: 0, availableProfitUsd: 0 },

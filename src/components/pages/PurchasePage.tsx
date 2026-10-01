@@ -607,11 +607,11 @@ export const PurchasePage: React.FC = () => {
     }
   };
 
-  if (currentUser?.role === 'SELLER') {
+  if (currentUser?.role !== 'ADMIN') {
     return (
       <div className="p-8 text-center text-fg-subtle">
         <p className="text-sm font-medium text-fg-muted">Доступ ограничен</p>
-        <p className="text-xs mt-1">Оформление и просмотр приходов разрешены только Администраторам и Партнерам</p>
+        <p className="text-xs mt-1">Оформление и просмотр приходов и цен закупки разрешены только Администратору</p>
       </div>
     );
   }

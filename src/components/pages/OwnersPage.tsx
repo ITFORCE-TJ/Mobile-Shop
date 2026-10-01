@@ -137,9 +137,10 @@ export const OwnersPage: React.FC = () => {
   const [selectedQuarterYear, setSelectedQuarterYear] = useState<number>(2026);
   const [transferRemainingToCapital, setTransferRemainingToCapital] = useState(true);
 
-  // Shares edit state
-  const [sharesInput, setSharesInput] = useState<Record<string, string>>({});
-  const [selectedShareOwnerId, setSelectedShareOwnerId] = useState<string>('');
+  // Shares edit state (per-store partner shares)
+  const [selectedSharesStoreId, setSelectedSharesStoreId] = useState<string>('');
+  const [adminShareVal, setAdminShareVal] = useState<string>('60');
+  const [partnerShareVal, setPartnerShareVal] = useState<string>('40');
   const [rebalanceOnSave, setRebalanceOnSave] = useState(false);
 
   // Tx state
@@ -158,6 +159,19 @@ export const OwnersPage: React.FC = () => {
 
   const mainWarehouse = useMemo(() => stores.find(s => s.isMainWarehouse), [stores]);
   const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
+
+  const adminOwner = useMemo(() => {
+    return owners.find(o => !o.storeId || users.find(u => u.id === o.userId)?.role === 'ADMIN') || owners[0];
+  }, [owners, users]);
+
+  const currentSharesStore = useMemo(() => {
+    return stores.find(s => s.id === selectedSharesStoreId) || retailStores[0] || stores[0];
+  }, [stores, selectedSharesStoreId, retailStores]);
+
+  const currentStorePartner = useMemo(() => {
+    if (!currentSharesStore) return undefined;
+    return owners.find(o => o.storeId === currentSharesStore.id);
+  }, [owners, currentSharesStore]);
 
   useEffect(() => {
     if (!selectedTxStoreId && stores.length > 0) {
@@ -354,16 +368,76 @@ export const OwnersPage: React.FC = () => {
     );
   }
 
-  const openSharesModal = (initialOwnerId?: string) => {
-    const init: Record<string, string> = {};
-    owners.forEach(o => {
-      init[o.id] = (o.profitSharePercent ?? 0).toString();
-    });
-    setSharesInput(init);
-    setSelectedShareOwnerId(initialOwnerId || owners[0]?.id || '');
+  const openSharesModal = (targetStoreIdOrOwnerId?: string) => {
+    let targetStore = retailStores[0] || stores[0];
+    if (targetStoreIdOrOwnerId) {
+      const byStore = stores.find(s => s.id === targetStoreIdOrOwnerId);
+      if (byStore) {
+        targetStore = byStore;
+      } else {
+        const byOwner = owners.find(o => o.id === targetStoreIdOrOwnerId);
+        if (byOwner?.storeId) {
+          const matched = stores.find(s => s.id === byOwner.storeId);
+          if (matched) targetStore = matched;
+        }
+      }
+    }
+    const storeId = targetStore?.id || '';
+    setSelectedSharesStoreId(storeId);
+
+    const partner = owners.find(o => o.storeId === storeId);
+    if (partner) {
+      const pShare = partner.profitSharePercent ?? 40;
+      setPartnerShareVal(pShare.toString());
+      setAdminShareVal((Math.max(0, Math.min(100, Math.round((100 - pShare) * 10000) / 10000))).toString());
+    } else {
+      setPartnerShareVal('0');
+      setAdminShareVal('100');
+    }
+
     setRebalanceOnSave(false);
     setStatusBanner(null);
     setIsSharesModalOpen(true);
+  };
+
+  const handleSharesStoreChange = (newStoreId: string) => {
+    setSelectedSharesStoreId(newStoreId);
+    const partner = owners.find(o => o.storeId === newStoreId);
+    if (partner) {
+      const pShare = partner.profitSharePercent ?? 40;
+      setPartnerShareVal(pShare.toString());
+      setAdminShareVal((Math.max(0, Math.min(100, Math.round((100 - pShare) * 10000) / 10000))).toString());
+    } else {
+      setPartnerShareVal('0');
+      setAdminShareVal('100');
+    }
+  };
+
+  const handlePartnerShareInputChange = (valStr: string) => {
+    setPartnerShareVal(valStr);
+    const num = parseFloat(valStr);
+    if (!isNaN(num)) {
+      const complement = Math.max(0, Math.min(100, Math.round((100 - num) * 10000) / 10000));
+      setAdminShareVal(complement.toString());
+    } else if (valStr === '') {
+      setAdminShareVal('');
+    }
+  };
+
+  const handleAdminShareInputChange = (valStr: string) => {
+    setAdminShareVal(valStr);
+    const num = parseFloat(valStr);
+    if (!isNaN(num)) {
+      const complement = Math.max(0, Math.min(100, Math.round((100 - num) * 10000) / 10000));
+      setPartnerShareVal(complement.toString());
+    } else if (valStr === '') {
+      setPartnerShareVal('');
+    }
+  };
+
+  const handleApplyPreset = (adminPct: number, partnerPct: number) => {
+    setAdminShareVal(adminPct.toString());
+    setPartnerShareVal(partnerPct.toString());
   };
 
   const openTxModalForOwner = (
@@ -384,52 +458,65 @@ export const OwnersPage: React.FC = () => {
     setIsTxModalOpen(true);
   };
 
-  const handleShareInputChange = (changedOwnerId: string, valueStr: string) => {
-    setSharesInput(prev => {
-      const nextState = { ...prev, [changedOwnerId]: valueStr };
-      if (owners.length === 2) {
-        const otherOwner = owners.find(o => o.id !== changedOwnerId);
-        if (otherOwner) {
-          const parsed = parseFloat(valueStr);
-          if (!isNaN(parsed)) {
-            const complement = Math.max(0, Math.min(100, Math.round((100 - parsed) * 10000) / 10000));
-            nextState[otherOwner.id] = complement.toString();
-          } else if (valueStr === '') {
-            nextState[otherOwner.id] = '';
-          }
-        }
-      }
-      return nextState;
-    });
-  };
-
   const handleSaveShares = async (e: React.FormEvent) => {
     e.preventDefault();
     if (isSubmitting) return;
-    const payload = owners.map(o => ({
-      ownerId: o.id,
-      sharePercent: parseFloat(sharesInput[o.id] || '0') || 0
-    }));
 
-    const total = payload.reduce((acc, p) => acc + p.sharePercent, 0);
-    if (Math.abs(total - 100) > 0.00005) {
+    if (!adminOwner) {
+      setStatusBanner({ tone: 'error', text: 'Администратор не найден в списке учредителей' });
+      return;
+    }
+
+    if (!currentStorePartner) {
       setStatusBanner({
         tone: 'error',
-        text: `Сумма долей должна быть строго 100% (сейчас ${total}%)`
+        text: `Для магазина «${currentSharesStore?.name || ''}» ещё не назначен партнёр. Создайте сотрудника с ролью «Партнёр» в разделе «Сотрудники».`
+      });
+      return;
+    }
+
+    const adminNum = parseFloat(adminShareVal);
+    const partnerNum = parseFloat(partnerShareVal);
+
+    if (isNaN(adminNum) || isNaN(partnerNum)) {
+      setStatusBanner({ tone: 'error', text: 'Укажите числовые значения долей' });
+      return;
+    }
+
+    if (adminNum < 0 || adminNum > 100 || partnerNum < 0 || partnerNum > 100) {
+      setStatusBanner({ tone: 'error', text: 'Доля должна быть в диапазоне от 0% до 100%' });
+      return;
+    }
+
+    const sum = Math.round((adminNum + partnerNum) * 10000) / 10000;
+    if (Math.abs(sum - 100) > 0.0001) {
+      setStatusBanner({
+        tone: 'error',
+        text: `Сумма долей должна быть строго 100% (сейчас ${sum}%)`
       });
       return;
     }
 
     setIsSubmitting(true);
     try {
+      const payload: { ownerId: string; sharePercent: number }[] = [
+        { ownerId: adminOwner.id, sharePercent: adminNum },
+        { ownerId: currentStorePartner.id, sharePercent: partnerNum },
+      ];
+
+      // Keep existing shares of all other store owners intact
+      owners.forEach(o => {
+        if (o.id !== adminOwner.id && o.id !== currentStorePartner.id) {
+          payload.push({ ownerId: o.id, sharePercent: o.profitSharePercent ?? 0 });
+        }
+      });
+
       const res = await updateOwnerProfitShares(payload, undefined, rebalanceOnSave);
       if (res.success) {
         setIsSharesModalOpen(false);
         setStatusBanner({
           tone: 'success',
-          text: rebalanceOnSave
-            ? 'Доли сохранены, остатки прибыли пересчитаны по новым долям'
-            : 'Доли сохранены и будут применяться к будущим операциям'
+          text: `Доли для магазина «${currentSharesStore?.name || ''}» успешно сохранены: ${adminOwner.name} ${adminNum}%, ${currentStorePartner.name} ${partnerNum}%${rebalanceOnSave ? ' (остатки прибыли пересчитаны)' : ''}`
         });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка сохранения долей' });
@@ -741,6 +828,16 @@ export const OwnersPage: React.FC = () => {
                             >
                               {info.roleTag}
                             </span>
+                            {owner.storeId && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning">
+                                {stores.find(s => s.id === owner.storeId)?.name || 'Магазин'}
+                              </span>
+                            )}
+                            {!owner.storeId && info.roleTag === 'Администратор' && (
+                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-accent/10 border border-accent/30 text-accent">
+                                Все филиалы
+                              </span>
+                            )}
                           </div>
                           <span className="text-[11px] text-fg-subtle block mt-0.5">
                             {info.roleSub}
@@ -1364,13 +1461,19 @@ export const OwnersPage: React.FC = () => {
       {/* MODAL: Edit Shares */}
       {isSharesModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <form onSubmit={handleSaveShares} className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4 text-xs">
+          <form onSubmit={handleSaveShares} className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4 text-xs">
+            {/* Header */}
             <div className="flex items-center justify-between pb-2.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <Percent className="w-4 h-4 text-accent" />
-                <h4 className="text-sm font-bold text-fg uppercase tracking-wide">
-                  Доли партнеров
-                </h4>
+                <div>
+                  <h4 className="text-sm font-bold text-fg uppercase tracking-wide">
+                    Доли партнеров в магазинах
+                  </h4>
+                  <p className="text-[11px] text-fg-subtle">
+                    Настройка распределения чистой прибыли по каждому филиалу
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
@@ -1381,50 +1484,44 @@ export const OwnersPage: React.FC = () => {
               </button>
             </div>
 
-            {/* Select active owner */}
-            <div className="space-y-1">
-              <label className="block text-[11px] font-semibold text-fg-subtle uppercase">
-                Выберите учредителя:
+            {/* Store Selector */}
+            <div className="space-y-1.5">
+              <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
+                <Store className="w-3.5 h-3.5 text-accent" />
+                <span>Выберите магазин:</span>
               </label>
               <select
-                value={selectedShareOwnerId || displayOwners[0]?.id}
-                onChange={(e) => setSelectedShareOwnerId(e.target.value)}
+                value={selectedSharesStoreId}
+                onChange={(e) => handleSharesStoreChange(e.target.value)}
                 className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer"
               >
-                {displayOwners.map((owner) => {
-                  const details = getOwnerDetails(owner);
-                  const currentShare = sharesInput[owner.id] ?? (owner.profitSharePercent || 0);
+                {stores.map((s) => {
+                  const partner = owners.find(o => o.storeId === s.id);
+                  const partnerInfo = partner ? ` — Партнёр: ${partner.name} (${partner.profitSharePercent ?? 40}%)` : ' — (партнёр не назначен)';
                   return (
-                    <option key={owner.id} value={owner.id}>
-                      {details.name} — {currentShare}% ({details.roleTag})
+                    <option key={s.id} value={s.id}>
+                      {s.name} {s.isMainWarehouse ? '(Склад)' : ''}{partnerInfo}
                     </option>
                   );
                 })}
               </select>
             </div>
 
-            {/* Active Owner Form */}
-            {(() => {
-              const activeOwnerId = selectedShareOwnerId || displayOwners[0]?.id;
-              const activeOwner = displayOwners.find(o => o.id === activeOwnerId);
-              if (!activeOwner) return null;
-              const details = getOwnerDetails(activeOwner);
-              const otherOwner = owners.length === 2 ? owners.find(o => o.id !== activeOwner.id) : undefined;
-              const otherDetails = otherOwner ? getOwnerDetails(otherOwner) : undefined;
-              const currentVal = sharesInput[activeOwner.id] ?? '';
-
-              return (
-                <div className="p-3.5 rounded-xl bg-surface-raised border border-border space-y-3">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-fg">
-                      {details.name}
-                    </span>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-accent/15 border border-accent/30 text-accent uppercase">
-                      {details.roleTag}
-                    </span>
-                  </div>
-
-                  <div className="space-y-2">
+            {/* Form for selected store */}
+            {currentStorePartner && adminOwner ? (
+              <div className="space-y-3">
+                {/* Admin and Partner Cards */}
+                <div className="grid grid-cols-2 gap-3">
+                  {/* Admin Card */}
+                  <div className="p-3 rounded-xl bg-surface-raised border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-fg truncate">
+                        {adminOwner.name || 'Администратор'}
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-accent/15 border border-accent/30 text-accent uppercase">
+                        Админ
+                      </span>
+                    </div>
                     <div className="relative">
                       <input
                         type="number"
@@ -1432,81 +1529,139 @@ export const OwnersPage: React.FC = () => {
                         max="100"
                         step="any"
                         required
-                        value={currentVal}
-                        onChange={(e) => handleShareInputChange(activeOwner.id, e.target.value)}
-                        placeholder="50"
+                        value={adminShareVal}
+                        onChange={(e) => handleAdminShareInputChange(e.target.value)}
+                        placeholder="60"
                         className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-accent font-bold focus:border-accent focus:outline-none pr-8"
                       />
                       <span className="absolute right-3 top-2.5 text-fg-subtle font-bold text-sm">%</span>
                     </div>
+                    <span className="text-[10px] text-fg-subtle block">
+                      Доля администратора
+                    </span>
+                  </div>
 
-                    {/* Presets */}
-                    <div className="flex items-center gap-1.5 pt-0.5">
-                      <span className="text-[10px] text-fg-subtle">Быстро:</span>
-                      {[50, 60, 70, 80].map((preset) => (
-                        <button
-                          key={preset}
-                          type="button"
-                          onClick={() => handleShareInputChange(activeOwner.id, preset.toString())}
-                          className={`px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors cursor-pointer ${
-                            parseFloat(currentVal) === preset
-                              ? 'bg-accent text-accent-fg border-accent'
-                              : 'bg-surface hover:bg-surface-raised border-border text-fg'
-                          }`}
-                        >
-                          {preset}%
-                        </button>
-                      ))}
+                  {/* Partner Card */}
+                  <div className="p-3 rounded-xl bg-surface-raised border border-border space-y-2">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-fg truncate">
+                        {currentStorePartner.name || 'Партнёр'}
+                      </span>
+                      <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-info/15 border border-info/30 text-info uppercase">
+                        Партнёр
+                      </span>
                     </div>
-
-                    {otherOwner && otherDetails && (
-                      <p className="text-[11px] text-fg-subtle pt-1">
-                        Доля партнёра <strong className="text-fg">{otherDetails.name}</strong>: <strong className="text-accent">{sharesInput[otherOwner.id] || (100 - (parseFloat(currentVal) || 0))}%</strong>
-                      </p>
-                    )}
+                    <div className="relative">
+                      <input
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="any"
+                        required
+                        value={partnerShareVal}
+                        onChange={(e) => handlePartnerShareInputChange(e.target.value)}
+                        placeholder="40"
+                        className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-info font-bold focus:border-info focus:outline-none pr-8"
+                      />
+                      <span className="absolute right-3 top-2.5 text-fg-subtle font-bold text-sm">%</span>
+                    </div>
+                    <span className="text-[10px] text-fg-subtle block">
+                      Доля партнёра филиала
+                    </span>
                   </div>
+                </div>
 
-                  {/* Linked user */}
-                  <div className="pt-2 border-t border-border">
-                    <label className="block text-[10px] uppercase font-semibold text-fg-subtle mb-1">
-                      Привязка к системному аккаунту:
-                    </label>
-                    <select
-                      value={activeOwner.userId ?? ''}
-                      disabled={linkingOwnerId === activeOwner.id}
-                      onChange={(e) => handleChangeLinkedUser(activeOwner.id, e.target.value)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-xs text-fg focus:border-accent focus:outline-none disabled:opacity-50 cursor-pointer"
+                {/* Quick Presets */}
+                <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
+                  <span className="text-[10px] text-fg-subtle font-semibold">Быстро:</span>
+                  {[
+                    { label: '60 / 40', admin: 60, partner: 40 },
+                    { label: '50 / 50', admin: 50, partner: 50 },
+                    { label: '70 / 30', admin: 70, partner: 30 },
+                    { label: '80 / 20', admin: 80, partner: 20 },
+                  ].map((p) => {
+                    const isActive = parseFloat(adminShareVal) === p.admin && parseFloat(partnerShareVal) === p.partner;
+                    return (
+                      <button
+                        key={p.label}
+                        type="button"
+                        onClick={() => handleApplyPreset(p.admin, p.partner)}
+                        className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold border transition-all cursor-pointer ${
+                          isActive
+                            ? 'bg-accent text-accent-fg border-accent shadow-xs'
+                            : 'bg-surface hover:bg-surface-raised border-border text-fg'
+                        }`}
+                      >
+                        {p.label}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Visual Ratio Bar */}
+                {(() => {
+                  const aVal = Math.max(0, Math.min(100, parseFloat(adminShareVal) || 0));
+                  const pVal = Math.max(0, Math.min(100, parseFloat(partnerShareVal) || 0));
+                  return (
+                    <div className="space-y-1">
+                      <div className="w-full h-3 rounded-full bg-surface-raised border border-border overflow-hidden flex">
+                        <div
+                          className="bg-accent h-full transition-all duration-300"
+                          style={{ width: `${aVal}%` }}
+                          title={`Администратор: ${aVal}%`}
+                        />
+                        <div
+                          className="bg-info h-full transition-all duration-300"
+                          style={{ width: `${pVal}%` }}
+                          title={`Партнёр: ${pVal}%`}
+                        />
+                      </div>
+                      <div className="flex justify-between text-[10px] text-fg-subtle font-medium">
+                        <span>{adminOwner.name}: <strong className="text-accent">{aVal}%</strong></span>
+                        <span>{currentStorePartner.name}: <strong className="text-info">{pVal}%</strong></span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Sum validation status */}
+                {(() => {
+                  const aVal = parseFloat(adminShareVal) || 0;
+                  const pVal = parseFloat(partnerShareVal) || 0;
+                  const total = Math.round((aVal + pVal) * 100) / 100;
+                  const isValid = Math.abs(total - 100) < 0.001;
+                  return (
+                    <div
+                      className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
+                        isValid
+                          ? 'bg-accent/10 border-accent/30 text-accent'
+                          : 'bg-danger/10 border-danger/30 text-danger'
+                      }`}
                     >
-                      <option value="">— не привязан —</option>
-                      {users.filter(u => u.role === 'ADMIN' || u.role === 'PARTNER').map(u => (
-                        <option key={u.id} value={u.id}>{u.name} ({u.login})</option>
-                      ))}
-                    </select>
-                  </div>
+                      <span className="flex items-center gap-1.5">
+                        {isValid ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
+                        <span>Сумма долей: {total}%</span>
+                      </span>
+                      <span className="text-[11px]">{isValid ? '100% ✓ (Корректно)' : 'требуется ровно 100%'}</span>
+                    </div>
+                  );
+                })()}
+              </div>
+            ) : (
+              /* No partner assigned to this store */
+              <div className="p-4 rounded-xl bg-warning/10 border border-warning/30 space-y-2 text-warning">
+                <div className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4 shrink-0" />
+                  <span className="text-xs font-bold">Партнёр не назначен</span>
                 </div>
-              );
-            })()}
-
-            {/* Sum validation */}
-            {(() => {
-              const total = displayOwners.reduce((sum, o) => sum + (parseFloat(sharesInput[o.id] || '0') || 0), 0);
-              const isValid = Math.abs(total - 100) < 0.001;
-              return (
-                <div
-                  className={`p-2.5 rounded-xl border flex items-center justify-between text-xs font-semibold ${
-                    isValid
-                      ? 'bg-accent/10 border-accent/30 text-accent'
-                      : 'bg-danger/10 border-danger/30 text-danger'
-                  }`}
-                >
-                  <span className="flex items-center gap-1.5">
-                    {isValid ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-                    <span>Сумма долей: {total}%</span>
-                  </span>
-                  <span className="text-[11px]">{isValid ? '100% ✓' : 'требуется 100%'}</span>
-                </div>
-              );
-            })()}
+                <p className="text-[11px] text-fg leading-relaxed">
+                  Для магазина <strong>«{currentSharesStore?.name}»</strong> ещё не создан или не прикреплён партнёр.
+                </p>
+                <p className="text-[10px] text-fg-subtle">
+                  Перейдите во вкладку <strong>«Сотрудники»</strong>, создайте или отредактируйте сотрудника с ролью <strong>«Партнёр»</strong> и выберите этот магазин.
+                </p>
+              </div>
+            )}
 
             {/* Rebalance checkbox */}
             <label className="flex items-start gap-2 p-2.5 rounded-xl border border-border bg-surface-raised cursor-pointer">
@@ -1535,7 +1690,7 @@ export const OwnersPage: React.FC = () => {
               </button>
               <button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !currentStorePartner}
                 className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
               >
                 {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

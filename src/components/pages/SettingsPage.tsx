@@ -156,7 +156,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleOpenAdjust = (store: StoreType) => {
     setAdjustingStore(store);
-    setAdjustNewBalance((store.cashBalanceTjs ?? 0).toFixed(2));
+    setAdjustNewBalance((store.cashBalanceUsd ?? 0).toFixed(2));
     setAdjustReason('');
   };
 
@@ -177,7 +177,7 @@ export const SettingsPage: React.FC = () => {
       const res = await adjustStoreCashBalance(adjustingStore.id, parsed, adjustReason.trim());
       if (res.success) {
         setAdjustingStore(null);
-        setStatusMessage({ type: 'success', text: `Касса «${adjustingStore.name}» скорректирована на ${formatMoney(parsed)} TJS` });
+        setStatusMessage({ type: 'success', text: `Касса «${adjustingStore.name}» установлена: $${formatMoney(parsed)}` });
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка корректировки кассы' });
       }
@@ -399,7 +399,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="pt-2 border-t border-border flex justify-between items-baseline text-xs">
                     <span className="text-fg-subtle text-[11px] uppercase">Остаток в кассе:</span>
                     <span className="font-bold text-accent">
-                      {formatMoney(s.cashBalanceTjs)} TJS
+                      ${formatMoney(s.cashBalanceUsd)}
                     </span>
                   </div>
                 </div>
@@ -589,7 +589,7 @@ export const SettingsPage: React.FC = () => {
 
             <div className="p-3 rounded-xl bg-surface-raised border border-border text-xs space-y-3">
               <p className="text-fg-muted">
-                Все товары, продажи, ремонты, расходы, перемещения и касса магазина «<strong className="text-fg-muted">{mergingStore.name}</strong>» ({formatMoney(mergingStore.cashBalanceTjs)} TJS) будут перенесены в:
+                Все товары, продажи, ремонты, расходы, перемещения и касса магазина «<strong className="text-fg-muted">{mergingStore.name}</strong>» (${formatMoney(mergingStore.cashBalanceUsd)}) будут перенесены в:
               </p>
               <select
                 value={mergeTargetId}
@@ -597,7 +597,7 @@ export const SettingsPage: React.FC = () => {
                 className="w-full rounded-lg bg-surface border border-border px-3 py-2 text-fg-muted focus:outline-none focus:border-accent"
               >
                 {stores.filter(s => s.id !== mergingStore.id && !s.isMainWarehouse).map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (Остаток: {formatMoney(s.cashBalanceTjs)} TJS)</option>
+                  <option key={s.id} value={s.id}>{s.name} (Остаток: ${formatMoney(s.cashBalanceUsd)})</option>
                 ))}
               </select>
               <p className="text-[11px] text-danger flex items-start space-x-1.5 pt-1">
@@ -646,10 +646,10 @@ export const SettingsPage: React.FC = () => {
             <div className="text-xs space-y-3">
               <div>
                 <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Текущий остаток</label>
-                <p className="text-fg-muted">{formatMoney(adjustingStore.cashBalanceTjs)} TJS</p>
+                <p className="text-fg-muted">${formatMoney(adjustingStore.cashBalanceUsd)}</p>
               </div>
               <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Новый остаток (TJS) *</label>
+                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Новый остаток (USD) *</label>
                 <input step="0.01"
                   type="number"
                   value={adjustNewBalance}

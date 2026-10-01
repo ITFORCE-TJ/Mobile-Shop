@@ -243,6 +243,7 @@ interface AppContextType {
     employeeId?: string;
     employeeName?: string;
     isEmployeeAdvance?: boolean;
+    payrollMonth?: string;
   }) => Promise<{ success: boolean; message?: string }>;
   updateExpense: (id: string, data: { category?: string; amountTjs?: number; storeId?: string; comment?: string; description?: string }) => Promise<{ success: boolean; message?: string }>;
   deleteExpense: (id: string) => Promise<{ success: boolean; message?: string }>;
@@ -271,7 +272,7 @@ interface AppContextType {
   updateStore: (storeId: string, name: string, address?: string) => Promise<{ success: boolean; message?: string }>;
   deleteStore: (storeId: string) => Promise<{ success: boolean; message?: string }>;
   mergeStores: (sourceStoreId: string, targetStoreId: string) => Promise<{ success: boolean; message?: string }>;
-  adjustStoreCashBalance: (storeId: string, newBalanceTjs: number, reason: string) => Promise<{ success: boolean; message?: string }>;
+  adjustStoreCashBalance: (storeId: string, newBalanceUsd: number, reason: string) => Promise<{ success: boolean; message?: string }>;
   closeQuarterPeriod: (params: { quarterName: string; transferRemainingToCapital: boolean }) => Promise<{ success: boolean; message?: string }>;
   theme: ThemeMode;
   setTheme: (theme: ThemeMode) => void;
@@ -1276,11 +1277,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } catch (err) { return { success: false, message: errorMessage(err, 'Не удалось выплатить зарплату') }; }
   };
 
-  const createExpense: AppContextType['createExpense'] = async ({ category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance }) => {
+  const createExpense: AppContextType['createExpense'] = async ({ category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance, payrollMonth }) => {
     try {
       await apiClient('/expenses', {
         method: 'POST',
-        body: JSON.stringify({ category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance }),
+        body: JSON.stringify({ category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance, payrollMonth }),
       });
       markLocalMutation(['expenses', 'stores', 'owners']);
       await refreshAfterMutation([fetchExpenses(), fetchStores(), fetchOwners()]);
@@ -1555,9 +1556,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const adjustStoreCashBalance: AppContextType['adjustStoreCashBalance'] = async (storeId, newBalanceTjs, reason) => {
+  const adjustStoreCashBalance: AppContextType['adjustStoreCashBalance'] = async (storeId, newBalanceUsd, reason) => {
     try {
-      await apiClient(`/stores/${storeId}/adjust-cash`, { method: 'POST', body: JSON.stringify({ newBalanceTjs, reason }) });
+      await apiClient(`/stores/${storeId}/adjust-cash`, { method: 'POST', body: JSON.stringify({ newBalanceUsd, reason }) });
       await refetchAll();
       return { success: true };
     } catch (err) {

@@ -2,9 +2,11 @@ import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import type { TransactionClient } from '../../prisma/prisma.service';
-import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
+import { allocateMoney } from '../../common/allocation';
 import { moneyEquals, requireNonNegativeMoney, requirePositiveMoney, roundMoney } from '../../common/money';
 import { allocateOwnerProfit } from './profit';
+import { getOwnersForStore } from '../finance/owner-allocations';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 
@@ -33,11 +35,6 @@ export class SalesService {
       throw new Error('Корзина пуста');
     }
 
-    const rate = await getRateForDate(new Date());
-    if (!rate) {
-      throw new Error('Сначала задайте курс валют на сегодня');
-    }
-
     if (!input.storeId) throw new Error('Не удалось определить магазин продажи');
     if (!['CASH', 'CARD', 'SPLIT'].includes(input.paymentMethod)) throw new Error('Некорректный способ оплаты');
     const deviceIds = input.items.map((item) => item.deviceId);
@@ -58,6 +55,7 @@ export class SalesService {
     }
 
     return prisma.$transaction(async (tx: TransactionClient) => {
+      const rate = await requireTodayRate(tx);
       const store = await tx.store.findUnique({ where: { id: input.storeId } });
       if (!store || !store.active || store.isMainWarehouse) {
         throw new Error('Главный склад предназначен исключительно для хранения телефонов. Продажи со склада запрещены — продажа возможна только через розничные торговые точки.');
@@ -77,6 +75,9 @@ export class SalesService {
       const deviceById = new Map(devices.map((d) => [d.id, d]));
 
       const totalUsd = roundMoney(D(totalTjs).div(rate));
+      // Split the receipt's USD total across items by price so the items add up to it
+      // exactly — rounding each item on its own drifts by a cent from the total.
+      const itemUsd = allocateMoney(totalUsd, normalizedItems.map((item) => item.salePriceTjs));
       let totalCostUsd = D(0);
       let regularRevenueUsd = D(0);
       let regularCostUsd = D(0);
@@ -84,10 +85,13 @@ export class SalesService {
       let bonusProfitTjs = D(0);
       let hasBelowCostItem = false;
 
-      const saleItemsData = normalizedItems.map((item) => {
+      const saleItemsData = normalizedItems.map((item, index) => {
         const device = deviceById.get(item.deviceId)!;
-        const isBonus = Boolean(device.isBonus || (device.bonusCampaign && D(device.costBasisUsd).eq(0)));
-        const salePriceUsd = roundMoney(D(item.salePriceTjs).div(rate));
+        // Only a device that cost nothing is a bonus: its whole price goes to the bonus pool.
+        // A bonus-flagged device bought for money, or one taken back in an exchange at its
+        // trade-in value, is a regular sale so its cost is never skipped.
+        const isBonus = Boolean((device.isBonus || device.bonusCampaign) && D(device.costBasisUsd).eq(0));
+        const salePriceUsd = itemUsd[index];
         const costTjs = D(device.costBasisUsd).mul(rate);
         const isBelowCost = !isBonus && D(item.salePriceTjs).lt(costTjs);
         if (isBelowCost) hasBelowCostItem = true;
@@ -158,7 +162,7 @@ export class SalesService {
         data: { status: 'SOLD' },
       });
       if (updateResult.count !== deviceIds.length) {
-        throw new Error('One or more selected devices were sold concurrently. Please refresh and try again.');
+        throw new Error('Одно или несколько устройств были проданы параллельно. Обновите данные и повторите продажу');
       }
 
       await tx.deviceTimelineEvent.createMany({
@@ -173,7 +177,10 @@ export class SalesService {
       });
 
       if (!D(cashAmountTjs).eq(0)) {
-        await tx.store.update({ where: { id: input.storeId }, data: { cashBalanceTjs: { increment: cashAmountTjs } } });
+        // The register is kept in USD at today's rate; the cash share of the receipt's USD
+        // total is split exactly so cash + card always add up to totalUsd.
+        const [cashAmountUsd] = allocateMoney(totalUsd, [cashAmountTjs, cardAmountTjs]);
+        await tx.store.update({ where: { id: input.storeId }, data: { cashBalanceUsd: { increment: cashAmountUsd } } });
         // Card payments settle outside any account this system tracks today (no
         // card/bank settlement account exists yet — matches existing behavior, where
         // the card portion has never moved a balance field either), so only the cash
@@ -184,12 +191,12 @@ export class SalesService {
           direction: 'IN',
           numberPrefix: 'CR',
           accountId: cashAccount.id,
-          balanceCurrency: 'TJS',
+          balanceCurrency: 'USD',
           amount: cashAmountTjs,
           currency: 'TJS',
           exchangeRate: rate,
           amountTjs: cashAmountTjs,
-          amountUsd: roundMoney(D(cashAmountTjs).div(rate)),
+          amountUsd: cashAmountUsd,
           categoryName: 'Продажа',
           shopId: input.storeId,
           sourceType: 'SALE',
@@ -200,18 +207,17 @@ export class SalesService {
       }
 
       const regularProfitUsd = roundMoney(D(regularRevenueUsd).minus(regularCostUsd));
-      const owners = await tx.owner.findMany();
-      // Only regular profit is auto-distributed to owners on sale.
+      const owners = await getOwnersForStore(tx, input.storeId);
+      // Only regular profit is auto-distributed to owners on sale — a loss too, the same as
+      // an exchange, so owner balances always match the profit the reports show.
       // Bonus device profit is stored in the pending bonus pool for quarterly manual allocation.
-      const ownerProfitAllocations = regularProfitUsd.gt(0) ? allocateOwnerProfit(regularProfitUsd, owners) : [];
-      if (ownerProfitAllocations.length > 0) {
-        await Promise.all(ownerProfitAllocations.map(({ ownerId, amountUsd: delta }) => {
-          return tx.owner.update({
-            where: { id: ownerId },
-            data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
-          });
-        }));
-      }
+      const ownerProfitAllocations = regularProfitUsd.isZero() ? [] : allocateOwnerProfit(regularProfitUsd, owners);
+      await Promise.all(ownerProfitAllocations.filter(({ amountUsd }) => !D(amountUsd).isZero()).map(({ ownerId, amountUsd: delta }) => {
+        return tx.owner.update({
+          where: { id: ownerId },
+          data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
+        });
+      }));
 
       await tx.ledgerEntry.create({
         data: {

@@ -1,6 +1,5 @@
-import { D, moneyJson, type MoneyInput } from '../../common/decimal';
+import { D, type MoneyInput } from '../../common/decimal';
 import type { TransactionClient } from '../../prisma/prisma.service';
-import { postTransaction } from './financial-transaction.service';
 
 type Actor = { id: string; name: string; role: string };
 
@@ -18,9 +17,10 @@ export async function getStoreCashAccount(tx: TransactionClient, storeId: string
   });
 }
 
-/** The store register is the authoritative cash balance used by every cash operation.
- * Older imports may predate the financial ledger. Reconcile its mirror explicitly,
- * under the store lock, before money leaves it; never add money to the register. */
+/** The store register (USD) is the authoritative cash balance used by every cash operation,
+ * and its ledger account must mirror it exactly. A difference means some write moved one
+ * without the other, so it is reported and the operation refused instead of being papered
+ * over — the admin fixes it explicitly with a cash adjustment, which resets both. */
 export async function lockCashRegister(tx: TransactionClient, storeId: string, actor: Actor, purpose: string) {
   await tx.$queryRaw`SELECT id FROM stores WHERE id = ${storeId} FOR UPDATE`;
   const store = await tx.store.findUnique({ where: { id: storeId } });
@@ -28,22 +28,12 @@ export async function lockCashRegister(tx: TransactionClient, storeId: string, a
   const account = await getStoreCashAccount(tx, storeId, store.name);
   await tx.$queryRaw`SELECT id FROM financial_accounts WHERE id = ${account.id} FOR UPDATE`;
   const current = await tx.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
-  const difference = D(store.cashBalanceTjs).minus(current.balanceTjs);
+  const difference = D(store.cashBalanceUsd).minus(current.balanceUsd);
   if (!difference.eq(0)) {
-    await postTransaction(tx, {
-      type: 'ADJUSTMENT', direction: difference.gt(0) ? 'IN' : 'OUT', numberPrefix: 'AJ',
-      accountId: account.id, balanceCurrency: 'TJS', currency: 'TJS',
-      amount: difference.abs(), amountTjs: difference.abs(), amountUsd: 0,
-      shopId: storeId, sourceType: 'CASH_LEDGER_RECONCILIATION', sourceId: storeId,
-      description: `Сверка финансового счёта с кассой ${store.name} перед операцией: ${purpose}`,
-      createdByUserId: actor.id, guardBalance: false,
-    });
-    await tx.auditLog.create({ data: {
-      userId: actor.id, userName: actor.name, userRole: actor.role,
-      action: 'CASH_LEDGER_RECONCILIATION',
-      details: `Счёт ${account.id}: ${current.balanceTjs} → ${store.cashBalanceTjs} TJS; остаток кассы не изменён`,
-      financialDetails: moneyJson({ previousAccountBalanceTjs: current.balanceTjs, cashBalanceTjs: store.cashBalanceTjs, differenceTjs: difference }),
-    } });
+    throw Object.assign(new Error(
+      `Расхождение кассы «${store.name}» ($${store.cashBalanceUsd}) и её финансового счёта ($${current.balanceUsd}) на $${difference}. ` +
+      `Операция «${purpose}» остановлена: выполните корректировку кассы в настройках.`,
+    ), { statusCode: 409 });
   }
   return { store, account };
 }
@@ -58,11 +48,11 @@ export async function lockCentralCashRegister(tx: TransactionClient, actor: Acto
 
 /** Takes cash out of the central register, refusing to overdraw it. The caller posts the
  * matching ledger transaction on the returned account. */
-export async function withdrawFromCentralCash(tx: TransactionClient, amountTjs: MoneyInput, actor: Actor, purpose: string) {
+export async function withdrawFromCentralCash(tx: TransactionClient, amountUsd: MoneyInput, actor: Actor, purpose: string) {
   const register = await lockCentralCashRegister(tx, actor, purpose);
   const guard = await tx.store.updateMany({
-    where: { id: register.store.id, cashBalanceTjs: { gte: amountTjs } },
-    data: { cashBalanceTjs: { decrement: amountTjs } },
+    where: { id: register.store.id, cashBalanceUsd: { gte: amountUsd } },
+    data: { cashBalanceUsd: { decrement: amountUsd } },
   });
   if (guard.count !== 1) throw new Error(`В центральной кассе недостаточно наличных: ${purpose}`);
   return register;

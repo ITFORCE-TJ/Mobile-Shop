@@ -87,7 +87,7 @@ export const SuppliersPage: React.FC = () => {
   const centralCashStore = useMemo(() => {
     const warehouses = stores.filter(s => s.isMainWarehouse);
     if (warehouses.length === 0) return stores[0] || null;
-    return warehouses.reduce((best, cur) => (cur.cashBalanceTjs || 0) > (best.cashBalanceTjs || 0) ? cur : best, warehouses[0]);
+    return warehouses.reduce((best, cur) => (cur.cashBalanceUsd || 0) > (best.cashBalanceUsd || 0) ? cur : best, warehouses[0]);
   }, [stores]);
   const defaultPaymentStoreId = centralCashStore?.id || '';
   const rateNumber = todayRate?.rate || 0;
@@ -124,11 +124,11 @@ export const SuppliersPage: React.FC = () => {
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (currentUser?.role === 'SELLER') {
+  if (currentUser?.role !== 'ADMIN') {
     return (
       <div className="p-8 text-center text-fg-subtle">
         <p className="text-sm font-medium text-fg-muted">Доступ ограничен</p>
-        <p className="text-xs mt-1">Раздел поставщиков доступен только Администраторам и Партнерам</p>
+        <p className="text-xs mt-1">Раздел поставщиков и цен закупки доступен только Администратору</p>
       </div>
     );
   }
@@ -716,7 +716,7 @@ export const SuppliersPage: React.FC = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-xs font-bold text-accent">
-                      {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                      ${formatMoney(centralCashStore?.cashBalanceUsd)}
                     </span>
                     <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
                   </div>
@@ -732,9 +732,9 @@ export const SuppliersPage: React.FC = () => {
                 </div>
               )}
 
-              {rateNumber > 0 && parseFloat(paymentAmountUsd) > 0 && (parseFloat(paymentAmountUsd) * rateNumber) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+              {parseFloat(paymentAmountUsd) > 0 && parseFloat(paymentAmountUsd) > (centralCashStore?.cashBalanceUsd ?? 0) && (
                 <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                  Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: ~{formatMoney(parseFloat(paymentAmountUsd) * rateNumber)} TJS).
+                  Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(parseFloat(paymentAmountUsd) || 0)}).
                 </div>
               )}
 
@@ -811,7 +811,7 @@ export const SuppliersPage: React.FC = () => {
                   </div>
                   <div className="text-right shrink-0">
                     <span className="text-xs font-bold text-accent">
-                      {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                      ${formatMoney(centralCashStore?.cashBalanceUsd)}
                     </span>
                     <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
                   </div>
@@ -827,9 +827,9 @@ export const SuppliersPage: React.FC = () => {
                 </div>
               )}
 
-              {rateNumber > 0 && parseFloat(payInvoiceAmountUsd) > 0 && (parseFloat(payInvoiceAmountUsd) * rateNumber) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+              {parseFloat(payInvoiceAmountUsd) > 0 && parseFloat(payInvoiceAmountUsd) > (centralCashStore?.cashBalanceUsd ?? 0) && (
                 <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                  Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: ~{formatMoney(parseFloat(payInvoiceAmountUsd) * rateNumber)} TJS).
+                  Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(parseFloat(payInvoiceAmountUsd) || 0)}).
                 </div>
               )}
 

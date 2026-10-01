@@ -138,7 +138,8 @@ model Store {
   name            String
   address         String?
   isMainWarehouse Boolean  @default(false)
-  cashBalanceTjs  Decimal  @default(0) @db.Decimal(14, 2)
+  // Every register is kept in USD: TJS takings and payouts are converted at the day's rate.
+  cashBalanceUsd  Decimal  @default(0) @db.Decimal(14, 2)
   active          Boolean  @default(true)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -730,6 +731,8 @@ model Expense {
   paidAt               DateTime?
   employeeId           String?
   isEmployeeAdvance    Boolean   @default(false)
+  // 'YYYY-MM' an employee advance is deducted from (it can be paid out in another month).
+  payrollMonth         String?
   createdAt            DateTime  @default(now())
   // Cancellation record instead of a hard delete — the expense (and its financial
   // transaction) must stay queryable forever for audit purposes; see FinancialTransaction.

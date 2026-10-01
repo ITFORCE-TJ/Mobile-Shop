@@ -6,7 +6,7 @@ const close = (left: MoneyInput, right: MoneyInput, tolerance = 0.02) => D(left)
 
 async function main() {
   const [stores, devices, sales, suppliers, invoices, owners, transfers, expenses, ledger, todayRate] = await Promise.all([
-    prisma.store.findMany({ select: { id: true, isMainWarehouse: true, cashBalanceTjs: true, active: true } }),
+    prisma.store.findMany({ select: { id: true, isMainWarehouse: true, cashBalanceUsd: true, active: true } }),
     prisma.device.findMany({ select: { id: true, storeId: true, status: true } }),
     prisma.sale.findMany({ include: { saleItems: { select: { deviceId: true, salePriceTjs: true, costBasisUsd: true } }, exchangeEvents: { select: { id: true } } } }),
     prisma.supplier.findMany({ select: { id: true, totalPurchasedUsd: true, totalPaidUsd: true, totalDebtUsd: true } }),
@@ -24,7 +24,7 @@ async function main() {
   const issues: { code: string; ids: string[]; count: number }[] = [];
   const add = (code: string, ids: string[]) => { if (ids.length) issues.push({ code, count: ids.length, ids: ids.slice(0, 20) }); };
 
-  add('NEGATIVE_STORE_CASH', stores.filter((store) => !store.isMainWarehouse && D(store.cashBalanceTjs).lt(-0.01)).map((store) => `${store.id}:${store.cashBalanceTjs.toFixed(2)}TJS`));
+  add('NEGATIVE_STORE_CASH', stores.filter((store) => !store.isMainWarehouse && D(store.cashBalanceUsd).lt(-0.01)).map((store) => `${store.id}:${store.cashBalanceUsd.toFixed(2)}USD`));
   add('AVAILABLE_DEVICE_LOCATION_STATUS_MISMATCH', devices.filter((device) => {
     const store = storeById.get(device.storeId);
     return !store || (device.status === 'MAIN_WAREHOUSE' && !store.isMainWarehouse) ||

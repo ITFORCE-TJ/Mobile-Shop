@@ -75,8 +75,8 @@ export class UsersService {
       const existing = await tx.user.findUnique({ where: { login: input.login } });
       if (existing) throw new Error('Пользователь с таким логином уже существует');
 
-      if (input.role === 'SELLER' && (!input.storeId || !input.storeId.trim())) {
-        throw new Error('Для роли Продавец обязательна привязка к магазину');
+      if ((input.role === 'SELLER' || input.role === 'PARTNER') && (!input.storeId || !input.storeId.trim())) {
+        throw new Error(input.role === 'PARTNER' ? 'Для роли Партнер обязательна привязка к магазину' : 'Для роли Продавец обязательна привязка к магазину');
       }
 
       const hashed = await AuthService.hashPassword(requireValidPassword(input.password));
@@ -92,6 +92,23 @@ export class UsersService {
         },
         select: SAFE_SELECT,
       });
+
+      if (input.role === 'PARTNER') {
+        const existingOwner = await tx.owner.findFirst({ where: { userId: user.id } });
+        if (!existingOwner) {
+          await tx.owner.create({
+            data: {
+              name: user.name,
+              userId: user.id,
+              storeId: user.storeId || null,
+              profitSharePercent: 40,
+              capitalBalanceUsd: 0,
+              totalAccruedProfitUsd: 0,
+              availableProfitUsd: 0,
+            } as any,
+          });
+        }
+      }
 
       await tx.auditLog.create({
         data: { userId: actor.id, userName: actor.name, userRole: actor.role, action: 'USER_CREATE', details: `Создан сотрудник: ${user.name} (${user.role})`, targetId: user.id },
@@ -136,8 +153,8 @@ export class UsersService {
 
       const effectiveRole = data.role || targetUser.role;
       const effectiveStoreId = data.storeId !== undefined ? data.storeId : targetUser.storeId;
-      if (effectiveRole === 'SELLER' && (!effectiveStoreId || !String(effectiveStoreId).trim())) {
-        throw new Error('Для роли Продавец обязательна привязка к магазину');
+      if ((effectiveRole === 'SELLER' || effectiveRole === 'PARTNER') && (!effectiveStoreId || !String(effectiveStoreId).trim())) {
+        throw new Error(effectiveRole === 'PARTNER' ? 'Для роли Партнер обязательна привязка к магазину' : 'Для роли Продавец обязательна привязка к магазину');
       }
 
       if (input.password && input.password.trim().length > 0) {
@@ -149,10 +166,16 @@ export class UsersService {
         await tx.authSession.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
       }
 
-      // Keep a linked Owner's display name in sync — it must never drift from the
+      // Keep a linked Owner's display name and storeId in sync — it must never drift from the
       // actual account it represents (a partner is a real person, not a free-text label).
-      if (data.name) {
-        await tx.owner.updateMany({ where: { userId }, data: { name: data.name } });
+      if (data.name || input.storeId !== undefined) {
+        await tx.owner.updateMany({
+          where: { userId },
+          data: {
+            ...(data.name ? { name: data.name } : {}),
+            ...(input.storeId !== undefined ? { storeId: input.storeId } : {}),
+          },
+        });
       }
 
       await tx.auditLog.create({

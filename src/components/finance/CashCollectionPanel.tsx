@@ -120,24 +120,24 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
   }, [month, retailScope, scoped, revision]);
 
   const posted = items.filter((i: CashCollection) => i.status === 'POSTED');
-  const totalCollectedThisMonth = posted.reduce((sum: number, i: CashCollection) => sum + i.amountTjs, 0);
+  const totalCollectedThisMonth = posted.reduce((sum: number, i: CashCollection) => sum + i.amountUsd, 0);
   const amountValue = parseFloat(amount) || 0;
-  const cashNow = formStore?.cashBalanceTjs ?? 0;
+  const cashNow = formStore?.cashBalanceUsd ?? 0;
 
   // Auto-fill entire till balance whenever selecting a store (if amount is empty or was from previous store)
   useEffect(() => {
-    if (formStore && formStore.cashBalanceTjs > 0 && !amount) {
-      setAmount(String(formStore.cashBalanceTjs));
+    if (formStore && formStore.cashBalanceUsd > 0 && !amount) {
+      setAmount(String(formStore.cashBalanceUsd));
       setActivePreset('full');
     }
   }, [formStoreId]);
 
   // Aggregate network cash stats across all retail registers
   const totalRetailTillCash = useMemo(() => {
-    return retailStores.reduce((sum: number, s: Store) => sum + (Number(s.cashBalanceTjs) || 0), 0);
+    return retailStores.reduce((sum: number, s: Store) => sum + (Number(s.cashBalanceUsd) || 0), 0);
   }, [retailStores]);
 
-  const centralSafeCash = mainWarehouse?.cashBalanceTjs ?? 0;
+  const centralSafeCash = mainWarehouse?.cashBalanceUsd ?? 0;
 
   // Store metrics map from reports summary
   const storeMetricsMap = useMemo(() => {
@@ -152,7 +152,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
 
   const handleSelectStoreForCollection = (store: Store, fullAmount?: boolean) => {
     setFormStoreId(store.id);
-    const targetAmt = store.cashBalanceTjs ?? 0;
+    const targetAmt = store.cashBalanceUsd ?? 0;
     if (fullAmount && targetAmt > 0) {
       setAmount(String(targetAmt));
       setActivePreset('full');
@@ -163,15 +163,15 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
     }
   };
 
-  const handleSetPreset = (type: 'full' | 'leave200' | 'leave500') => {
+  const handleSetPreset = (type: 'full' | 'leave20' | 'leave50') => {
     setActivePreset(type);
     if (type === 'full') {
       setAmount(String(cashNow));
-    } else if (type === 'leave200') {
-      const val = Math.max(0, cashNow - 200);
+    } else if (type === 'leave20') {
+      const val = Math.max(0, cashNow - 20);
       setAmount(String(val));
-    } else if (type === 'leave500') {
-      const val = Math.max(0, cashNow - 500);
+    } else if (type === 'leave50') {
+      const val = Math.max(0, cashNow - 50);
       setAmount(String(val));
     }
   };
@@ -183,13 +183,13 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
         method: 'POST',
         body: JSON.stringify({
           storeId: formStoreId,
-          amountTjs: amountValue,
+          amountUsd: amountValue,
           comment: comment.trim() || undefined,
         }),
       });
       setStatus({
         tone: 'success',
-        text: `✓ Инкассация ${tjs(amountValue)} из кассы «${formStore?.name ?? ''}» в центральную кассу успешно проведена`,
+        text: `✓ Инкассация ${usd(amountValue)} из кассы «${formStore?.name ?? ''}» в центральную кассу успешно проведена`,
       });
       setAmount('');
       setComment('');
@@ -203,7 +203,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
   };
 
   const handleCollectAllStores = async () => {
-    const storesWithCash = retailStores.filter((s: Store) => (s.cashBalanceTjs ?? 0) > 0);
+    const storesWithCash = retailStores.filter((s: Store) => (s.cashBalanceUsd ?? 0) > 0);
     if (storesWithCash.length === 0) {
       setStatus({ tone: 'warning', text: 'Во всех кассах магазинов сейчас нулевой остаток' });
       return;
@@ -217,7 +217,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
           method: 'POST',
           body: JSON.stringify({
             storeId: st.id,
-            amountTjs: st.cashBalanceTjs,
+            amountUsd: st.cashBalanceUsd,
             comment: 'Автоматическая пакетная инкассация всей сети',
           }),
         });
@@ -244,7 +244,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
       await apiClient(`/cash-collections/${cancelling.id}/cancel`, { method: 'POST' });
       setStatus({
         tone: 'success',
-        text: `Инкассация ${cancelling.transactionNumber} отменена, ${tjs(cancelling.amountTjs)} возвращены в кассу магазина`,
+        text: `Инкассация ${cancelling.transactionNumber} отменена, ${usd(cancelling.amountUsd)} возвращены в кассу магазина`,
       });
     } catch (error) {
       setStatus({ tone: 'error', text: (error as Error).message || 'Не удалось отменить инкассацию' });
@@ -274,21 +274,21 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
         />
         <StatCard
           label="Наличные в кассах точек"
-          value={tjs(totalRetailTillCash)}
+          value={usd(totalRetailTillCash)}
           subvalue={`В ${retailStores.length} точках`}
           icon={Wallet}
           tone={totalRetailTillCash > 0 ? 'warning' : 'neutral'}
         />
         <StatCard
           label="Инкассировано за месяц"
-          value={tjs(totalCollectedThisMonth)}
+          value={usd(totalCollectedThisMonth)}
           subvalue={`${posted.length} операций`}
           icon={ArrowRightLeft}
           tone="success"
         />
         <StatCard
           label="Центральный сейф"
-          value={tjs(centralSafeCash)}
+          value={usd(centralSafeCash)}
           subvalue={mainWarehouse?.name || 'Главный склад'}
           icon={Vault}
         />
@@ -315,7 +315,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                 className="px-3 py-1.5 rounded-lg bg-surface-raised border border-border hover:border-accent text-xs font-semibold text-accent flex items-center gap-1.5 transition-colors disabled:opacity-50"
               >
                 <Zap className="w-3.5 h-3.5" />
-                Инкассировать все кассы ({tjs(totalRetailTillCash)})
+                Инкассировать все кассы ({usd(totalRetailTillCash)})
               </button>
             )}
           </div>
@@ -326,7 +326,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
               const storeRevenueTjs = metrics?.revenueTjs ?? 0;
               const storeRevenueUsd = metrics?.revenueUsd ?? 0;
               const storeSalesCount = metrics?.salesCount ?? 0;
-              const storeCash = st.cashBalanceTjs ?? 0;
+              const storeCash = st.cashBalanceUsd ?? 0;
               const storeCollected = metrics?.cashCollectedTjs ?? 0;
               const isSelected = formStoreId === st.id;
 
@@ -349,7 +349,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                     </div>
                     {storeCash > 0 ? (
                       <Badge tone="warning" className="shrink-0 text-[10px]">
-                        В кассе: {tjs(storeCash)}
+                        В кассе: {usd(storeCash)}
                       </Badge>
                     ) : (
                       <Badge tone="neutral" className="shrink-0 text-[10px]">
@@ -372,7 +372,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                   <div className="flex items-center justify-between gap-2 pt-0.5">
                     <span className="text-xs font-semibold text-fg-muted flex items-center gap-1">
                       <Wallet className="w-3.5 h-3.5 text-accent" />
-                      {tjs(storeCash)}
+                      {usd(storeCash)}
                     </span>
                     {storeCash > 0 && (
                       <button
@@ -413,7 +413,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
               <p className="text-[10px] text-fg-subtle uppercase tracking-wider font-semibold">
                 В кассе точки
               </p>
-              <p className="text-sm font-black text-accent">{tjs(cashNow)}</p>
+              <p className="text-sm font-black text-accent">{usd(cashNow)}</p>
             </div>
           )}
         </div>
@@ -439,7 +439,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                 >
                   {retailStores.map((s: Store) => (
                     <option key={s.id} value={s.id}>
-                      {s.name} (В кассе: {(s.cashBalanceTjs ?? 0).toLocaleString()} TJS)
+                      {s.name} (В кассе: {usd(s.cashBalanceUsd ?? 0)})
                     </option>
                   ))}
                 </Select>
@@ -447,12 +447,12 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
             ) : (
               <FormField label="Магазин">
                 <div className="h-11 flex items-center px-3 rounded-lg bg-surface-raised border border-border text-sm font-semibold text-fg-muted truncate">
-                  {formStore?.name ?? '—'} (В кассе: {tjs(cashNow)})
+                  {formStore?.name ?? '—'} (В кассе: {usd(cashNow)})
                 </div>
               </FormField>
             )}
 
-            <FormField label="Сумма к инкассации (TJS)" required>
+            <FormField label="Сумма к инкассации (USD)" required>
               <div className="relative">
                 <input
                   type="number"
@@ -468,7 +468,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                   className="w-full h-11 rounded-lg bg-bg border border-border px-3 pr-16 text-sm font-bold text-fg-muted focus:outline-none focus:border-accent"
                 />
                 <span className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-fg-subtle">
-                  TJS
+                  USD
                 </span>
               </div>
             </FormField>
@@ -497,32 +497,32 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                     : 'bg-surface-raised text-fg-muted border-border hover:border-accent/50'
                 }`}
               >
-                Вся касса ({tjs(cashNow)})
+                Вся касса ({usd(cashNow)})
               </button>
-              {cashNow > 200 && (
+              {cashNow > 20 && (
                 <button
                   type="button"
-                  onClick={() => handleSetPreset('leave200')}
+                  onClick={() => handleSetPreset('leave20')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                    activePreset === 'leave200'
+                    activePreset === 'leave20'
                       ? 'bg-accent text-accent-fg border-accent'
                       : 'bg-surface-raised text-fg-muted border-border hover:border-accent/50'
                   }`}
                 >
-                  Оставить 200 TJS на размен (сдать {tjs(cashNow - 200)})
+                  Оставить $20 на размен (сдать {usd(cashNow - 20)})
                 </button>
               )}
-              {cashNow > 500 && (
+              {cashNow > 50 && (
                 <button
                   type="button"
-                  onClick={() => handleSetPreset('leave500')}
+                  onClick={() => handleSetPreset('leave50')}
                   className={`px-2.5 py-1 rounded-lg text-xs font-semibold border transition-colors ${
-                    activePreset === 'leave500'
+                    activePreset === 'leave50'
                       ? 'bg-accent text-accent-fg border-accent'
                       : 'bg-surface-raised text-fg-muted border-border hover:border-accent/50'
                   }`}
                 >
-                  Оставить 500 TJS на размен (сдать {tjs(cashNow - 500)})
+                  Оставить $50 на размен (сдать {usd(cashNow - 50)})
                 </button>
               )}
             </div>
@@ -530,7 +530,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
 
           {amountValue > cashNow && (
             <p className="text-xs text-danger font-medium">
-              Внимание: сумма инкассации превышает текущий остаток в кассе ({tjs(cashNow)}).
+              Внимание: сумма инкассации превышает текущий остаток в кассе ({usd(cashNow)}).
             </p>
           )}
 
@@ -541,7 +541,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
               leftIcon={ArrowRightLeft}
               disabled={busy || amountValue <= 0 || !formStoreId || amountValue > cashNow}
             >
-              Инкассировать {amountValue > 0 ? tjs(amountValue) : ''}
+              Инкассировать {amountValue > 0 ? usd(amountValue) : ''}
             </Button>
           </div>
         </form>
@@ -574,10 +574,10 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
             )}
             <span className="text-xs font-bold text-accent">
               {filteredHistoryItems.filter((i: CashCollection) => i.status === 'POSTED').length} опер. ·{' '}
-              {tjs(
+              {usd(
                 filteredHistoryItems
                   .filter((i: CashCollection) => i.status === 'POSTED')
-                  .reduce((sum: number, i: CashCollection) => sum + i.amountTjs, 0)
+                  .reduce((sum: number, i: CashCollection) => sum + i.amountUsd, 0)
               )}
             </span>
           </div>
@@ -621,7 +621,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
                       item.status === 'CANCELLED' ? 'text-fg-subtle line-through' : 'text-accent'
                     }`}
                   >
-                    {tjs(item.amountTjs)}
+                    {usd(item.amountUsd)}
                   </span>
                   {canCancel && item.status === 'POSTED' && (
                     <button
@@ -644,7 +644,7 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
       <ConfirmDialog
         open={confirmOpen}
         title="Провести инкассацию?"
-        message={`${tjs(amountValue)} будут списаны из кассы «${
+        message={`${usd(amountValue)} будут списаны из кассы «${
           formStore?.name ?? ''
         }» и переданы в центральный сейф «${mainWarehouse?.name ?? 'Главный склад'}».`}
         confirmLabel="Инкассировать"
@@ -659,8 +659,8 @@ export const CashCollectionPanel: React.FC<CashCollectionPanelProps> = ({ storeI
         title="Отменить инкассацию?"
         message={
           cancelling
-            ? `${tjs(
-                cancelling.amountTjs
+            ? `${usd(
+                cancelling.amountUsd
               )} будут списаны из центрального сейфа и возвращены в кассу «${cancelling.storeName}».`
             : ''
         }

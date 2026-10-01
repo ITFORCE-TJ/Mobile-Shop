@@ -61,7 +61,7 @@ export function registerExpenseRoutes(app: Express) {
 
   app.post('/api/expenses', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const { category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance } =
+      const { category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance, payrollMonth } =
         req.body ?? {};
       if (!category || !amountTjs) {
         res.status(400).json({ message: 'category и amountTjs обязательны' });
@@ -79,6 +79,7 @@ export function registerExpenseRoutes(app: Express) {
         paidFromCashRegister,
         employeeId,
         isEmployeeAdvance,
+        payrollMonth,
         createdByUserId: req.user!.userId,
       });
 

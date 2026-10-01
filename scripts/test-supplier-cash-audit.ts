@@ -36,40 +36,54 @@ try {
 
 
   const warehouse = await db.store.findFirstOrThrow({ where: { isMainWarehouse: true } });
-  const purchase = await api('POST', '/purchases', { supplierId: 'sup-dubai', invoiceNumber: 'CASH-RECONCILE', storeId: warehouse.id, groups: [{ brand: 'Test', model: 'Phone', storage: '128', color: 'Black', purchasePriceUsd: 100, items: [{ imei: '350000000000001' }] }] });
+  const purchase = await api('POST', '/purchases', { supplierId: 'sup-dubai', invoiceNumber: 'CASH-RECONCILE', storeId: warehouse.id, groups: [{ brand: 'Test', model: 'Phone', ram: '8', storage: '128', color: 'Black', purchasePriceUsd: 100, items: [{ imei: '350000000000001' }] }] });
   assert.equal(purchase.status, 201, JSON.stringify(purchase));
   const endpoint = `/supplier-invoices/${purchase.data.invoice.id}/payments`;
-  await db.store.update({ where: { id: warehouse.id }, data: { cashBalanceTjs: 1000 } });
-  const payment = { amountUsd: 10, sourceAccount: 'STORE_CASH', storeId: warehouse.id };
-  const result = await api('POST', endpoint, payment, 'invoice-pay');
-  assert.equal(result.status, 201, JSON.stringify(result));
+  // Registers are kept in USD and their ledger account must mirror them exactly.
+  const setCash = async (usd: number, accountUsd = usd) => {
+    await db.store.update({ where: { id: warehouse.id }, data: { cashBalanceUsd: usd } });
+    await db.financialAccount.upsert({ where: { storeId: warehouse.id }, update: { balanceUsd: accountUsd, balanceTjs: 0 },
+      create: { name: `Касса ${warehouse.name}`, type: 'CASH', storeId: warehouse.id, balanceUsd: accountUsd } });
+  };
   const check = async (expected: string) => {
     const store = await db.store.findUniqueOrThrow({ where: { id: warehouse.id } });
     const account = await db.financialAccount.findUniqueOrThrow({ where: { storeId: warehouse.id } });
-    assert.equal(store.cashBalanceTjs.toString(), expected); assert(account.balanceTjs.eq(store.cashBalanceTjs));
+    assert.equal(store.cashBalanceUsd.toString(), expected); assert(account.balanceUsd.eq(store.cashBalanceUsd));
   };
-  await check('900');
-  assert.equal(await db.financialTransaction.count({ where: { sourceType: 'CASH_LEDGER_RECONCILIATION' } }), 1);
-  assert.equal(await db.auditLog.count({ where: { action: 'CASH_LEDGER_RECONCILIATION' } }), 1);
-  pass('legacy cash with empty financial account: invoice paid; mirror reconciled and audited');
+  await setCash(100);
+  const payment = { amountUsd: 10, sourceAccount: 'STORE_CASH', storeId: warehouse.id };
+  const result = await api('POST', endpoint, payment, 'invoice-pay');
+  assert.equal(result.status, 201, JSON.stringify(result));
+  await check('90');
+  pass('invoice paid in USD: register and ledger account both -$10');
   assert.equal((await api('POST', endpoint, payment, 'invoice-pay')).status, 201);
-  await check('900'); assert.equal(await db.supplierPayment.count(), 1);
+  await check('90'); assert.equal(await db.supplierPayment.count(), 1);
   assert.equal((await api('POST', endpoint, payment, 'invoice-pay-2')).status, 201);
-  await check('800');
-  assert.equal(await db.financialTransaction.count({ where: { sourceType: 'CASH_LEDGER_RECONCILIATION' } }), 1);
-  pass('retry does not pay twice; subsequent payment does not repeat reconciliation');
+  await check('80');
+  pass('retry does not pay twice; subsequent payment debits once more');
+
+  // A register that drifted from its ledger account is reported and blocks payouts until
+  // an explicit cash adjustment resets both — never silently "reconciled".
+  await setCash(500, 80);
+  const drifted = await api('POST', endpoint, payment, 'drifted');
+  assert.equal(drifted.status, 409, JSON.stringify(drifted));
+  assert.match(String(drifted.data?.message), /Расхождение кассы/);
+  assert.equal(await db.supplierPayment.count(), 2);
+  const adjusted = await api('POST', `/stores/${warehouse.id}/adjust-cash`, { newBalanceUsd: 500, reason: 'Пересчёт кассы' }, 'adjust');
+  assert.equal(adjusted.status, 200, JSON.stringify(adjusted));
+  await check('500');
+  pass('register/ledger drift is rejected with 409 until a cash adjustment resets both');
+
   const before = await db.supplierPayment.count();
-  await db.store.update({ where: { id: warehouse.id }, data: { cashBalanceTjs: 0 } });
+  await setCash(0);
   assert.equal((await api('POST', endpoint, payment, 'insufficient')).status, 400);
   assert.equal(await db.supplierPayment.count(), before);
-  const account = await db.financialAccount.findUniqueOrThrow({ where: { storeId: warehouse.id } });
-  assert.equal(account.balanceTjs.toString(), '800');
-  assert.equal(await db.financialTransaction.count({ where: { sourceType: 'CASH_LEDGER_RECONCILIATION' } }), 1);
-  pass('real cash shortage rejected; payment and reconciliation both rolled back');
-  await db.store.update({ where: { id: warehouse.id }, data: { cashBalanceTjs: 800 } });
+  await check('0');
+  pass('real cash shortage rejected; nothing moves');
+  await setCash(80);
   const fifo = await api('POST', '/suppliers/sup-dubai/payments', payment, 'fifo-payment');
   assert.equal(fifo.status, 201, JSON.stringify(fifo));
-  await check('700');
+  await check('70');
   pass('supplier FIFO payment keeps both cash balances consistent');
   console.log(`Supplier cash audit: ${passed} groups passed`);
 } finally {

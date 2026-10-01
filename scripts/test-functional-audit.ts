@@ -39,13 +39,13 @@ try {
   assert(adjustment.amountTjs.eq(10000));
   assert.equal(adjustment.direction, 'IN');
   assert.equal(adjustment.type, 'ADJUSTMENT');
-  const cash = async () => (await db.store.findUniqueOrThrow({ where: { id: 'store-siyoma' } })).cashBalanceTjs.toString();
+  const cash = async () => (await db.store.findUniqueOrThrow({ where: { id: 'store-siyoma' } })).cashBalanceUsd.toString();
   const expense = { category: 'OTHER', amountTjs: '12.34', storeId: 'store-siyoma', paidFromCashRegister: true };
   const retries = await Promise.all([api('POST', '/expenses', expense, 'same-expense'), api('POST', '/expenses', expense, 'same-expense')]);
   assert.deepEqual(retries.map(r => r.status), [201, 201]);
   assert.equal(retries[0].data.id, retries[1].data.id);
   assert.equal(await db.expense.count(), 1);
-  assert.equal(await cash(), '9987.66');
+  assert.equal(await cash(), '998.77');
   assert.equal((await api('POST', '/expenses', { ...expense, amountTjs: 99 }, 'same-expense')).status, 409);
   assert.equal((await api('POST', '/expenses', expense, 'same-expense')).data.id, retries[0].data.id);
   pass('persistent atomic idempotency, simultaneous replay and changed-payload conflict');
@@ -88,9 +88,9 @@ try {
   pass('concurrent cross-slot IMEI uniqueness');
 
   const store = await api('POST', '/stores', { name: 'Audit nonzero' });
-  await api('POST', `/stores/${store.data.id}/adjust-cash`, { newBalanceTjs: 100, reason: 'fixture' });
+  await api('POST', `/stores/${store.data.id}/adjust-cash`, { newBalanceUsd: 100, reason: 'fixture' });
   assert.equal((await api('DELETE', `/stores/${store.data.id}`)).status, 400);
-  assert.equal((await db.store.findUniqueOrThrow({ where: { id: store.data.id } })).cashBalanceTjs.toString(), '100');
+  assert.equal((await db.store.findUniqueOrThrow({ where: { id: store.data.id } })).cashBalanceUsd.toString(), '100');
   pass('nonzero cash register cannot be deleted');
 
   await db.owner.updateMany({ data: { totalAccruedProfitUsd: 100, availableProfitUsd: 100 } });

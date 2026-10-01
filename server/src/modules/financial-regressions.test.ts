@@ -37,6 +37,8 @@ beforeEach(() => {
   db.financialCategory.findFirst.mockResolvedValue({ id: 'category-1' });
   db.financialTransaction.create.mockResolvedValue({ id: 'ftx-1' });
   db.$queryRaw.mockResolvedValue([{ issued: 1 }]);
+  db.bonusPoolEntry.findMany.mockResolvedValue([]);
+  db.owner.updateMany.mockResolvedValue({ count: 1 });
 });
 
 describe('supplier payment safeguards', () => {
@@ -79,7 +81,7 @@ describe('refund cash ledger', () => {
     await RefundService.refund({ saleId: 'sale', reason: 'Возврат', refundAmountTjs: 900, penaltyFeeTjs: 100, paymentMethod: 'CASH', refundedByUserId: 'admin' });
     const cashMovement = db.ledgerEntry.create.mock.calls.reduce((sum, [entry]) => sum.plus(entry.data.amountTjs), D(0));
     expect(cashMovement.plus(1000)).toEqual(100);
-    expect(db.owner.update).toHaveBeenCalledWith(expect.objectContaining({ data: {
+    expect(db.owner.updateMany).toHaveBeenCalledWith(expect.objectContaining({ data: {
       totalAccruedProfitUsd: { increment: -10 }, availableProfitUsd: { increment: -10 },
     } }));
   });

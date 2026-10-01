@@ -99,6 +99,7 @@ describe('BonusesService', () => {
         { id: 'o2', name: 'Партнёр 2', availableProfitUsd: 50 },
       ]);
       db.bonusDistributionLog.create.mockResolvedValue({ id: 'log-1' });
+      db.bonusPoolEntry.updateMany.mockResolvedValue({ count: 2 });
 
       await BonusesService.distributeBonusProfit({
         periodName: '3 квартал 2026',
@@ -133,7 +134,7 @@ describe('BonusesService', () => {
       // Verify entries updated to DISTRIBUTED
       expect(db.bonusPoolEntry.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { status: 'PENDING' },
+          where: { id: { in: ['e1', 'e2'] }, status: 'PENDING' },
           data: expect.objectContaining({
             status: 'DISTRIBUTED',
             distributionId: 'log-1',
