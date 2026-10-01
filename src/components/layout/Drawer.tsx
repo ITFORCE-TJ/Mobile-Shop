@@ -130,7 +130,7 @@ export const Drawer: React.FC = () => {
     if (isPartner) {
       return [
         {
-          title: `Точка: ${userStoreName || 'Магазин'}`,
+          title: 'Магазин',
           items: [
             { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['PARTNER'] },
             { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['PARTNER'] },
@@ -246,7 +246,7 @@ export const Drawer: React.FC = () => {
                 {currentUser?.name || 'Пользователь'}
               </h2>
               <p className="text-[11px] font-medium text-accent truncate">
-                {isStoreScoped ? (userStoreName || 'Магазин не привязан') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
+                {isStoreScoped ? (isPartner ? 'Партнёр' : 'Продавец') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
               </p>
             </div>
           </div>

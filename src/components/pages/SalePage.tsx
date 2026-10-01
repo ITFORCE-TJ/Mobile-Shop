@@ -1,6 +1,5 @@
 import { decimal, moneyNumber, sumMoney, formatMoney } from '../../utils/money';
 import React, { useState, useMemo } from 'react';
-import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Device, PaymentMethod } from '../../types';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
@@ -17,7 +16,6 @@ import {
   Store as StoreIcon,
   Plus,
   Flame,
-  Landmark,
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
@@ -38,20 +36,17 @@ interface CartItem {
 }
 
 export const SalePage: React.FC = () => {
-  const navigate = useNavigate();
-  const { triggerStoreTransition } = useUIStore();
+  const { setStoreSwitchModalOpen } = useUIStore();
   const {
     currentUser,
     devices,
     todayRate,
     selectedStoreId,
-    setSelectedStoreId,
     stores,
     openScanner,
     createSale,
     isInitialLoading,
-    setActivePage,
-  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'setSelectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading', 'setActivePage');
+  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
@@ -75,16 +70,17 @@ export const SalePage: React.FC = () => {
   const isStoreScoped = isSeller || isPartner;
   const isAdmin = currentUser?.role === 'ADMIN';
   const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
-  const [localSaleStoreId, setLocalSaleStoreId] = useState<string>('');
 
   const selectableStores = useMemo(() => {
     return stores.filter(s => !s.isMainWarehouse);
   }, [stores]);
 
+  // Store-bound users sell in their own store; the admin sells in the store picked in the top
+  // bar (in central-cash mode no store is picked and the page asks for one).
   const effectiveStoreId = isStoreScoped
     ? currentUser?.storeId
     : (isCentralCashMode
-        ? (selectableStores.some(s => s.id === localSaleStoreId) ? localSaleStoreId : (selectableStores[0]?.id || ''))
+        ? ''
         : (selectableStores.some(s => s.id === selectedStoreId) ? selectedStoreId : (selectableStores[0]?.id || '')));
 
   const activeStore = stores.find(s => s.id === effectiveStoreId);
@@ -297,71 +293,22 @@ export const SalePage: React.FC = () => {
         </div>
       )}
 
+      {isCentralCashMode && (
+        <div className="flex-1 flex items-center justify-center p-6">
+          <EmptyState
+            icon={StoreIcon}
+            title="Выберите магазин"
+            description="Продажа проводится в конкретном магазине. Выберите его — так же, как кнопкой «Продавать в магазине» в верхней панели."
+            action={<Button leftIcon={StoreIcon} onClick={() => setStoreSwitchModalOpen(true)}>Выбрать магазин</Button>}
+          />
+        </div>
+      )}
+
+      {!isCentralCashMode && (<>
       {/* Filter bar */}
       <div className="p-2.5 md:p-3 border-b border-border bg-bg space-y-2 shrink-0">
-        <div className="flex items-center justify-between gap-2">
-          <div className="flex items-center gap-1.5 min-w-0">
-            {/* Block 1: Label badge */}
-            <div className="inline-flex items-center gap-1.5 h-8 px-2.5 rounded-lg bg-surface-raised border border-border text-xs font-medium text-fg-muted shrink-0 shadow-2xs box-border">
-              <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
-              <span>Точка:</span>
-            </div>
-
-            {/* Block 2: Store selection / display */}
-            {isAdmin ? (
-              <div className="relative inline-flex items-center h-8 rounded-lg bg-surface border border-border hover:border-accent/40 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent transition-colors shadow-2xs box-border min-w-0">
-                <select
-                  value={effectiveStoreId}
-                  onChange={(e) => {
-                    const newStoreId = e.target.value;
-                    const targetStore = selectableStores.find(s => s.id === newStoreId);
-                    triggerStoreTransition({
-                      storeName: targetStore?.name || 'Магазин',
-                      storeId: newStoreId,
-                      isCentral: false,
-                    });
-                    setSelectedStoreId(newStoreId);
-                    setLocalSaleStoreId(newStoreId);
-                  }}
-                  className="h-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 cursor-pointer pl-2.5 pr-7 text-xs font-semibold text-fg-muted appearance-none max-w-52 sm:max-w-64 truncate py-0 leading-none m-0"
-                >
-                  {selectableStores.map(s => (
-                    <option key={s.id} value={s.id} className="bg-surface text-fg-muted">
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-                <ChevronDown className="absolute right-2 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle pointer-events-none" />
-              </div>
-            ) : (
-              <div className="inline-flex items-center h-8 px-2.5 rounded-lg bg-surface border border-border text-xs font-semibold text-accent truncate shadow-2xs box-border max-w-52 sm:max-w-64">
-                {activeStoreName}
-              </div>
-            )}
-
-            {isAdmin && (
-              <button
-                type="button"
-                onClick={() => {
-                  triggerStoreTransition({
-                    storeName: 'Центральная касса (Главный офис)',
-                    storeId: 'all',
-                    isCentral: true,
-                  });
-                  setSelectedStoreId('all');
-                  setActivePage('FINANCE');
-                  navigate('/finance');
-                }}
-                className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 text-xs font-semibold text-accent transition-colors shrink-0 shadow-2xs cursor-pointer active:scale-95"
-                title="Вернуться в режим Центральной кассы"
-              >
-                <Landmark className="w-3.5 h-3.5" />
-                <span className="hidden sm:inline">В Центр. кассу</span>
-                <span className="sm:hidden">В центр</span>
-              </button>
-            )}
-          </div>
-
+        {/* The current store is shown (and switched) in the top bar, so it isn't repeated here. */}
+        <div className="flex items-center justify-end gap-2">
           <span className="text-[11px] text-fg-subtle tabular-nums font-medium">
             В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
           </span>
@@ -388,7 +335,7 @@ export const SalePage: React.FC = () => {
           <EmptyState
             icon={Smartphone}
             title="Товары не найдены"
-            description={`В наличии нет устройств по текущим фильтрам (${activeStoreName})`}
+            description={`В наличии нет устройств по текущим фильтрам${isStoreScoped ? '' : ` (${activeStoreName})`}`}
             action={
               selectedBrand !== 'ALL' ? (
                 <Button variant="secondary" onClick={() => setSelectedBrand('ALL')}>Сбросить фильтр бренда</Button>
@@ -470,6 +417,8 @@ export const SalePage: React.FC = () => {
         )}
       </div>
 
+      </>)}
+
       {/* Floating cart bar */}
       {cart.length > 0 && (
         <div className="fixed bottom-18 md:bottom-4 left-3 right-3 md:left-64 md:right-4 z-40 max-w-2xl mx-auto">
@@ -513,7 +462,7 @@ export const SalePage: React.FC = () => {
       <Dialog
         open={isCartOpen}
         onClose={() => setIsCartOpen(false)}
-        title={`Чек · ${activeStoreName}`}
+        title={isStoreScoped ? 'Чек' : `Чек · ${activeStoreName}`}
         subtitle={`${formatMoney(totalTjs)} TJS ≈ $${formatMoney(totalUsd)}`}
         maxWidth="lg"
         footer={
@@ -713,11 +662,11 @@ export const SalePage: React.FC = () => {
 
           <div className="my-3 p-3 bg-bg rounded-lg border border-border text-left space-y-1 text-xs">
             <div className="text-fg-muted font-medium">{new Date().toLocaleString('ru-RU')}</div>
-            <div className="text-fg-muted">{activeStoreName}</div>
+            {!isStoreScoped && <div className="text-fg-muted">{activeStoreName}</div>}
             <div className="text-accent font-semibold">Оператор: {currentUser?.name || 'Администратор'}</div>
           </div>
 
-          <p className="text-xs text-fg-subtle">Устройства списаны со склада {activeStoreName}</p>
+          <p className="text-xs text-fg-subtle">{isStoreScoped ? 'Устройства списаны со склада магазина' : `Устройства списаны со склада ${activeStoreName}`}</p>
         </div>
       </Dialog>
     </div>

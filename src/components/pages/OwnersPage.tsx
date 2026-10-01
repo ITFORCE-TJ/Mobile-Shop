@@ -1661,7 +1661,7 @@ export const OwnersPage: React.FC = () => {
 
             {/* Store Selector */}
             <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
+              <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider items-center gap-1.5">
                 <Store className="w-3.5 h-3.5 text-accent" />
                 <span>Выберите магазин:</span>
               </label>

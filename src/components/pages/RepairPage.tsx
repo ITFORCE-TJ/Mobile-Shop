@@ -443,10 +443,12 @@ export const RepairPage: React.FC = () => {
           </button>
         </div>
 
-        <div className="hidden sm:flex items-center space-x-2 text-xs font-medium text-fg-muted shrink-0">
-          <Wrench className="w-4 h-4 text-accent shrink-0" />
-          <span className="truncate">{currentStoreName}</span>
-        </div>
+        {!isStoreScoped && (
+          <div className="hidden sm:flex items-center space-x-2 text-xs font-medium text-fg-muted shrink-0">
+            <Wrench className="w-4 h-4 text-accent shrink-0" />
+            <span className="truncate">{currentStoreName}</span>
+          </div>
+        )}
       </div>
 
       {/* Row 2: Dedicated Filter & Search Bar */}
@@ -679,7 +681,7 @@ export const RepairPage: React.FC = () => {
                             {conf.label}
                           </span>
                           <span className="text-[11px] text-fg-subtle">
-                            • {new Date(ticket.createdAt).toLocaleDateString()} ({ticket.storeName || 'Магазин'})
+                            • {new Date(ticket.createdAt).toLocaleDateString('ru-RU')}{isStoreScoped ? '' : ` (${ticket.storeName || 'Магазин'})`}
                           </span>
                         </div>
 
@@ -842,10 +844,12 @@ export const RepairPage: React.FC = () => {
                   <span className="text-fg-subtle block text-[10px] uppercase font-semibold">IMEI</span>
                   <span className="font-mono text-fg-muted">{viewingTicket.imei || 'N/A'}</span>
                 </div>
-                <div>
-                  <span className="text-fg-subtle block text-[10px] uppercase font-semibold">Магазин / Точка</span>
-                  <span className="text-fg-muted">{viewingTicket.storeName || 'Магазин'}</span>
-                </div>
+                {!isStoreScoped && (
+                  <div>
+                    <span className="text-fg-subtle block text-[10px] uppercase font-semibold">Магазин / Точка</span>
+                    <span className="text-fg-muted">{viewingTicket.storeName || 'Магазин'}</span>
+                  </div>
+                )}
               </div>
             </div>
 

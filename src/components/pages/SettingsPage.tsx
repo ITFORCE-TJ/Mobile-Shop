@@ -433,7 +433,9 @@ export const SettingsPage: React.FC = () => {
                 Вы вошли как <strong className="text-fg-muted">{currentUser?.name}</strong> ({currentUser?.role === 'ADMIN' ? 'Администратор' : currentUser?.role})
                 {(() => {
                   const sName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
-                  return sName ? <span className="text-accent font-medium"> • Магазин: {sName}</span> : null;
+                  // Store-bound users see their store in the top bar already.
+                  const scoped = currentUser?.role === 'PARTNER';
+                  return sName && !scoped ? <span className="text-accent font-medium"> • Магазин: {sName}</span> : null;
                 })()}
               </p>
             </div>

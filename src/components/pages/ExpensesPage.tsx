@@ -590,7 +590,7 @@ export const ExpensesPage: React.FC = () => {
               value={searchQuery}
               onChange={setSearchQuery}
               placeholder="Поиск по расходу, категории, автору, сотруднику, сумме..."
-              className="flex-1 min-w-[200px]"
+              className="flex-1 min-w-50"
             />
 
             {/* Quick Status pills */}
@@ -992,9 +992,13 @@ export const ExpensesPage: React.FC = () => {
                     </div>
                     <p className="text-sm text-fg-muted mt-0.5">{exp.comment || exp.description || 'Операционный расход'}</p>
                     <div className="flex flex-wrap items-center gap-1.5 text-xs text-fg-subtle mt-1">
-                      <StoreIcon className="w-3 h-3" />
-                      <span>{exp.storeName || 'Магазин'}</span>
-                      <span>·</span>
+                      {!isStoreScoped && (
+                        <>
+                          <StoreIcon className="w-3 h-3" />
+                          <span>{exp.storeName || 'Магазин'}</span>
+                          <span>·</span>
+                        </>
+                      )}
                       <Calendar className="w-3 h-3" />
                       <span>{formattedDate}</span>
                       <span>·</span>

@@ -704,14 +704,7 @@ export const InventoryPage: React.FC = () => {
                 </span>
               </button>
             </div>
-          ) : (
-            <div className="flex items-center gap-2">
-              <Store className="w-4 h-4 text-accent shrink-0" />
-              <span className="text-sm font-bold text-fg-muted">
-                {currentUser?.storeName || 'Мой магазин'}
-              </span>
-            </div>
-          )}
+          ) : null}
 
           {/* Quick Location Dropdown Filter */}
           {!isStoreScoped && (

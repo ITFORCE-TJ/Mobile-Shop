@@ -402,12 +402,7 @@ export const SalesHistoryPage: React.FC = () => {
                   <ChevronDown className="w-3.5 h-3.5 text-fg-subtle shrink-0 pointer-events-none absolute right-2.5" />
                 </div>
               </div>
-            ) : (
-              <span className="h-9 px-2 rounded-lg border border-border bg-surface text-xs font-semibold text-fg-muted flex items-center gap-1.5 min-w-0 flex-1" title={stores.find(s => s.id === selectedStoreFilter)?.name}>
-                <Store className="w-3.5 h-3.5 text-accent shrink-0" />
-                <span className="truncate">{stores.find(s => s.id === selectedStoreFilter)?.name || currentUser?.storeName || 'Магазин'}</span>
-              </span>
-            )}
+            ) : null}
           </div>
         </div>
 
@@ -448,8 +443,7 @@ export const SalesHistoryPage: React.FC = () => {
                     {sale.items.map(i => `${i.brand} ${i.model}`).join(', ')}
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-fg-subtle mt-0.5">
-                    <span>{sale.storeName}</span>
-                    <span>·</span>
+                    {!isStoreScoped && <><span>{sale.storeName}</span><span>·</span></>}
                     <span>{sale.sellerName}</span>
                     {sale.customerName && <><span>·</span><span>{sale.customerName}</span></>}
                   </div>
@@ -519,7 +513,7 @@ export const SalesHistoryPage: React.FC = () => {
         {!selectedSale ? null : dialogView === 'details' ? (
           <div className="space-y-3.5">
             <div className="bg-surface p-3 rounded-lg border border-border space-y-1 text-sm">
-              <div className="text-fg-muted">{selectedSale.storeName}</div>
+              {!isStoreScoped && <div className="text-fg-muted">{selectedSale.storeName}</div>}
               <div className="text-accent font-semibold">Оператор: {selectedSale.sellerName}</div>
               {selectedSale.customerName && (
                 <div className="text-fg-subtle text-xs pt-1 border-t border-border mt-1">Клиент: {selectedSale.customerName}</div>

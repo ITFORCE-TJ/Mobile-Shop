@@ -175,7 +175,7 @@ export const TabletNavRail: React.FC = () => {
             }
           >
             {isCentralCashMode ? <Landmark className="w-5 h-5" /> : <Store className="w-5 h-5" />}
-            <span className="text-[8px] font-bold uppercase mt-0.5 tracking-tighter truncate max-w-[40px]">
+            <span className="text-[8px] font-bold uppercase mt-0.5 tracking-tighter truncate max-w-10">
               {isCentralCashMode ? 'Офис' : 'В Центр'}
             </span>
           </button>

@@ -129,7 +129,7 @@ export const Sidebar: React.FC = () => {
     if (isPartner) {
       return [
         {
-          title: `Точка: ${sellerStoreName || 'Магазин'}`,
+          title: 'Магазин',
           items: [
             { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['PARTNER'] },
             { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['PARTNER'] },
@@ -488,10 +488,9 @@ export const Sidebar: React.FC = () => {
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-semibold text-fg-muted truncate">{currentUser?.name || 'Пользователь'}</p>
                 {isSeller ? (
-                  <p className="text-[10px] text-accent truncate flex items-center gap-1" title={sellerStoreName}>
-                    <Store className="w-2.5 h-2.5 shrink-0" />
-                    <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
-                  </p>
+                  <p className="text-[10px] text-fg-subtle truncate">Продавец</p>
+                ) : isPartner ? (
+                  <p className="text-[10px] text-fg-subtle truncate">Партнёр</p>
                 ) : (
                   <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
                     {isCentralCashMode ? (

@@ -66,6 +66,7 @@ export const ExchangePage: React.FC = () => {
     || currentUser?.storeId
     || (globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : '');
   const currentStoreName = stores.find(s => s.id === effectiveStoreId)?.name || currentUser?.storeName || 'Магазин';
+  const isStoreScoped = currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER';
 
   const availableDevices = useMemo(() => {
     return devices.filter(d => {
@@ -511,7 +512,7 @@ export const ExchangePage: React.FC = () => {
                 <div className="max-h-64 overflow-y-auto divide-y divide-border rounded-xl border border-border bg-surface">
                   {availableDevices.length === 0 ? (
                     <div className="p-4 text-center text-fg-muted text-xs">
-                      Нет подходящих товаров в наличии ({currentStoreName})
+                      Нет подходящих товаров в наличии{isStoreScoped ? '' : ` (${currentStoreName})`}
                     </div>
                   ) : (
                     availableDevices.slice(0, 8).map((d) => (
