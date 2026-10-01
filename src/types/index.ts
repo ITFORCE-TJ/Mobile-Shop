@@ -131,6 +131,7 @@ export interface SaleItem {
   imei2?: string;
   brand: string;
   model: string;
+  ram?: string;
   storage: string;
   color: string;
   salePriceTjs: number;
@@ -317,6 +318,7 @@ export interface SupplierBonus {
   freeDevices?: {
     brand: string;
     model: string;
+    ram?: string;
     storage: string;
     color: string;
     imei: string;
@@ -422,3 +424,46 @@ export interface AuditLogEntry {
 }
 
 export type ThemeMode = 'light' | 'dark';
+
+export type BonusPoolStatus = 'PENDING' | 'DISTRIBUTED' | 'ANNULLED';
+
+export interface BonusPoolEntry {
+  id: string;
+  deviceId: string;
+  saleId?: string;
+  saleItemId?: string;
+  imei: string;
+  brand: string;
+  model: string;
+  salePriceUsd: number;
+  salePriceTjs: number;
+  profitUsd: number;
+  profitTjs: number;
+  status: BonusPoolStatus;
+  distributionId?: string;
+  distributedAt?: string;
+  distributedBy?: string;
+  distributionNote?: string;
+  annulledAt?: string;
+  annulledBy?: string;
+  annulledNote?: string;
+  createdAt: string;
+  sale?: {
+    receiptNumber: number;
+    createdAt: string;
+    storeId: string;
+  };
+}
+
+export interface BonusDistributionLog {
+  id: string;
+  periodName: string;
+  totalAmountUsd: number;
+  totalAmountTjs?: number;
+  type: 'DISTRIBUTION' | 'ANNULMENT';
+  allocations: { ownerId: string; ownerName?: string; amountUsd: number }[];
+  note?: string;
+  performedByUserId?: string;
+  performedByName?: string;
+  createdAt: string;
+}

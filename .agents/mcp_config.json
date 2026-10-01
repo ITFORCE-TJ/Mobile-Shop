@@ -1,0 +1,19 @@
+{
+  "mcpServers": {
+    "supabase": {
+      "serverUrl": "https://mcp.supabase.com/mcp?project_ref=alngtffrtzpbvedhhaex&features=docs%2Caccount%2Cdatabase%2Cdebugging%2Cdevelopment%2Cfunctions%2Cbranching"
+    },
+    "chrome-devtools": {
+      "command": "cmd.exe",
+      "args": ["/c", "npx", "-y", "chrome-devtools-mcp@latest", "--no-usage-statistics"]
+    },
+    "puppeteer": {
+      "command": "cmd.exe",
+      "args": ["/c", "npx", "-y", "@modelcontextprotocol/server-puppeteer"]
+    },
+    "stitch": {
+      "command": "cmd.exe",
+      "args": ["/c", "npx", "-y", "@keeponfirst/kof-stitch-mcp"]
+    }
+  }
+}

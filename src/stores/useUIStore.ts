@@ -8,6 +8,7 @@ interface UIState {
   isDailyRateModalOpen: boolean;
   isScannerOpen: boolean;
   scannerCallback: ((code: string) => void) | null;
+  isStoreSwitchModalOpen: boolean;
 
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
@@ -16,6 +17,7 @@ interface UIState {
   setDailyRateModalOpen: (open: boolean) => void;
   openScanner: (callback: (code: string) => void) => void;
   closeScanner: () => void;
+  setStoreSwitchModalOpen: (open: boolean) => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -25,6 +27,7 @@ export const useUIStore = create<UIState>((set) => ({
   isDailyRateModalOpen: false,
   isScannerOpen: false,
   scannerCallback: null,
+  isStoreSwitchModalOpen: false,
 
   setTheme: (theme) => {
     if (typeof localStorage !== 'undefined') {
@@ -54,4 +57,5 @@ export const useUIStore = create<UIState>((set) => ({
 
   openScanner: (scannerCallback) => set({ isScannerOpen: true, scannerCallback }),
   closeScanner: () => set({ isScannerOpen: false, scannerCallback: null }),
+  setStoreSwitchModalOpen: (isStoreSwitchModalOpen) => set({ isStoreSwitchModalOpen }),
 }));

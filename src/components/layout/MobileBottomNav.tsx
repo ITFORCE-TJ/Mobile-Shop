@@ -9,7 +9,9 @@ import {
   Package,
   PlusCircle,
   Menu,
-  RefreshCw
+  RefreshCw,
+  Landmark,
+  Wallet,
 } from 'lucide-react';
 
 const PAGE_ROUTES: Record<string, string> = {
@@ -26,6 +28,7 @@ const PAGE_ROUTES: Record<string, string> = {
   OWNERS: '/owners',
   EMPLOYEES: '/employees',
   REPORTS: '/finance',
+  FINANCE: '/finance',
   AUDIT_LOG: '/audit-log',
   SETTINGS: '/settings',
   NOTIFICATIONS: '/notifications',
@@ -38,24 +41,16 @@ export const MobileBottomNav: React.FC = () => {
     currentUser,
     setActivePage,
     drawerOpen,
-    setDrawerOpen
-  } = useAppFields('currentUser', 'setActivePage', 'drawerOpen', 'setDrawerOpen');
+    setDrawerOpen,
+    selectedStoreId,
+  } = useAppFields('currentUser', 'setActivePage', 'drawerOpen', 'setDrawerOpen', 'selectedStoreId');
   const { notifications } = useNotifications();
 
   const userRole = currentUser?.role || 'SELLER';
-  // `resolved` tracks whether an actionable notification has been handled, not whether
-  // the user has seen it — informational notifications are created already resolved.
-  const unreadNotifs = notifications.filter(n => !n.read).length;
-  // Route pathname alone is the source of truth for what's on screen — activePage is
-  // plain component state that resets to its 'SALE' default on every mount/reload, so
-  // relying on it here made the POS button stay lit after navigating (or reloading)
-  // into any drawer-only page (e.g. Repair, Settings) that isn't one of the 4 quick slots.
-  const isSaleActive = location.pathname === '/sale' || location.pathname === '/';
+  const isSeller = userRole === 'SELLER';
+  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
 
-  const fourthItem: { id: PageId; label: string; icon: React.ElementType } =
-    userRole === 'ADMIN' || userRole === 'PARTNER'
-      ? { id: 'PURCHASE', label: 'Приход', icon: PlusCircle }
-      : { id: 'EXCHANGE', label: 'Обмен', icon: RefreshCw };
+  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const NavItem: React.FC<{ routePath: string; label: string; icon: React.ElementType; onSelect: () => void }> = ({
     routePath,
@@ -76,6 +71,80 @@ export const MobileBottomNav: React.FC = () => {
       </button>
     );
   };
+
+  if (isCentralCashMode) {
+    const isFinanceActive = location.pathname === '/finance' || location.pathname === '/';
+
+    return (
+      <nav className="app-bottom-nav md:hidden shrink-0 w-full bg-surface border-t border-border flex items-stretch justify-around select-none">
+        <NavItem
+          routePath="/finance"
+          label="Финансы"
+          icon={Landmark}
+          onSelect={() => {
+            setActivePage('FINANCE');
+            navigate('/finance');
+          }}
+        />
+        <NavItem
+          routePath="/expenses"
+          label="Расходы"
+          icon={Wallet}
+          onSelect={() => {
+            setActivePage('EXPENSES');
+            navigate('/expenses');
+          }}
+        />
+
+        {/* Center primary action in Central Cash — Finance Dashboard */}
+        <div className="flex-1 flex justify-center items-center relative">
+          <button
+            onClick={() => {
+              setActivePage('FINANCE');
+              navigate('/finance');
+            }}
+            className={`w-14 h-14 -mt-5 rounded-full flex flex-col items-center justify-center active:scale-95 transition-transform shadow-md ${
+              isFinanceActive ? 'bg-accent-strong text-accent-fg' : 'bg-accent text-accent-fg'
+            }`}
+            title="Центральная касса и финансы"
+          >
+            <Landmark className="w-5 h-5" strokeWidth={2.5} />
+            <span className="text-[9px] font-bold tracking-tight leading-none mt-0.5">Офис</span>
+          </button>
+        </div>
+
+        <NavItem
+          routePath="/inventory"
+          label="Склад"
+          icon={Package}
+          onSelect={() => {
+            setActivePage('INVENTORY');
+            navigate('/inventory');
+          }}
+        />
+
+        <button
+          onClick={() => setDrawerOpen(!drawerOpen)}
+          className={`flex-1 min-h-11 flex flex-col items-center justify-center gap-0.5 transition-colors ${
+            drawerOpen ? 'text-accent' : 'text-fg-subtle active:text-fg'
+          }`}
+        >
+          <div className="relative">
+            <Menu className="w-5 h-5" strokeWidth={drawerOpen ? 2.5 : 2} />
+            {unreadNotifs > 0 && (
+              <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+                {unreadNotifs}
+              </span>
+            )}
+          </div>
+          <span className={`text-[10px] leading-none ${drawerOpen ? 'font-semibold' : 'font-medium'}`}>Меню</span>
+        </button>
+      </nav>
+    );
+  }
+
+  // Retail Store mode / Seller
+  const isSaleActive = location.pathname === '/sale' || location.pathname === '/';
 
   return (
     <nav className="app-bottom-nav md:hidden shrink-0 w-full bg-surface border-t border-border flex items-stretch justify-around select-none">
@@ -105,7 +174,7 @@ export const MobileBottomNav: React.FC = () => {
             setActivePage('SALE');
             navigate('/sale');
           }}
-          className={`w-14 h-14 -mt-5 rounded-full flex flex-col items-center justify-center active:scale-95 transition-transform ${
+          className={`w-14 h-14 -mt-5 rounded-full flex flex-col items-center justify-center active:scale-95 transition-transform shadow-md ${
             isSaleActive ? 'bg-accent-strong text-accent-fg' : 'bg-accent text-accent-fg'
           }`}
           title="POS Терминал"
@@ -116,12 +185,12 @@ export const MobileBottomNav: React.FC = () => {
       </div>
 
       <NavItem
-        routePath={PAGE_ROUTES[fourthItem.id] || '/sale'}
-        label={fourthItem.label}
-        icon={fourthItem.icon}
+        routePath="/exchange"
+        label="Обмен"
+        icon={RefreshCw}
         onSelect={() => {
-          setActivePage(fourthItem.id);
-          navigate(PAGE_ROUTES[fourthItem.id] || '/sale');
+          setActivePage('EXCHANGE');
+          navigate('/exchange');
         }}
       />
 

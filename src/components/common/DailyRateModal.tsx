@@ -5,6 +5,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { FormField } from '../ui/FormField';
 import { hasCurrentDailyRate } from '../../utils/dailyRatePrompt';
+import { formatRateOrInput } from '../../utils/money';
 
 interface DailyRateModalProps {
   isOpen: boolean;
@@ -26,16 +27,23 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
 
   useEffect(() => {
     if (isOpen) {
-      setRateInput(todayRate?.rate ? todayRate.rate.toString() : '');
+      setRateInput(formatRateOrInput(todayRate?.rate));
       setError(null);
     }
   }, [isOpen, todayRate]);
+
+  const handleBlur = () => {
+    const formatted = formatRateOrInput(rateInput);
+    if (formatted) {
+      setRateInput(formatted);
+    }
+  };
 
   const handleSubmit = async () => {
     if (savingRef.current) return;
     const val = Number(rateInput.trim().replace(',', '.'));
     if (!Number.isFinite(val) || val <= 0) {
-      setError('Введите корректный курс (например, 9.50)');
+      setError('Введите корректный курс (например, 10.50)');
       return;
     }
     savingRef.current = true;
@@ -119,7 +127,8 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
               onKeyDown={(e) => e.key === 'Enter' && handleSubmit()}
               onFocus={(e) => e.target.select()}
               autoFocus={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
-              placeholder="9.50"
+              onBlur={handleBlur}
+              placeholder="10.50"
               className="w-full h-16 rounded-xl bg-bg border border-accent/50 pl-4 pr-16 text-3xl font-bold tabular-nums text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
             />
             <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-fg-subtle uppercase">TJS</span>

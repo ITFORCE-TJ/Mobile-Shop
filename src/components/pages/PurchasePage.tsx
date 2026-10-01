@@ -34,20 +34,24 @@ interface PurchaseItemGroup {
   id: string;
   brand: string;
   model: string;
-  ram?: string;
+  ram: string;
   storage: string;
   color: string;
   purchasePriceUsd: number;
+  isBonus?: boolean;
+  bonusCampaign?: string;
   items: PurchaseItem[];
 }
 
 interface PurchasePreviewGroup {
   brand: string;
   model: string;
-  ram?: string;
+  ram: string;
   storage: string;
   color: string;
   purchasePriceUsd: number;
+  isBonus?: boolean;
+  bonusCampaign?: string;
   items: PurchaseItem[];
   imeis: string[];
 }
@@ -163,8 +167,8 @@ export const PurchasePage: React.FC = () => {
     return () => { cancelled = true; };
   }, [selectedMonth, fetchInvoicesRange, dataRefreshRevision]);
 
-  // Form states
-  const [selectedSupplierId, setSelectedSupplierId] = useState<string>(suppliers[0]?.id || '');
+  // Form states - no default supplier, must be selected explicitly
+  const [selectedSupplierId, setSelectedSupplierId] = useState<string>('');
 
   // Inline "add new supplier" — lets a purchase be started even when the supplier doesn't
   // exist yet, instead of forcing a detour to the Suppliers page and back.
@@ -202,11 +206,10 @@ export const PurchasePage: React.FC = () => {
     return `INV-${((supplierInvoices?.length || 0) + 1).toString().padStart(4, '0')}`;
   });
 
-  // Suppliers now load asynchronously from the API, so they're typically still empty
-  // at mount time — resync once they arrive (but never clobber a manual selection).
+  // If the currently selected supplier is deleted, clear selection
   useEffect(() => {
-    if (suppliers.length > 0 && (!selectedSupplierId || !suppliers.some(s => s.id === selectedSupplierId))) {
-      setSelectedSupplierId(suppliers[0].id);
+    if (selectedSupplierId && !suppliers.some(s => s.id === selectedSupplierId)) {
+      setSelectedSupplierId('');
     }
   }, [suppliers, selectedSupplierId]);
 
@@ -490,7 +493,7 @@ export const PurchasePage: React.FC = () => {
     setStatusMessage(null);
 
     if (!selectedSupplierId) {
-      setStatusMessage({ type: 'error', text: 'Выберите поставщика' });
+      setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите поставщика из списка (выбор поставщика обязателен)' });
       return;
     }
     if (!invoiceNumber.trim()) {
@@ -502,21 +505,47 @@ export const PurchasePage: React.FC = () => {
       return;
     }
 
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      if (!g.brand.trim()) {
+        setStatusMessage({ type: 'error', text: `Позиция #${i + 1}: укажите бренд устройства` });
+        return;
+      }
+      if (!g.model.trim()) {
+        setStatusMessage({ type: 'error', text: `Позиция #${i + 1}: укажите модель устройства` });
+        return;
+      }
+      if (!g.ram || !g.ram.trim()) {
+        setStatusMessage({ type: 'error', text: `Позиция #${i + 1} (${g.brand || ''} ${g.model || ''}): обязательно укажите RAM (ОЗУ)` });
+        return;
+      }
+      if (!g.storage.trim()) {
+        setStatusMessage({ type: 'error', text: `Позиция #${i + 1}: укажите память (ROM)` });
+        return;
+      }
+      if (!g.color.trim()) {
+        setStatusMessage({ type: 'error', text: `Позиция #${i + 1}: укажите цвет` });
+        return;
+      }
+    }
+
     const cleanGroups: PurchasePreviewGroup[] = groups.map(g => {
       const validItems = g.items
         .filter(i => i.imei.trim().length > 0)
         .map(i => ({ imei: i.imei.trim() }));
 
-      const ramStr = g.ram?.trim() || '';
+      const ramStr = g.ram.trim();
       const storageStr = g.storage.trim();
 
       return {
         brand: g.brand.trim(),
         model: g.model.trim(),
-        ram: ramStr || undefined,
+        ram: ramStr,
         storage: storageStr,
         color: g.color.trim(),
-        purchasePriceUsd: g.purchasePriceUsd,
+        purchasePriceUsd: g.isBonus ? 0 : g.purchasePriceUsd,
+        isBonus: Boolean(g.isBonus),
+        bonusCampaign: g.isBonus ? (g.bonusCampaign?.trim() || 'Бонус от поставщика') : undefined,
         items: validItems,
         imeis: validItems.map(i => i.imei)
       };
@@ -562,6 +591,7 @@ export const PurchasePage: React.FC = () => {
           }
         ]);
         setPreviewInvoice(null);
+        setSelectedSupplierId('');
 
         // Automatically switch back to the list of purchases as requested!
         setViewMode('list');
@@ -628,6 +658,7 @@ export const PurchasePage: React.FC = () => {
             <button
               onClick={() => {
                 setStatusMessage(null);
+                setSelectedSupplierId('');
                 setViewMode('form');
               }}
               className="shrink-0 px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg font-bold text-xs flex items-center space-x-1.5 transition-colors shadow-xs whitespace-nowrap"
@@ -1092,14 +1123,21 @@ export const PurchasePage: React.FC = () => {
 
           <div className="text-xs">
             <div>
-              <label className="block text-fg-subtle mb-1 font-medium">Поставщик</label>
+              <label className="block text-fg-subtle mb-1 font-semibold">
+                Поставщик <span className="text-danger">* (обязательно выберите)</span>
+              </label>
               <div className="flex items-center gap-2">
                 <select
-                  value={selectedSupplierId ?? ''}
+                  required
+                  value={selectedSupplierId}
                   onChange={(e) => setSelectedSupplierId(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                  className={`w-full rounded-lg bg-surface-raised border px-3 py-2 text-xs font-semibold focus:outline-none transition-colors ${
+                    !selectedSupplierId
+                      ? 'border-amber-500/70 text-fg-subtle focus:border-accent'
+                      : 'border-border text-fg-muted focus:border-accent'
+                  }`}
                 >
-                  {suppliers.length === 0 && <option value="">Нет поставщиков</option>}
+                  <option value="">-- Выберите поставщика (обязательно) --</option>
                   {suppliers.map(s => (
                     <option key={s.id} value={s.id}>{s.name} (Долг: ${s.totalDebtUsd})</option>
                   ))}
@@ -1113,6 +1151,12 @@ export const PurchasePage: React.FC = () => {
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
+              {!selectedSupplierId && (
+                <p className="text-[11px] text-amber-500 mt-1 flex items-center gap-1 font-medium">
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Поставщик не выбран. Обязательно выберите поставщика из списка перед продолжением.</span>
+                </p>
+              )}
             </div>
             {/* Номер накладной и дата прихода формируются автоматически (INV-XXXX, сегодня) — не требуют ввода */}
           </div>
@@ -1129,7 +1173,7 @@ export const PurchasePage: React.FC = () => {
                     onChange={() => setIsStorePurchase(false)}
                     className="text-accent focus:ring-accent"
                   />
-                  <span className="text-fg-muted font-medium">Приход на Главный склад</span>
+                  <span className="text-fg-muted font-medium">Приход на Центральный склад</span>
                 </label>
               )}
 
@@ -1170,9 +1214,30 @@ export const PurchasePage: React.FC = () => {
               className="rounded-xl border border-border bg-surface shadow-xs p-3.5 sm:p-4 space-y-3 relative"
             >
               <div className="flex items-center justify-between border-b border-border pb-2">
-                <span className="text-xs font-bold text-fg-muted tracking-wider font-mono">
-                  Позиция #{groupIdx + 1}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-fg-muted tracking-wider font-mono">
+                    Позиция #{groupIdx + 1}
+                  </span>
+                  <label className={`flex items-center gap-1.5 text-xs font-medium cursor-pointer select-none px-2.5 py-0.5 rounded-md border transition-all ${
+                    group.isBonus
+                      ? 'bg-emerald-500/15 text-emerald-400 border-emerald-500/30'
+                      : 'bg-surface-raised text-fg-subtle border-border hover:text-fg-muted'
+                  }`}>
+                    <input
+                      type="checkbox"
+                      checked={Boolean(group.isBonus)}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        handleUpdateGroup(groupIdx, 'isBonus', checked);
+                        if (checked) {
+                          handleUpdateGroup(groupIdx, 'purchasePriceUsd', 0);
+                        }
+                      }}
+                      className="rounded border-border text-emerald-500 focus:ring-emerald-400 w-3.5 h-3.5"
+                    />
+                    <span>🎁 Бонусный товар (0$)</span>
+                  </label>
+                </div>
 
                 {groups.length > 1 && (
                   <button
@@ -1185,6 +1250,19 @@ export const PurchasePage: React.FC = () => {
                   </button>
                 )}
               </div>
+
+              {group.isBonus && (
+                <div className="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-xs font-mono">
+                  <span className="text-emerald-400 font-medium shrink-0">Акция / примечание:</span>
+                  <input
+                    type="text"
+                    value={group.bonusCampaign || ''}
+                    onChange={(e) => handleUpdateGroup(groupIdx, 'bonusCampaign', e.target.value)}
+                    placeholder="Бонус от поставщика / Акция 10+1..."
+                    className="flex-1 rounded-md bg-surface-raised border border-border px-2.5 py-1 text-xs text-fg-muted focus:border-emerald-500 focus:outline-none"
+                  />
+                </div>
+              )}
 
               {/* Group Specs Form */}
               <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5 text-xs font-mono">
@@ -1213,8 +1291,11 @@ export const PurchasePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle mb-1">RAM</label>
+                  <label className="block text-fg-subtle mb-1">
+                    RAM (ОЗУ) <span className="text-rose-500 font-bold">*</span>
+                  </label>
                   <Combobox
+                    required
                     options={ramOptions}
                     value={group.ram || ''}
                     onChange={(v) => handleUpdateGroup(groupIdx, 'ram', v)}
@@ -1246,17 +1327,26 @@ export const PurchasePage: React.FC = () => {
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle mb-1">Цена закупки ($)</label>
-                  <input
-                    type="number"
-                    required
-                    min="0"
-                    step="0.01"
-                    value={group.purchasePriceUsd || ''}
-                    onChange={(e) => handleUpdateGroup(groupIdx, 'purchasePriceUsd', parseFloat(e.target.value) || 0)}
-                    className="w-full rounded-lg bg-surface-raised border border-border px-2.5 py-1.5 text-xs text-accent font-bold focus:border-accent focus:outline-none font-mono"
-                    placeholder="0"
-                  />
+                  <label className="block text-fg-subtle mb-1">
+                    {group.isBonus ? 'Цена закупки (Бонус)' : 'Цена закупки ($)'}
+                  </label>
+                  {group.isBonus ? (
+                    <div className="w-full rounded-lg bg-emerald-500/10 border border-emerald-500/30 px-2.5 py-1.5 text-xs text-emerald-400 font-bold font-mono flex items-center justify-between">
+                      <span>$0.00</span>
+                      <span className="text-[10px] bg-emerald-500/20 px-1.5 py-0.5 rounded">Бонус</span>
+                    </div>
+                  ) : (
+                    <input
+                      type="number"
+                      required
+                      min="0.01"
+                      step="0.01"
+                      value={group.purchasePriceUsd || ''}
+                      onChange={(e) => handleUpdateGroup(groupIdx, 'purchasePriceUsd', parseFloat(e.target.value) || 0)}
+                      className="w-full rounded-lg bg-surface-raised border border-border px-2.5 py-1.5 text-xs text-accent font-bold focus:border-accent focus:outline-none font-mono"
+                      placeholder="0"
+                    />
+                  )}
                 </div>
               </div>
 
@@ -1485,11 +1575,23 @@ export const PurchasePage: React.FC = () => {
                 {previewInvoice.groups.map((g, idx) => (
                   <div key={idx} className="p-3 flex items-center justify-between gap-2">
                     <div className="min-w-0">
-                      <p className="font-bold text-fg-muted truncate">{g.brand} {g.model}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="font-bold text-fg-muted truncate">{g.brand} {g.model}</p>
+                        {g.isBonus && (
+                          <span className="text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.5 rounded font-bold">
+                            БОНУС (0$)
+                          </span>
+                        )}
+                      </div>
                       <p className="text-[11px] text-fg-muted mt-0.5">{[g.ram, g.storage, g.color].filter(Boolean).join(' • ')}</p>
-                      <p className="text-[10px] text-fg-subtle mt-0.5">{g.items.length} шт. × ${g.purchasePriceUsd}</p>
+                      <p className="text-[10px] text-fg-subtle mt-0.5">
+                        {g.items.length} шт. {g.isBonus ? '• Бесплатно (подарок)' : `× $${g.purchasePriceUsd}`}
+                        {g.bonusCampaign ? ` • ${g.bonusCampaign}` : ''}
+                      </p>
                     </div>
-                    <span className="font-bold text-accent shrink-0">${(g.items.length * g.purchasePriceUsd).toLocaleString()}</span>
+                    <span className="font-bold text-accent shrink-0">
+                      {g.isBonus ? '$0' : `$${(g.items.length * g.purchasePriceUsd).toLocaleString()}`}
+                    </span>
                   </div>
                 ))}
               </div>

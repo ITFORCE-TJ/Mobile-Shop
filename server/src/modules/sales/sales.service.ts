@@ -60,7 +60,7 @@ export class SalesService {
     return prisma.$transaction(async (tx: TransactionClient) => {
       const store = await tx.store.findUnique({ where: { id: input.storeId } });
       if (!store || !store.active || store.isMainWarehouse) {
-        throw new Error('Продажа возможна только из активной торговой точки');
+        throw new Error('Главный склад предназначен исключительно для хранения телефонов. Продажи со склада запрещены — продажа возможна только через розничные торговые точки.');
       }
       await tx.$queryRaw(Prisma.sql`SELECT id FROM devices WHERE id IN (${Prisma.join(deviceIds)}) ORDER BY id FOR UPDATE`);
       const devices = await tx.device.findMany({
@@ -78,15 +78,29 @@ export class SalesService {
 
       const totalUsd = roundMoney(D(totalTjs).div(rate));
       let totalCostUsd = D(0);
+      let regularRevenueUsd = D(0);
+      let regularCostUsd = D(0);
+      let bonusProfitUsd = D(0);
+      let bonusProfitTjs = D(0);
       let hasBelowCostItem = false;
 
       const saleItemsData = normalizedItems.map((item) => {
         const device = deviceById.get(item.deviceId)!;
+        const isBonus = Boolean(device.isBonus || (device.bonusCampaign && D(device.costBasisUsd).eq(0)));
         const salePriceUsd = roundMoney(D(item.salePriceTjs).div(rate));
         const costTjs = D(device.costBasisUsd).mul(rate);
-        const isBelowCost = D(item.salePriceTjs).lt(costTjs);
+        const isBelowCost = !isBonus && D(item.salePriceTjs).lt(costTjs);
         if (isBelowCost) hasBelowCostItem = true;
         totalCostUsd = D(totalCostUsd).plus(device.costBasisUsd);
+
+        if (isBonus) {
+          bonusProfitUsd = D(bonusProfitUsd).plus(salePriceUsd);
+          bonusProfitTjs = D(bonusProfitTjs).plus(item.salePriceTjs);
+        } else {
+          regularRevenueUsd = D(regularRevenueUsd).plus(salePriceUsd);
+          regularCostUsd = D(regularCostUsd).plus(device.costBasisUsd);
+        }
+
         return {
           deviceId: device.id,
           brand: device.brand,
@@ -100,6 +114,7 @@ export class SalesService {
           purchaseCostUsd: device.purchasePriceUsd,
           costBasisUsd: device.costBasisUsd,
           isBelowCost,
+          isBonus,
         };
       });
 
@@ -120,6 +135,24 @@ export class SalesService {
         include: { saleItems: true },
       });
 
+      const bonusItems = saleItemsData.filter((i) => i.isBonus);
+      if (bonusItems.length > 0) {
+        await tx.bonusPoolEntry.createMany({
+          data: bonusItems.map((b) => ({
+            deviceId: b.deviceId,
+            saleId: sale.id,
+            imei: b.imei,
+            brand: b.brand,
+            model: b.model,
+            salePriceUsd: b.salePriceUsd,
+            salePriceTjs: b.salePriceTjs,
+            profitUsd: b.salePriceUsd,
+            profitTjs: b.salePriceTjs,
+            status: 'PENDING',
+          })),
+        });
+      }
+
       const updateResult = await tx.device.updateMany({
         where: { id: { in: deviceIds }, storeId: input.storeId, status: { in: ['STORE_STOCK', 'IN_STOCK_AFTER_EXCHANGE'] } },
         data: { status: 'SOLD' },
@@ -132,7 +165,7 @@ export class SalesService {
         data: saleItemsData.map((item) => ({
           deviceId: item.deviceId,
           type: 'SALE',
-          description: `Продано за ${item.salePriceTjs} TJS (чек #${sale.receiptNumber})`,
+          description: `Продано за ${item.salePriceTjs} TJS (чек #${sale.receiptNumber})${item.isBonus ? ' (Бонусный товар)' : ''}`,
           userName: input.userId,
           priceTjs: item.salePriceTjs,
           priceUsd: item.salePriceUsd,
@@ -166,15 +199,19 @@ export class SalesService {
         });
       }
 
-      const saleProfitUsd = roundMoney(D(totalUsd).minus(totalCostUsd));
+      const regularProfitUsd = roundMoney(D(regularRevenueUsd).minus(regularCostUsd));
       const owners = await tx.owner.findMany();
-      const ownerProfitAllocations = allocateOwnerProfit(saleProfitUsd, owners);
-      await Promise.all(ownerProfitAllocations.map(({ ownerId, amountUsd: delta }) => {
-        return tx.owner.update({
-          where: { id: ownerId },
-          data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
-        });
-      }));
+      // Only regular profit is auto-distributed to owners on sale.
+      // Bonus device profit is stored in the pending bonus pool for quarterly manual allocation.
+      const ownerProfitAllocations = regularProfitUsd.gt(0) ? allocateOwnerProfit(regularProfitUsd, owners) : [];
+      if (ownerProfitAllocations.length > 0) {
+        await Promise.all(ownerProfitAllocations.map(({ ownerId, amountUsd: delta }) => {
+          return tx.owner.update({
+            where: { id: ownerId },
+            data: { totalAccruedProfitUsd: { increment: delta }, availableProfitUsd: { increment: delta } },
+          });
+        }));
+      }
 
       await tx.ledgerEntry.create({
         data: {
@@ -193,8 +230,15 @@ export class SalesService {
         data: {
           userId: input.userId,
           action: hasBelowCostItem ? 'SALE_BELOW_COST' : 'SALE',
-          details: `Чек #${sale.receiptNumber}: продажа ${saleItemsData.length} устройств на сумму ${totalTjs} TJS ($${totalUsd})`,
-          financialDetails: moneyJson({ amountTjs: totalTjs, amountUsd: totalUsd, exchangeRate: rate, recognizedProfitUsd: saleProfitUsd, ownerProfitAllocations: moneyJson(ownerProfitAllocations) }),
+          details: `Чек #${sale.receiptNumber}: продажа ${saleItemsData.length} устройств на сумму ${totalTjs} TJS ($${totalUsd})${bonusItems.length > 0 ? ` (включая ${bonusItems.length} бонусных устройств, $${roundMoney(bonusProfitUsd)} в бонусный пул)` : ''}`,
+          financialDetails: moneyJson({
+            amountTjs: totalTjs,
+            amountUsd: totalUsd,
+            exchangeRate: rate,
+            recognizedProfitUsd: regularProfitUsd,
+            bonusProfitUsd: roundMoney(bonusProfitUsd),
+            ownerProfitAllocations: moneyJson(ownerProfitAllocations),
+          }),
           receiptNumber: sale.receiptNumber,
           targetId: sale.id,
         },

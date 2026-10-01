@@ -6,7 +6,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { RefundService } from './refund.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import { calculateRecognizedProfit } from './profit';
-import { dateRangeForPeriod, type ReportPeriod } from '../reports/reports.service';
+import { dateRangeForPeriod, dateRangeForCustomDates, type ReportPeriod } from '../reports/reports.service';
 
 const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'];
 
@@ -46,7 +46,11 @@ export function registerRefundRoutes(app: Express) {
         // instead of the client filtering the entire sales history it used to fetch in full.
         const period = VALID_PERIODS.includes(req.query.period as ReportPeriod) ? (req.query.period as ReportPeriod) : 'ALL';
         const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-        const dateRange = dateRangeForPeriod(period, month);
+        const startDate = typeof req.query.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.startDate) ? req.query.startDate : undefined;
+        const endDate = typeof req.query.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.endDate) ? req.query.endDate : undefined;
+        const dateRange = startDate
+          ? dateRangeForCustomDates(startDate, endDate)
+          : dateRangeForPeriod(period, month);
         where = {
           ...(storeId ? { storeId } : {}),
           ...(sellerId ? { userId: sellerId } : {}),
@@ -59,7 +63,12 @@ export function registerRefundRoutes(app: Express) {
         // `user: true` used to pull the seller's full row — password hash and PIN
         // included — into every sales-history response. Only the display fields are
         // actually used (receipt "sold by"), so select those explicitly instead.
-        include: { saleItems: true, exchangeEvents: true, store: true, user: { select: { id: true, name: true, role: true } } },
+        include: {
+          saleItems: { include: { device: { select: { ram: true } } } },
+          exchangeEvents: true,
+          store: true,
+          user: { select: { id: true, name: true, role: true } }
+        },
         orderBy: { createdAt: 'desc' },
         ...(search ? { take: 20 } : limit ? { take: limit } : {}),
       });
@@ -74,7 +83,14 @@ export function registerRefundRoutes(app: Express) {
       for (const log of profitLogs) if (log.targetId) profits.set(log.targetId, [...(profits.get(log.targetId) ?? []), log]);
       res.json(sales.map((sale) => {
         const fallbackCost = sale.saleItems.reduce((sum, item) => D(sum).plus(item.costBasisUsd), D(0));
-        return { ...sale, recognizedProfitUsd: calculateRecognizedProfit(profits.get(sale.id) ?? [], D(sale.totalUsd).minus(fallbackCost)) };
+        return {
+          ...sale,
+          saleItems: sale.saleItems.map((item: any) => ({
+            ...item,
+            ram: item.device?.ram || item.ram || undefined,
+          })),
+          recognizedProfitUsd: calculateRecognizedProfit(profits.get(sale.id) ?? [], D(sale.totalUsd).minus(fallbackCost))
+        };
       }));
     } catch (error) {
       next(error);

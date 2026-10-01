@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { formatMoney } from '../../utils/money';
 import { useAppFields } from '../../context/AppContext';
 import { Supplier, SupplierInvoice, Device } from '../../types';
 import {
@@ -12,7 +13,8 @@ import {
   Building,
   Edit,
   Trash2,
-  Loader2
+  Loader2,
+  Landmark
 } from 'lucide-react';
 
 const formatDateStr = (dateVal?: string) => {
@@ -40,8 +42,9 @@ export const SuppliersPage: React.FC = () => {
     updateSupplierInvoice,
     deleteSupplierInvoice,
     paySupplier,
-    paySupplierInvoice
-  } = useAppFields('currentUser', 'suppliers', 'supplierInvoices', 'fetchInvoicesRange', 'devices', 'findDevicesByInvoice', 'stores', 'createSupplier', 'updateSupplier', 'deleteSupplier', 'updateSupplierInvoice', 'deleteSupplierInvoice', 'paySupplier', 'paySupplierInvoice');
+    paySupplierInvoice,
+    todayRate
+  } = useAppFields('currentUser', 'suppliers', 'supplierInvoices', 'fetchInvoicesRange', 'devices', 'findDevicesByInvoice', 'stores', 'createSupplier', 'updateSupplier', 'deleteSupplier', 'updateSupplierInvoice', 'deleteSupplierInvoice', 'paySupplier', 'paySupplierInvoice', 'todayRate');
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
@@ -80,9 +83,14 @@ export const SuppliersPage: React.FC = () => {
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
 
-  // Supplier payments default to the main warehouse's register — that's where partner
-  // capital lives and what purchases are meant to be paid back from.
-  const defaultPaymentStoreId = stores.find(s => s.isMainWarehouse)?.id || stores[0]?.id || '';
+  // Central Cash: all supplier payments strictly draw from the central cash register
+  const centralCashStore = useMemo(() => {
+    const warehouses = stores.filter(s => s.isMainWarehouse);
+    if (warehouses.length === 0) return stores[0] || null;
+    return warehouses.reduce((best, cur) => (cur.cashBalanceTjs || 0) > (best.cashBalanceTjs || 0) ? cur : best, warehouses[0]);
+  }, [stores]);
+  const defaultPaymentStoreId = centralCashStore?.id || '';
+  const rateNumber = todayRate?.rate || 0;
 
   // Pay form state
   const [paymentAmountUsd, setPaymentAmountUsd] = useState('');
@@ -129,6 +137,7 @@ export const SuppliersPage: React.FC = () => {
     setSelectedSupplierId(supplier.id);
     setPaymentAmountUsd(supplier.totalDebtUsd.toString());
     setPaymentNote(`Оплата поставщику ${supplier.name}`);
+    setSourceAccountId(centralCashStore?.id || '');
     setIsPayModalOpen(true);
   };
 
@@ -162,6 +171,7 @@ export const SuppliersPage: React.FC = () => {
 
   const handleOpenPayInvoice = (invoice: SupplierInvoice) => {
     setPayInvoiceAmountUsd(invoice.remainingAmountUsd.toString());
+    setPayInvoiceSourceAccountId(centralCashStore?.id || '');
     setIsPayInvoiceModalOpen(true);
   };
 
@@ -319,7 +329,7 @@ export const SuppliersPage: React.FC = () => {
       {/* Top Header */}
       <div className="p-3 sm:p-4 border-b border-border bg-surface flex items-center justify-between gap-3 shrink-0">
         <div className="text-xs text-fg-muted">
-          Общий долг поставщикам: <strong className="text-danger">${totalAllDebt.toLocaleString()}</strong>
+          Общий долг поставщикам: <strong className="text-danger">${formatMoney(totalAllDebt)}</strong>
         </div>
         <button
           onClick={() => setIsAddSupplierOpen(true)}
@@ -379,7 +389,7 @@ export const SuppliersPage: React.FC = () => {
                   <div className="flex items-center space-x-2">
                     <div className="text-right">
                       <span className="text-xs font-bold text-danger">
-                        ${(s.totalDebtUsd ?? 0).toLocaleString()}
+                        ${formatMoney(s.totalDebtUsd)}
                       </span>
                       <span className="block text-[10px] text-fg-subtle">Долг</span>
                     </div>
@@ -418,11 +428,11 @@ export const SuppliersPage: React.FC = () => {
                 <div>
                   <h4 className="text-base font-bold text-fg-muted">{selectedSupplier.name}</h4>
                   <div className="flex items-center space-x-3 text-xs mt-1">
-                    <span className="text-fg-muted">Закуплено: <strong className="text-fg-muted">${(selectedSupplier.totalPurchasedUsd ?? 0).toLocaleString()}</strong></span>
+                    <span className="text-fg-muted">Закуплено: <strong className="text-fg-muted">${formatMoney(selectedSupplier.totalPurchasedUsd)}</strong></span>
                     <span>•</span>
-                    <span className="text-fg-muted">Выплачено: <strong className="text-accent">${(selectedSupplier.totalPaidUsd ?? 0).toLocaleString()}</strong></span>
+                    <span className="text-fg-muted">Выплачено: <strong className="text-accent">${formatMoney(selectedSupplier.totalPaidUsd)}</strong></span>
                     <span>•</span>
-                    <span className="text-fg-muted">Остаток долга: <strong className="text-danger">${(selectedSupplier.totalDebtUsd ?? 0).toLocaleString()}</strong></span>
+                    <span className="text-fg-muted">Остаток долга: <strong className="text-danger">${formatMoney(selectedSupplier.totalDebtUsd)}</strong></span>
                   </div>
                 </div>
 
@@ -495,13 +505,13 @@ export const SuppliersPage: React.FC = () => {
                         <div className="flex items-center space-x-2">
                           <div className="text-right">
                             <p className="text-xs font-bold text-fg-muted">
-                              Всего: ${(inv.totalAmountUsd ?? 0).toLocaleString()}
+                              Всего: ${formatMoney(inv.totalAmountUsd)}
                             </p>
                             <p className="text-[11px] text-danger">
-                              Долг: ${(inv.remainingAmountUsd ?? 0).toLocaleString()}
+                              Долг: ${formatMoney(inv.remainingAmountUsd)}
                             </p>
                             <p className="text-[10px] text-accent">
-                              Оплачено: ${(inv.paidAmountUsd ?? 0).toLocaleString()}
+                              Оплачено: ${formatMoney(inv.paidAmountUsd)}
                             </p>
                           </div>
                           <button
@@ -569,19 +579,19 @@ export const SuppliersPage: React.FC = () => {
             <div className="bg-surface p-2 rounded-lg border border-border">
               <span className="block text-[10px] text-fg-subtle">Закуплено</span>
               <strong className="text-fg-muted text-xs">
-                ${(selectedSupplier.totalPurchasedUsd ?? 0).toLocaleString()}
+                ${formatMoney(selectedSupplier.totalPurchasedUsd)}
               </strong>
             </div>
             <div className="bg-surface p-2 rounded-lg border border-border">
               <span className="block text-[10px] text-fg-subtle">Выплачено</span>
               <strong className="text-accent text-xs">
-                ${(selectedSupplier.totalPaidUsd ?? 0).toLocaleString()}
+                ${formatMoney(selectedSupplier.totalPaidUsd)}
               </strong>
             </div>
             <div className="bg-surface p-2 rounded-lg border border-border">
               <span className="block text-[10px] text-fg-subtle">Долг</span>
               <strong className="text-danger text-xs">
-                ${(selectedSupplier.totalDebtUsd ?? 0).toLocaleString()}
+                ${formatMoney(selectedSupplier.totalDebtUsd)}
               </strong>
             </div>
           </div>
@@ -637,10 +647,10 @@ export const SuppliersPage: React.FC = () => {
                     <div className="flex items-center space-x-3">
                       <div className="text-right">
                         <p className="text-xs font-bold text-fg-muted">
-                          ${(inv.totalAmountUsd ?? 0).toLocaleString()}
+                          ${formatMoney(inv.totalAmountUsd)}
                         </p>
                         <p className="text-[11px] text-danger">
-                          Долг: ${(inv.remainingAmountUsd ?? 0).toLocaleString()}
+                          Долг: ${formatMoney(inv.remainingAmountUsd)}
                         </p>
                       </div>
                       <button
@@ -693,19 +703,40 @@ export const SuppliersPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-fg-subtle mb-1">Списать с кассы / счета:</label>
-                <select
-                  value={sourceAccountId ?? ''}
-                  onChange={(e) => setSourceAccountId(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                >
-                  {stores.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (Остаток: {(s.cashBalanceTjs ?? 0).toLocaleString()} TJS)
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-fg-subtle mb-1">Касса списания:</label>
+                <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
+                      <Landmark className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
+                      <p className="text-[11px] text-fg-subtle">Оплата поставщикам производится исключительно из центральной кассы</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-accent">
+                      {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                    </span>
+                    <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
+                  </div>
+                </div>
               </div>
+
+              {rateNumber > 0 && parseFloat(paymentAmountUsd) > 0 && (
+                <div className="flex items-center justify-between text-[11px] px-1 text-fg-subtle">
+                  <span>Сумма к списанию (курс {rateNumber.toFixed(2)}):</span>
+                  <span className="font-semibold text-fg-muted">
+                    ≈ {formatMoney(parseFloat(paymentAmountUsd) * rateNumber)} TJS
+                  </span>
+                </div>
+              )}
+
+              {rateNumber > 0 && parseFloat(paymentAmountUsd) > 0 && (parseFloat(paymentAmountUsd) * rateNumber) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
+                  Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: ~{formatMoney(parseFloat(paymentAmountUsd) * rateNumber)} TJS).
+                </div>
+              )}
 
               <div>
                 <label className="block text-fg-subtle mb-1">Примечание:</label>
@@ -767,19 +798,40 @@ export const SuppliersPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-fg-subtle mb-1">Списать с кассы / счета:</label>
-                <select
-                  value={payInvoiceSourceAccountId ?? ''}
-                  onChange={(e) => setPayInvoiceSourceAccountId(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                >
-                  {stores.map(s => (
-                    <option key={s.id} value={s.id}>
-                      {s.name} (Остаток: {(s.cashBalanceTjs ?? 0).toLocaleString()} TJS)
-                    </option>
-                  ))}
-                </select>
+                <label className="block text-fg-subtle mb-1">Касса списания:</label>
+                <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+                  <div className="flex items-center gap-2.5">
+                    <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
+                      <Landmark className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
+                      <p className="text-[11px] text-fg-subtle">Оплата накладной производится исключительно из центральной кассы</p>
+                    </div>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="text-xs font-bold text-accent">
+                      {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                    </span>
+                    <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
+                  </div>
+                </div>
               </div>
+
+              {rateNumber > 0 && parseFloat(payInvoiceAmountUsd) > 0 && (
+                <div className="flex items-center justify-between text-[11px] px-1 text-fg-subtle">
+                  <span>Сумма к списанию (курс {rateNumber.toFixed(2)}):</span>
+                  <span className="font-semibold text-fg-muted">
+                    ≈ {formatMoney(parseFloat(payInvoiceAmountUsd) * rateNumber)} TJS
+                  </span>
+                </div>
+              )}
+
+              {rateNumber > 0 && parseFloat(payInvoiceAmountUsd) > 0 && (parseFloat(payInvoiceAmountUsd) * rateNumber) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
+                  Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: ~{formatMoney(parseFloat(payInvoiceAmountUsd) * rateNumber)} TJS).
+                </div>
+              )}
 
               <div className="p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-[11px] text-accent">
                 Оплата будет применена только к этой накладной, независимо от других долгов поставщика.
@@ -918,16 +970,16 @@ export const SuppliersPage: React.FC = () => {
               <div className="bg-surface p-2.5 rounded-xl border border-border">
                 <span className="text-[10px] text-fg-subtle block font-semibold uppercase">СУММА НАКЛАДНОЙ</span>
                 <strong className={selectedInvoice.totalAmountUsd === 0 ? "text-highlight font-bold" : "text-fg-muted font-bold"}>
-                  {selectedInvoice.totalAmountUsd === 0 ? '$0 (БОНУС)' : `$${(selectedInvoice.totalAmountUsd || 0).toLocaleString()}`}
+                  {selectedInvoice.totalAmountUsd === 0 ? '$0.00 (БОНУС)' : `$${formatMoney(selectedInvoice.totalAmountUsd)}`}
                 </strong>
               </div>
               <div className="bg-surface p-2.5 rounded-xl border border-border">
                 <span className="text-[10px] text-fg-subtle block font-semibold uppercase">ОПЛАЧЕНО</span>
-                <strong className="text-accent font-bold">${(selectedInvoice.paidAmountUsd || 0).toLocaleString()}</strong>
+                <strong className="text-accent font-bold">${formatMoney(selectedInvoice.paidAmountUsd)}</strong>
               </div>
               <div className="bg-surface p-2.5 rounded-xl border border-border">
                 <span className="text-[10px] text-fg-subtle block font-semibold uppercase">ОСТАТОК ДОЛГА</span>
-                <strong className="text-danger font-bold">${(selectedInvoice.remainingAmountUsd || 0).toLocaleString()}</strong>
+                <strong className="text-danger font-bold">${formatMoney(selectedInvoice.remainingAmountUsd)}</strong>
               </div>
             </div>
 

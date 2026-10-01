@@ -1,5 +1,6 @@
-import { decimal, moneyNumber, sumMoney } from '../../utils/money';
+import { decimal, moneyNumber, sumMoney, formatMoney } from '../../utils/money';
 import React, { useState, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Device, PaymentMethod } from '../../types';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
@@ -15,7 +16,8 @@ import {
   ShoppingCart,
   Store as StoreIcon,
   Plus,
-  Flame
+  Flame,
+  Landmark,
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
@@ -35,6 +37,7 @@ interface CartItem {
 }
 
 export const SalePage: React.FC = () => {
+  const navigate = useNavigate();
   const {
     currentUser,
     devices,
@@ -44,8 +47,9 @@ export const SalePage: React.FC = () => {
     stores,
     openScanner,
     createSale,
-    isInitialLoading
-  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'setSelectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading');
+    isInitialLoading,
+    setActivePage,
+  } = useAppFields('currentUser', 'devices', 'todayRate', 'selectedStoreId', 'setSelectedStoreId', 'stores', 'openScanner', 'createSale', 'isInitialLoading', 'setActivePage');
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
@@ -63,19 +67,24 @@ export const SalePage: React.FC = () => {
   const [completedReceiptNumber, setCompletedReceiptNumber] = useState<number | null>(null);
   const [isSubmittingSale, setIsSubmittingSale] = useState(false);
 
+  const isSeller = currentUser?.role === 'SELLER';
   const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
+  const [localSaleStoreId, setLocalSaleStoreId] = useState<string>('');
 
   const selectableStores = useMemo(() => {
     return stores.filter(s => !s.isMainWarehouse);
   }, [stores]);
 
-  const effectiveStoreId = currentUser?.role === 'SELLER'
-    ? currentUser.storeId
-    : (selectableStores.some(s => s.id === selectedStoreId)
-        ? selectedStoreId
-        : (selectableStores[0]?.id || ''));
+  const effectiveStoreId = isSeller
+    ? currentUser?.storeId
+    : (isCentralCashMode
+        ? (selectableStores.some(s => s.id === localSaleStoreId) ? localSaleStoreId : (selectableStores[0]?.id || ''))
+        : (selectableStores.some(s => s.id === selectedStoreId) ? selectedStoreId : (selectableStores[0]?.id || '')));
 
-  const activeStoreName = stores.find(s => s.id === effectiveStoreId)?.name || 'Магазин';
+  const activeStore = stores.find(s => s.id === effectiveStoreId);
+  const activeStoreName = activeStore?.name || 'Магазин';
+  const isCurrentStoreWarehouse = Boolean(activeStore?.isMainWarehouse);
 
   const availableDevices = useMemo(() => {
     return devices.filter(d => {
@@ -104,9 +113,14 @@ export const SalePage: React.FC = () => {
 
   const brands = useMemo(() => {
     const set = new Set<string>();
-    devices.forEach(d => set.add(d.brand));
-    return [{ value: 'ALL', label: 'Все бренды' }, ...Array.from(set).map(b => ({ value: b, label: b }))];
-  }, [devices]);
+    devices.forEach(d => {
+      const isAvailableStatus = d.status === 'STORE_STOCK' || d.status === 'IN_STOCK_AFTER_EXCHANGE';
+      if (!isAvailableStatus) return false;
+      if (effectiveStoreId && d.locationId !== effectiveStoreId) return false;
+      if (d.brand?.trim()) set.add(d.brand.trim());
+    });
+    return [{ value: 'ALL', label: 'Все бренды' }, ...Array.from(set).sort().map(b => ({ value: b, label: b }))];
+  }, [devices, effectiveStoreId]);
 
   const defaultPriceFor = (device: Device): number | undefined =>
     device.retailPriceTjs && device.retailPriceTjs > 0 ? device.retailPriceTjs : undefined;
@@ -122,15 +136,17 @@ export const SalePage: React.FC = () => {
       variantKey: string;
       brand: string;
       model: string;
+      ram?: string;
       storage: string;
       color: string;
       devices: Device[];
     }> = {};
 
     for (const dev of availableDevices) {
-      const key = `${dev.brand}_${dev.model}_${dev.storage}_${dev.color}`;
+      const ramPart = dev.ram ? dev.ram.trim() : '';
+      const key = `${dev.brand}_${dev.model}_${ramPart}_${dev.storage}_${dev.color}`;
       if (!groups[key]) {
-        groups[key] = { variantKey: key, brand: dev.brand, model: dev.model, storage: dev.storage, color: dev.color, devices: [] };
+        groups[key] = { variantKey: key, brand: dev.brand, model: dev.model, ram: dev.ram, storage: dev.storage, color: dev.color, devices: [] };
       }
       groups[key].devices.push(dev);
     }
@@ -232,9 +248,14 @@ export const SalePage: React.FC = () => {
       cashVal = parseFloat(cashAmountInput) || 0;
       cardVal = parseFloat(cardAmountInput) || 0;
       if (Math.abs(cashVal + cardVal - totalTjs) > 0.01) {
-        setPaymentStatus({ tone: 'error', text: `Сумма наличных (${cashVal}) + карты (${cardVal}) не равна итогу (${totalTjs} TJS)` });
+        setPaymentStatus({ tone: 'error', text: `Сумма наличных (${formatMoney(cashVal)}) + карты (${formatMoney(cardVal)}) не равна итогу (${formatMoney(totalTjs)} TJS)` });
         return;
       }
+    }
+
+    if (isCurrentStoreWarehouse) {
+      setPaymentStatus({ tone: 'error', text: 'Главный склад предназначен только для хранения телефонов. Продажи со склада запрещены.' });
+      return;
     }
 
     setIsSubmittingSale(true);
@@ -264,6 +285,13 @@ export const SalePage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted relative">
       <StatusBanner message={paymentStatus} onDismiss={() => setPaymentStatus(null)} />
 
+      {isCurrentStoreWarehouse && (
+        <div className="p-3 bg-warning/15 border-b border-warning/30 text-warning text-xs font-medium flex items-center gap-2 shrink-0">
+          <AlertTriangle className="w-4 h-4 shrink-0" />
+          <span>Главный склад предназначен исключительно для хранения телефонов. Продажи со склада запрещены. Выберите розничную точку продаж.</span>
+        </div>
+      )}
+
       {/* Filter bar */}
       <div className="p-2.5 md:p-3 border-b border-border bg-bg space-y-2 shrink-0">
         <div className="flex items-center justify-between gap-2">
@@ -279,7 +307,11 @@ export const SalePage: React.FC = () => {
               <div className="relative inline-flex items-center h-8 rounded-lg bg-surface border border-border hover:border-accent/40 focus-within:border-accent focus-within:ring-1 focus-within:ring-accent transition-colors shadow-2xs box-border min-w-0">
                 <select
                   value={effectiveStoreId}
-                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  onChange={(e) => {
+                    const newStoreId = e.target.value;
+                    setSelectedStoreId(newStoreId);
+                    setLocalSaleStoreId(newStoreId);
+                  }}
                   className="h-full bg-transparent border-0 outline-none focus:outline-none focus:ring-0 cursor-pointer pl-2.5 pr-7 text-xs font-semibold text-fg-muted appearance-none max-w-52 sm:max-w-64 truncate py-0 leading-none m-0"
                 >
                   {selectableStores.map(s => (
@@ -294,6 +326,23 @@ export const SalePage: React.FC = () => {
               <div className="inline-flex items-center h-8 px-2.5 rounded-lg bg-surface border border-border text-xs font-semibold text-accent truncate shadow-2xs box-border max-w-52 sm:max-w-64">
                 {activeStoreName}
               </div>
+            )}
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStoreId('all');
+                  setActivePage('FINANCE');
+                  navigate('/finance');
+                }}
+                className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 text-xs font-semibold text-accent transition-colors shrink-0 shadow-2xs cursor-pointer"
+                title="Вернуться в режим Центральной кассы"
+              >
+                <Landmark className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">В Центр. кассу</span>
+                <span className="sm:hidden">В центр</span>
+              </button>
             )}
           </div>
 
@@ -352,7 +401,7 @@ export const SalePage: React.FC = () => {
                       )}
                     </div>
                     <p className="text-xs text-fg-subtle mt-0.5">
-                      {variant.storage} · {variant.color}
+                      {variant.ram ? `${variant.ram} · ` : ''}{variant.storage} · {variant.color}
                     </p>
                   </div>
 
@@ -409,8 +458,8 @@ export const SalePage: React.FC = () => {
                 {cart.length}
               </div>
               <div className="truncate">
-                <span className="text-sm font-bold text-accent block truncate">{totalTjs.toLocaleString()} TJS</span>
-                <span className="text-xs text-fg-subtle block">≈ ${totalUsd} USD</span>
+                <span className="text-sm font-bold text-accent block truncate">{formatMoney(totalTjs)} TJS</span>
+                <span className="text-xs text-fg-subtle block">≈ ${formatMoney(totalUsd)} USD</span>
               </div>
             </div>
 
@@ -444,13 +493,13 @@ export const SalePage: React.FC = () => {
         open={isCartOpen}
         onClose={() => setIsCartOpen(false)}
         title={`Чек · ${activeStoreName}`}
-        subtitle={`${totalTjs.toLocaleString()} TJS ≈ $${totalUsd}`}
+        subtitle={`${formatMoney(totalTjs)} TJS ≈ $${formatMoney(totalUsd)}`}
         maxWidth="lg"
         footer={
           <div className="w-full grid grid-cols-2 gap-2">
             <div className="col-span-2 flex items-center justify-between pb-2 text-sm">
               <span className="text-fg-muted">К оплате</span>
-              <strong className="text-lg tabular-nums text-accent">{totalTjs.toLocaleString()} TJS</strong>
+              <strong className="text-lg tabular-nums text-accent">{formatMoney(totalTjs)} TJS</strong>
             </div>
             <Button
               variant="secondary"
@@ -487,7 +536,9 @@ export const SalePage: React.FC = () => {
                 <div className="flex items-start justify-between gap-2">
                   <div className="min-w-0">
                     <p className="text-sm font-semibold text-fg-muted">{item.device.brand} {item.device.model}</p>
-                    <p className="text-xs text-fg-subtle">{item.device.storage} · {item.device.color}</p>
+                    <p className="text-xs text-fg-subtle">
+                      {item.device.ram ? `${item.device.ram} · ` : ''}{item.device.storage} · {item.device.color}
+                    </p>
                     <p className="text-xs text-fg-subtle mt-0.5">
                       IMEI: {item.device.imei}{item.device.imei2 ? ` / ${item.device.imei2}` : ''}
                     </p>

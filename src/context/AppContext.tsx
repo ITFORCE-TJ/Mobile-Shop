@@ -55,7 +55,7 @@ interface AppContextType {
   // period/month — and merges whatever it finds into `sales`, so every existing
   // `sales.find(...)`/`sales.filter(...)` call site keeps working unchanged once a caller
   // has awaited it once for the record it needed.
-  fetchSalesRange: (params: { period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL'; month?: string; storeId?: string; sellerId?: string; search?: string }) => Promise<Sale[]>;
+  fetchSalesRange: (params: { period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL'; month?: string; startDate?: string; endDate?: string; storeId?: string; sellerId?: string; search?: string }) => Promise<Sale[]>;
   transfers: TransferRequest[];
   repairs: RepairTicket[];
   // `repairs` only holds a recent, bounded window by default (see fetchRepairs) — this
@@ -73,8 +73,7 @@ interface AppContextType {
   expenses: Expense[];
   // `expenses` only holds a recent, bounded window by default (see fetchExpenses) — this
   // reaches further back by an explicit period/month, or employeeId for one employee's
-  // full advance/expense history, same pattern as fetchSalesRange.
-  fetchExpensesRange: (params: { period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL'; month?: string; employeeId?: string }) => Promise<Expense[]>;
+  fetchExpensesRange: (params: { period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL'; month?: string; startDate?: string; endDate?: string; storeId?: string; employeeId?: string }) => Promise<Expense[]>;
   owners: Owner[];
   ownerTransactions: OwnerTransaction[];
   users: User[];
@@ -172,6 +171,7 @@ interface AppContextType {
     freeDevices?: {
       brand: string;
       model: string;
+      ram?: string;
       storage: string;
       color: string;
       imei: string;
@@ -179,6 +179,7 @@ interface AppContextType {
     }[];
     destinationLocationId?: string;
   }) => Promise<{ success: boolean; message?: string }>;
+  updateDevice: (id: string, updates: { ram?: string | null; storage?: string; color?: string; model?: string }) => Promise<{ success: boolean; device?: Device; message?: string }>;
   updateSupplierBonus: (id: string, data: {
     campaignTitle?: string;
     amountUsd?: number;
@@ -251,6 +252,9 @@ interface AppContextType {
     ownerId: string;
     type: 'INVESTMENT' | 'WITHDRAWAL' | 'PROFIT_PAYOUT' | 'REINVEST';
     amountUsd: number;
+    destination?: string;
+    source?: string;
+    storeId?: string;
     note?: string;
   }) => Promise<{ success: boolean; message?: string }>;
 
@@ -451,6 +455,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return mapped;
   }, []);
 
+  const updateDevice: AppContextType['updateDevice'] = useCallback(async (id, updates) => {
+    try {
+      const raw = await apiClient<any>(`/devices/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify(updates),
+      });
+      const mapped = mapDevice(raw);
+      setDevices((prev) => prev.map((d) => (d.id === id ? mapped : d)));
+      return { success: true, device: mapped };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Не удалось обновить устройство' };
+    }
+  }, []);
+
   // Bounded by default — the background/startup load used to fetch every sale ever, which
   // only gets slower as the shop's history grows. Anything outside this recent window is
   // reached on demand via fetchSalesRange (search/sellerId/explicit period) instead.
@@ -463,6 +481,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const qs = new URLSearchParams();
     if (params.period) qs.set('period', params.period);
     if (params.month) qs.set('month', params.month);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
     if (params.storeId) qs.set('storeId', params.storeId);
     if (params.sellerId) qs.set('sellerId', params.sellerId);
     if (params.search) qs.set('search', params.search);
@@ -566,6 +586,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     const qs = new URLSearchParams();
     if (params.period) qs.set('period', params.period);
     if (params.month) qs.set('month', params.month);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    if (params.storeId) qs.set('storeId', params.storeId);
     if (params.employeeId) qs.set('employeeId', params.employeeId);
     const raw = await apiClient<any[]>(`/expenses?${qs.toString()}`);
     const mapped = raw.map((e) => mapExpense(e, namesRef.current));
@@ -827,10 +850,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       setCurrentUserState(mappedUser);
       if (mappedUser.role === 'SELLER' && mappedUser.storeId) {
         setSelectedStoreIdState(mappedUser.storeId);
+        setActivePageState('SALE');
       } else {
         setSelectedStoreIdState('all');
+        setActivePageState('FINANCE');
       }
-      setActivePageState('SALE');
       // The authenticated-data effect performs the initial fetch. Calling refetchAll
       // here as well doubled every API request on login and delayed the first screen.
       return { success: true };
@@ -869,6 +893,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const setSelectedStoreId = (storeId: string) => {
     if (currentUser?.role === 'SELLER') return;
     setSelectedStoreIdState(storeId);
+    useUIStore.getState().setSelectedStoreId(storeId);
   };
 
   const openScanner = (callback: (code: string) => void) => {
@@ -947,6 +972,21 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     );
     if (!targetSale && returnedImeiStr) {
       targetSale = sales.find((s) => s.items.some((i) => i.imei === returnedImeiStr));
+    }
+    if (!targetSale) {
+      try {
+        const lookupQuery = targetReceiptNum ? String(targetReceiptNum) : returnedImeiStr;
+        if (lookupQuery) {
+          const found = await fetchSalesRange({ search: lookupQuery });
+          targetSale = found.find((s) =>
+            (targetReceiptNum && s.receiptNumber === targetReceiptNum) ||
+            s.id === params.originalSaleId ||
+            (returnedImeiStr && s.items.some((i) => i.imei === returnedImeiStr))
+          );
+        }
+      } catch {
+        // ignore
+      }
     }
     if (!targetSale) {
       return { success: false, message: `Продажа с указанным чеком/IMEI не найдена` };
@@ -1185,8 +1225,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const paySupplier: AppContextType['paySupplier'] = async ({ supplierId, amountUsd, storeId, sourceAccountId, note }) => {
-    const resolvedStoreId = storeId || sourceAccountId;
-    if (!resolvedStoreId) return { success: false, message: 'Выберите кассу, из которой оплатить' };
+    const centralStore = stores.find((s) => s.isMainWarehouse) || stores[0];
+    const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
+    if (!resolvedStoreId) return { success: false, message: 'Центральная касса не найдена' };
     try {
       await apiClient(`/suppliers/${supplierId}/payments`, {
         method: 'POST',
@@ -1206,8 +1247,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const paySupplierInvoice: AppContextType['paySupplierInvoice'] = async ({ invoiceId, amountUsd, storeId, sourceAccountId }) => {
-    const resolvedStoreId = storeId || sourceAccountId;
-    if (!resolvedStoreId) return { success: false, message: 'Выберите кассу, из которой оплатить' };
+    const centralStore = stores.find((s) => s.isMainWarehouse) || stores[0];
+    const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
+    if (!resolvedStoreId) return { success: false, message: 'Центральная касса не найдена' };
     try {
       await apiClient(`/supplier-invoices/${invoiceId}/payments`, {
         method: 'POST',
@@ -1336,9 +1378,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const ownerReinvest = async (ownerId: string, amountUsd: number, note?: string): Promise<ActionResult> => {
+  const ownerReinvest = async (ownerId: string, amountUsd: number, destination?: string, note?: string): Promise<ActionResult> => {
     try {
-      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/reinvest`, { method: 'POST', body: JSON.stringify({ amountUsd, note }) });
+      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/reinvest`, { method: 'POST', body: JSON.stringify({ amountUsd, destination, note }) });
       setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
       markLocalMutation(['owners', 'ownerTransactions']);
       void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions()]);
@@ -1348,11 +1390,14 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const createOwnerTransaction: AppContextType['createOwnerTransaction'] = async ({ ownerId, type, amountUsd, note }) => {
-    if (type === 'INVESTMENT') return ownerInvestment(ownerId, amountUsd, 'Главный счет', note);
-    if (type === 'WITHDRAWAL') return ownerCapitalWithdrawal(ownerId, amountUsd, 'Главный счет', note);
-    if (type === 'PROFIT_PAYOUT') return ownerProfitPayout(ownerId, amountUsd, 'Главный счет', note);
-    if (type === 'REINVEST') return ownerReinvest(ownerId, amountUsd, note);
+  const createOwnerTransaction: AppContextType['createOwnerTransaction'] = async ({ ownerId, type, amountUsd, destination, source, storeId, note }) => {
+    const storeName = storeId ? stores.find(s => s.id === storeId)?.name : undefined;
+    const dest = destination || storeName || 'Главный склад';
+    const src = source || storeName || 'Главный склад';
+    if (type === 'INVESTMENT') return ownerInvestment(ownerId, amountUsd, dest, note);
+    if (type === 'WITHDRAWAL') return ownerCapitalWithdrawal(ownerId, amountUsd, src, note);
+    if (type === 'PROFIT_PAYOUT') return ownerProfitPayout(ownerId, amountUsd, src, note);
+    if (type === 'REINVEST') return ownerReinvest(ownerId, amountUsd, dest, note);
     return { success: false, message: 'Неизвестный тип операции' };
   };
 
@@ -1593,6 +1638,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         deleteSupplier,
         updateSupplierInvoice,
         deleteSupplierInvoice,
+        updateDevice,
         createSupplierBonus,
         updateSupplierBonus,
         deleteSupplierBonus,

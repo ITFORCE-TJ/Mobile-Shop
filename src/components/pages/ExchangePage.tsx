@@ -1,5 +1,6 @@
-import { decimal, moneyNumber, sumMoney } from '../../utils/money';
-import React, { useState, useMemo } from 'react';
+import { decimal, moneyNumber, sumMoney, formatMoney } from '../../utils/money';
+import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Device, PaymentMethod, Sale, SaleItem } from '../../types';
 import {
@@ -14,6 +15,17 @@ import {
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 
 export const ExchangePage: React.FC = () => {
+  const location = useLocation();
+  const navigatedState = location.state as {
+    saleReceiptNumber?: number;
+    item?: SaleItem;
+    customerName?: string;
+    saleId?: string;
+    saleStoreId?: string;
+    saleStoreName?: string;
+    saleDate?: string;
+  } | null;
+
   const {
     currentUser,
     sales,
@@ -74,7 +86,7 @@ export const ExchangePage: React.FC = () => {
     });
   }, [devices, effectiveStoreId, deviceSearchQuery, selectedOldDevice]);
 
-  const resolveOldDeviceFromItem = (sale: Sale, item: SaleItem): Device => {
+  const resolveOldDeviceFromItem = (sale: { storeId: string; storeName: string; date?: string; [key: string]: any }, item: SaleItem): Device => {
     const matchedDev = devices.find(d => d.imei === item.imei || d.id === item.deviceId);
     return matchedDev || {
       id: item.deviceId || `old-${Date.now()}`,
@@ -91,7 +103,7 @@ export const ExchangePage: React.FC = () => {
       locationId: sale.storeId,
       locationName: sale.storeName,
       supplierId: 'sup-tradein',
-      createdAt: sale.date,
+      createdAt: sale.date || new Date().toISOString(),
       timeline: [],
     };
   };
@@ -109,6 +121,25 @@ export const ExchangePage: React.FC = () => {
       setStatus({ tone: 'info', text: `Устройство на замену было выбрано из другого магазина и сброшено — обмен проводится в пределах одного магазина` });
     }
   };
+
+  useEffect(() => {
+    if (navigatedState?.item) {
+      const item = navigatedState.item;
+      const matchedSale = sales.find(s => (navigatedState.saleReceiptNumber && s.receiptNumber === navigatedState.saleReceiptNumber) || s.id === navigatedState.saleId);
+      const dev = resolveOldDeviceFromItem(matchedSale || {
+        storeId: navigatedState.saleStoreId || currentUser?.storeId || '',
+        storeName: navigatedState.saleStoreName || currentUser?.storeName || 'Магазин',
+        date: navigatedState.saleDate || new Date().toISOString(),
+      }, item);
+
+      applySelectedOldDevice(dev, item.salePriceTjs || 0);
+      setStatus({
+        tone: 'success',
+        text: `Устройство ${item.brand} ${item.model} (${item.imei}) из чека #${navigatedState.saleReceiptNumber || ''} выбрано для обмена. Теперь выберите устройство на замену из наличия.`
+      });
+      window.history.replaceState({}, document.title);
+    }
+  }, [navigatedState]);
 
   const handlePickReceiptItem = (sale: Sale, item: SaleItem) => {
     applySelectedOldDevice(resolveOldDeviceFromItem(sale, item), item.salePriceTjs || 0);
@@ -231,6 +262,8 @@ export const ExchangePage: React.FC = () => {
     setIsSubmitting(true);
     try {
       const res = await processExchange({
+        originalSaleId: navigatedState?.saleId,
+        originalSaleReceiptNumber: navigatedState?.saleReceiptNumber,
         returnedImei: selectedOldDevice.imei,
         returnedItem: {
           brand: selectedOldDevice.brand,
@@ -417,7 +450,7 @@ export const ExchangePage: React.FC = () => {
                     {replacementDevice.brand} {replacementDevice.model}
                   </h4>
                   <p className="text-xs text-fg-muted mt-0.5">
-                    {replacementDevice.storage} • {replacementDevice.color}
+                    {replacementDevice.ram ? `${replacementDevice.ram} • ` : ''}{replacementDevice.storage} • {replacementDevice.color}
                   </p>
                   <p className="text-xs text-fg-subtle mt-1">
                     IMEI: {replacementDevice.imei}
@@ -482,11 +515,11 @@ export const ExchangePage: React.FC = () => {
                       >
                         <div>
                           <p className="font-bold text-fg-muted group-hover:text-accent transition-colors">{d.brand} {d.model}</p>
-                          <p className="text-[11px] text-fg-muted mt-0.5">{d.storage} • {d.color}</p>
+                          <p className="text-[11px] text-fg-muted mt-0.5">{d.ram ? `${d.ram} • ` : ''}{d.storage} • {d.color}</p>
                           <p className="text-[10px] text-fg-subtle mt-0.5">IMEI: {d.imei}</p>
                         </div>
                         <span className="font-bold text-accent text-xs">
-                          {(d.retailPriceTjs || 0).toLocaleString()} TJS
+                          {formatMoney(d.retailPriceTjs)} TJS
                         </span>
                       </button>
                     ))
@@ -606,12 +639,12 @@ export const ExchangePage: React.FC = () => {
         {/* Action Bottom Bar */}
         <div className="p-3.5 bg-surface border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center justify-between shrink-0">
           <div className="text-xs font-medium text-fg-muted flex flex-wrap items-center gap-2">
-            <span>Новый: <strong className="text-accent">{newPriceTjs} TJS</strong></span>
+            <span>Новый: <strong className="text-accent">{formatMoney(newPriceTjs)} TJS</strong></span>
             <span>·</span>
-            <span>Зачет: <strong className="text-accent">{exchangeInValueTjs} TJS</strong></span>
+            <span>Зачет: <strong className="text-accent">{formatMoney(exchangeInValueTjs)} TJS</strong></span>
             <span>·</span>
             <span className="font-bold text-fg-muted">
-              {differenceTjs > 0 ? `Доплата: +${differenceTjs} TJS` : differenceTjs < 0 ? `Возврат: ${differenceTjs} TJS` : 'Равный обмен'}
+              {differenceTjs > 0 ? `Доплата: +${formatMoney(differenceTjs)} TJS` : differenceTjs < 0 ? `Возврат: ${formatMoney(differenceTjs)} TJS` : 'Равный обмен'}
             </span>
           </div>
 

@@ -34,6 +34,7 @@ try {
   token = (await api('POST', '/auth/login', { login: 'admin', password: 'admin123' })).data.token;
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 10 })).status, 200);
   assert.equal((await api('POST', '/stores/store-siyoma/adjust-cash', { newBalanceTjs: 10000, reason: 'Test fixture' })).status, 200);
+  assert.equal((await api('POST', '/stores/main-warehouse/adjust-cash', { newBalanceTjs: 10000, reason: 'Test fixture central' })).status, 200);
   const adjustment = await db.financialTransaction.findFirstOrThrow({ where: { sourceType: 'STORE_ADJUSTMENT', sourceId: 'store-siyoma' } });
   assert(adjustment.amountTjs.eq(10000));
   assert.equal(adjustment.direction, 'IN');
@@ -57,7 +58,7 @@ try {
   pass('failed operation rolls back data and idempotency record');
 
   const purchase = (number: string, items: { imei: string; imei2?: string }[], price = 1) => api('POST', '/purchases', {
-    supplierId: 'sup-dubai', invoiceNumber: number, storeId: 'main-warehouse', groups: [{ brand: 'Audit', model: 'Phone', storage: '128', color: 'Black', purchasePriceUsd: price, items }],
+    supplierId: 'sup-dubai', invoiceNumber: number, storeId: 'main-warehouse', groups: [{ brand: 'Audit', model: 'Phone', ram: '8GB', storage: '128', color: 'Black', purchasePriceUsd: price, items }],
   });
   const p = await purchase('ROUND', [{ imei: '350000000000001' }, { imei: '350000000000002' }, { imei: '350000000000003' }]);
   assert.equal(p.status, 201);
@@ -74,7 +75,7 @@ try {
   const invoice = await db.supplierInvoice.findUniqueOrThrow({ where: { id: invoiceId } });
   assert.equal(supplier.totalDebtUsd.toString(), invoice.totalAmountUsd.toString());
   pass('parallel invoice edits preserve supplier debt');
-  const paymentBody = { amountUsd: 0.5, storeId: 'store-siyoma' };
+  const paymentBody = { amountUsd: 0.5, storeId: 'main-warehouse' };
   const payments = await Promise.all([api('POST', `/supplier-invoices/${invoiceId}/payments`, paymentBody, 'same-payment'), api('POST', `/supplier-invoices/${invoiceId}/payments`, paymentBody, 'same-payment')]);
   assert(payments.every(r => r.status === 201));
   assert.equal(await db.supplierPayment.count(), 1);
@@ -109,7 +110,7 @@ try {
   assert.equal((await api('PUT', '/suppliers/sup-dubai', { name: '   ' })).status, 400);
   pass('invalid compensation, boolean and blank supplier rejected');
 
-  const racePurchase = await api('POST', '/purchases', { supplierId: 'sup-china', invoiceNumber: 'SALE-EDIT-RACE', storeId: 'store-siyoma', groups: [{ brand: 'Audit', model: 'Race', storage: '128', color: 'Black', purchasePriceUsd: 10, items: [{ imei: '350000000000099' }] }] });
+  const racePurchase = await api('POST', '/purchases', { supplierId: 'sup-china', invoiceNumber: 'SALE-EDIT-RACE', storeId: 'store-siyoma', groups: [{ brand: 'Audit', model: 'Race', ram: '8GB', storage: '128', color: 'Black', purchasePriceUsd: 10, items: [{ imei: '350000000000099' }] }] });
   assert.equal(racePurchase.status, 201);
   const raceId = racePurchase.data.invoice.id;
   const raceDeviceId = racePurchase.data.devices[0].id;

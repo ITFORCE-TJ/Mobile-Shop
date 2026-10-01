@@ -1,7 +1,8 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
+import { useUIStore } from '../../stores/useUIStore';
 import { PageId } from '../../types';
 import {
   ShoppingBag,
@@ -22,7 +23,9 @@ import {
   LogOut,
   X,
   ChevronRight,
-  Landmark
+  Landmark,
+  Store,
+  ArrowRight,
 } from 'lucide-react';
 
 const PAGE_ROUTES: Record<string, string> = {
@@ -55,45 +58,6 @@ interface NavGroup {
   }[];
 }
 
-const NAV_GROUPS: NavGroup[] = [
-  {
-    title: 'Основные операции',
-    items: [
-      { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-    ]
-  },
-  {
-    title: 'Склад и логистика',
-    items: [
-      { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER', 'SELLER'] },
-      { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN', 'PARTNER'] },
-    ]
-  },
-  {
-    title: 'Финансы и учёт',
-    items: [
-      { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'EXPENSES', label: 'Расходы магазина', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'BONUSES', label: 'Бонусы продавцов', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
-    ]
-  },
-  {
-    title: 'Система и доступ',
-    items: [
-      { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
-      { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
-      { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
-      { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
-    ]
-  }
-];
-
 export const Drawer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -103,24 +67,121 @@ export const Drawer: React.FC = () => {
     drawerOpen,
     setDrawerOpen,
     logout,
-    stores
-  } = useAppFields('currentUser', 'setActivePage', 'drawerOpen', 'setDrawerOpen', 'logout', 'stores');
+    stores,
+    selectedStoreId,
+    setSelectedStoreId,
+  } = useAppFields(
+    'currentUser',
+    'setActivePage',
+    'drawerOpen',
+    'setDrawerOpen',
+    'logout',
+    'stores',
+    'selectedStoreId',
+    'setSelectedStoreId'
+  );
   const { notifications } = useNotifications();
+  const { setStoreSwitchModalOpen } = useUIStore();
 
   if (!drawerOpen) return null;
 
   const userRole = currentUser?.role || 'SELLER';
-  const bottomNavPages: PageId[] = [
-    'INVENTORY', 'SALES_HISTORY', 'SALE',
-    userRole === 'ADMIN' || userRole === 'PARTNER' ? 'PURCHASE' : 'EXCHANGE',
-  ];
-  // `resolved` tracks whether an actionable notification has been handled, not whether
-  // the user has seen it — informational notifications are created already resolved.
-  const unreadNotifs = notifications.filter(n => !n.read).length;
+  const isSeller = userRole === 'SELLER';
+  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const userStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
-  const storeSubtitle = currentUser?.role === 'SELLER'
-    ? (userStoreName || 'Магазин не привязан')
-    : (userStoreName || 'Все магазины');
+
+  const unreadNotifs = notifications.filter(n => !n.read).length;
+
+  const navGroups = useMemo<NavGroup[]>(() => {
+    if (isSeller) {
+      return [
+        {
+          title: 'Основные операции',
+          items: [
+            { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['SELLER'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['SELLER'] },
+            { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['SELLER'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['SELLER'] },
+          ],
+        },
+        {
+          title: 'Склад',
+          items: [
+            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
+          ],
+        },
+      ];
+    }
+
+    if (isCentralCashMode) {
+      return [
+        {
+          title: 'Центральная касса и финансы',
+          items: [
+            { id: 'FINANCE', label: 'Финансы и отчёты', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'BONUSES', label: 'Бонусы поставщиков', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+          ],
+        },
+        {
+          title: 'Склад и логистика',
+          items: [
+            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN', 'PARTNER'] },
+          ],
+        },
+        {
+          title: 'Система и доступ',
+          items: [
+            { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
+            { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
+            { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+          ],
+        },
+      ];
+    }
+
+    // Retail Store mode for Admin
+    return [
+      {
+        title: `Продажи: ${activeRetailStore?.name || 'Магазин'}`,
+        items: [
+          { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
+        ],
+      },
+      {
+        title: 'Финансы (Центральный офис)',
+        items: [
+          { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+        ],
+      },
+      {
+        title: 'Система и доступ',
+        items: [
+          { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
+          { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
+          { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+        ],
+      },
+    ];
+  }, [isSeller, isCentralCashMode, activeRetailStore]);
 
   return (
     <div className="app-safe-area fixed inset-x-0 top-0 bottom-[calc(3.5rem+var(--bottom-nav-pb))] z-40 flex md:hidden flex-col bg-bg text-fg-muted w-full overflow-hidden">
@@ -135,7 +196,7 @@ export const Drawer: React.FC = () => {
               {currentUser?.name || 'Пользователь'}
             </h2>
             <p className="text-xs font-medium text-accent truncate">
-              {storeSubtitle}
+              {isSeller ? (userStoreName || 'Магазин не привязан') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
             </p>
           </div>
         </div>
@@ -150,10 +211,92 @@ export const Drawer: React.FC = () => {
         </button>
       </div>
 
+      {/* Mode Switcher Banner for Admin/Partner */}
+      {!isSeller && (
+        <div className="p-3 border-b border-border bg-surface-raised/40 shrink-0">
+          {isCentralCashMode ? (
+            <div
+              onClick={() => {
+                setDrawerOpen(false);
+                setSelectedStoreId('all');
+                setActivePage('FINANCE');
+                navigate('/finance');
+              }}
+              className="p-3 rounded-xl bg-accent/5 hover:bg-accent/10 border border-accent/25 space-y-1.5 cursor-pointer transition-colors"
+              title="Перейти в Центральную кассу (Финансы)"
+            >
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-accent flex items-center gap-1">
+                  <Landmark className="w-3.5 h-3.5" />
+                  Центральная касса
+                </span>
+                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+              </div>
+              <p className="text-xs text-fg-subtle">
+                Режим главного офиса и финансового учёта
+              </p>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setDrawerOpen(false);
+                  setStoreSwitchModalOpen(true);
+                }}
+                className="w-full mt-1 px-3 py-2 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg flex items-center justify-center gap-1.5 transition-all shadow-xs"
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>Выбрать магазин для продаж</span>
+                <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-70" />
+              </button>
+            </div>
+          ) : (
+            <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-warning flex items-center gap-1">
+                  <Store className="w-3.5 h-3.5" />
+                  Режим продаж
+                </span>
+                <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+              </div>
+              <p className="text-xs font-bold text-fg truncate">
+                {activeRetailStore?.name || 'Магазин'}
+              </p>
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    setStoreSwitchModalOpen(true);
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg flex items-center justify-center gap-1 transition-all"
+                >
+                  <Store className="w-3 h-3 text-fg-subtle" />
+                  <span>Сменить</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setDrawerOpen(false);
+                    setSelectedStoreId('all');
+                    setActivePage('FINANCE');
+                    navigate('/finance');
+                  }}
+                  className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer"
+                  title="Автоматически перейти в Центральную кассу"
+                >
+                  <Landmark className="w-3 h-3" />
+                  <span>В Центр</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Vertical List of Menu Items */}
       <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-6">
-        {NAV_GROUPS.map((group, gIdx) => {
-          const visibleItems = group.items.filter(item => item.roles.includes(userRole) && !bottomNavPages.includes(item.id));
+        {navGroups.map((group, gIdx) => {
+          const visibleItems = group.items.filter(item => item.roles.includes(userRole));
           if (visibleItems.length === 0) return null;
 
           return (
@@ -166,7 +309,7 @@ export const Drawer: React.FC = () => {
                 {visibleItems.map(item => {
                   const Icon = item.icon;
                   const routePath = PAGE_ROUTES[item.id] || '/sale';
-                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === 'SALE');
+                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isSeller ? 'SALE' : 'FINANCE'));
                   const isNotif = item.id === 'NOTIFICATIONS';
 
                   return (
@@ -179,26 +322,22 @@ export const Drawer: React.FC = () => {
                       }}
                       className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl border text-left transition-all active:scale-[0.99] ${
                         isActive
-                          ? 'bg-accent/10 text-accent border-accent/40 font-semibold shadow-xs'
-                          : 'bg-surface hover:bg-surface-raised text-fg-muted border-border/80'
+                          ? 'bg-accent/15 border-accent/40 text-accent font-semibold shadow-xs'
+                          : 'bg-surface hover:bg-surface-raised border-border text-fg-muted'
                       }`}
                     >
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className={`p-2 rounded-lg shrink-0 ${
-                          isActive ? 'bg-accent/20 text-accent' : 'bg-surface-raised text-fg-subtle border border-border'
-                        }`}>
-                          <Icon className="w-4.5 h-4.5" />
-                        </div>
-                        <span className="text-xs md:text-sm font-medium truncate">{item.label}</span>
+                      <div className="flex items-center gap-3 truncate">
+                        <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-accent' : 'text-fg-subtle'}`} />
+                        <span className="text-xs">{item.label}</span>
                       </div>
 
-                      <div className="flex items-center gap-2 shrink-0">
+                      <div className="flex items-center gap-2">
                         {isNotif && unreadNotifs > 0 && (
                           <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
                             {unreadNotifs}
                           </span>
                         )}
-                        <ChevronRight className={`w-4 h-4 ${isActive ? 'text-accent' : 'text-fg-subtle/50'}`} />
+                        <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
                       </div>
                     </button>
                   );
@@ -207,25 +346,18 @@ export const Drawer: React.FC = () => {
             </div>
           );
         })}
+      </div>
 
-        {/* Logout item at the end of the mobile menu list */}
-        <div className="pt-2">
-          <button
-            onClick={() => {
-              setDrawerOpen(false);
-              logout();
-            }}
-            className="w-full flex items-center justify-between px-3.5 py-3.5 rounded-xl border text-left bg-danger/10 hover:bg-danger/15 text-danger border-danger/30 font-semibold transition-all active:scale-[0.99]"
-          >
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 rounded-lg bg-danger/15 text-danger shrink-0 border border-danger/20">
-                <LogOut className="w-4.5 h-4.5" />
-              </div>
-              <span className="text-xs md:text-sm font-bold truncate">Выйти из системы</span>
-            </div>
-            <ChevronRight className="w-4 h-4 text-danger/60 shrink-0" />
-          </button>
-        </div>
+      {/* Footer */}
+      <div className="p-4 border-t border-border bg-surface shrink-0">
+        <button
+          type="button"
+          onClick={logout}
+          className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/30 text-fg-muted hover:text-danger text-xs font-semibold transition-colors"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>Выйти из аккаунта</span>
+        </button>
       </div>
     </div>
   );

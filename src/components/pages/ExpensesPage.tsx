@@ -1,6 +1,7 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { ActionMenu } from '../ui/ActionMenu';
 import { getBusinessDateKey } from '../../utils/businessDate';
+import { formatMoney } from '../../utils/money';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { Expense, ExpenseCategory } from '../../types';
@@ -22,11 +23,20 @@ import {
   Edit2,
   Trash2,
   SlidersHorizontal,
-  Banknote
+  Banknote,
+  Landmark,
+  AlertCircle,
+  ArrowUpDown,
+  CheckCircle2,
+  RotateCcw,
+  X,
+  User,
+  Filter
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { MonthPicker } from '../ui/MonthPicker';
+import { DateRangePicker } from '../ui/DateRangePicker';
 import { Select, ToggleRow } from '../ui/Input';
 import { FormField } from '../ui/FormField';
 import { Button } from '../ui/Button';
@@ -74,6 +84,11 @@ export const ExpensesPage: React.FC = () => {
   const canAddCategory = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
 
   const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
+  const centralCashStore = useMemo(() => {
+    const warehouses = stores.filter(s => s.isMainWarehouse);
+    if (warehouses.length === 0) return stores[0] || null;
+    return warehouses.reduce((best, cur) => (cur.cashBalanceTjs || 0) > (best.cashBalanceTjs || 0) ? cur : best, warehouses[0]);
+  }, [stores]);
 
   const [status, setStatus] = useState<StatusMessage | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -101,8 +116,12 @@ export const ExpensesPage: React.FC = () => {
   }, [retailStores, storeId]);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'SPECIFIC_MONTH' | 'ALL'>('SPECIFIC_MONTH');
-  const [selectedMonth, setSelectedMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
+  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'YESTERDAY' | 'MONTH' | 'CUSTOM' | 'ALL'>('MONTH');
+  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
+  const [selectedEndDate, setSelectedEndDate] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
+  const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('ALL');
+  const [sortBy, setSortBy] = useState<'DATE_DESC' | 'DATE_ASC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedCategoryTab, setSelectedCategoryTab] = useState('ALL');
   // Defaults to whichever store is currently active on the POS Terminal page —
@@ -112,20 +131,62 @@ export const ExpensesPage: React.FC = () => {
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
 
-  // `expenses` from context only holds a recent bounded window by default — the current
-  // month (this page's own default filter) is always inside it, but "весь период" or an
-  // older month reaches further back, so fetch that exact range from the server and merge
-  // it in. Guarded against a stale response overwriting a newer one on fast clicks.
   useEffect(() => {
-    const thisMonth = getBusinessDateKey().substring(0, 7);
+    if (!isSeller) {
+      if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
+        setSelectedStoreFilter(globalSelectedStoreId);
+      } else {
+        setSelectedStoreFilter('ALL');
+      }
+    }
+  }, [globalSelectedStoreId, isSeller]);
 
+  const todayStr = getBusinessDateKey();
+  const thisMonthStr = todayStr.substring(0, 7);
+  const yesterdayStr = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    return getBusinessDateKey(d);
+  }, []);
+
+  useEffect(() => {
     let cancelled = false;
-    fetchExpensesRange({
-      period: periodFilter,
-      month: periodFilter === 'SPECIFIC_MONTH' ? selectedMonth : undefined,
-    }).catch((e) => { if (!cancelled) console.error('Failed to load expenses for period', e); });
-    return () => { cancelled = true; };
-  }, [periodFilter, selectedMonth, fetchExpensesRange, dataRefreshRevision]);
+
+    const params: {
+      period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL';
+      month?: string;
+      startDate?: string;
+      endDate?: string;
+      storeId?: string;
+    } = {};
+
+    if (periodFilter === 'TODAY') {
+      params.period = 'TODAY';
+    } else if (periodFilter === 'YESTERDAY') {
+      params.startDate = yesterdayStr;
+      params.endDate = yesterdayStr;
+    } else if (periodFilter === 'MONTH') {
+      params.period = 'SPECIFIC_MONTH';
+      params.month = thisMonthStr;
+    } else if (periodFilter === 'CUSTOM' && selectedStartDate) {
+      params.startDate = selectedStartDate;
+      params.endDate = selectedEndDate || selectedStartDate;
+    } else if (periodFilter === 'ALL') {
+      params.period = 'ALL';
+    }
+
+    if (selectedStoreFilter !== 'ALL') {
+      params.storeId = selectedStoreFilter;
+    }
+
+    fetchExpensesRange(params).catch((e) => {
+      if (!cancelled) console.error('Failed to load expenses for period', e);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [periodFilter, selectedStartDate, selectedEndDate, selectedStoreFilter, thisMonthStr, yesterdayStr, fetchExpensesRange, dataRefreshRevision]);
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
     try {
@@ -142,7 +203,7 @@ export const ExpensesPage: React.FC = () => {
   const handleStartEdit = (exp: Expense) => {
     setEditingExpense(exp);
     setEditCategory(exp.category);
-    setEditAmountTjs((exp.amountTjs || 0).toString());
+    setEditAmountTjs((exp.amountTjs || 0).toFixed(2));
     setEditStoreId(exp.storeId || stores[0]?.id || '');
     setEditDescription(exp.comment || exp.description || '');
   };
@@ -182,7 +243,7 @@ export const ExpensesPage: React.FC = () => {
       const res = await deleteExpense(deletingId);
       setDeletingId(null);
       if (res.success) {
-        setStatus({ tone: 'success', text: 'Расход удалён, средства возвращены в баланс кассы' });
+        setStatus({ tone: 'success', text: 'Расход удалён, средства возвращены в баланс Центральной кассы' });
       } else {
         setStatus({ tone: 'error', text: res.message || 'Ошибка удаления расхода' });
       }
@@ -193,16 +254,16 @@ export const ExpensesPage: React.FC = () => {
 
   const handleStartPay = (exp: Expense) => {
     setPayingExpense(exp);
-    setPayStoreId(exp.storeId || retailStores[0]?.id || '');
+    setPayStoreId(centralCashStore?.id || '');
   };
 
   const handleConfirmPay = async () => {
     if (!payingExpense || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const res = await payExpense(payingExpense.id, payingExpense.storeId ? undefined : payStoreId);
+      const res = await payExpense(payingExpense.id, centralCashStore?.id);
       if (res.success) {
-        setStatus({ tone: 'success', text: `Расход оплачен: ${payingExpense.amountTjs.toLocaleString()} TJS списано из кассы` });
+        setStatus({ tone: 'success', text: `Расход оплачен: ${formatMoney(payingExpense.amountTjs)} TJS списано из Центральной кассы` });
         setPayingExpense(null);
       } else {
         setStatus({ tone: 'error', text: res.message || 'Не удалось оплатить расход' });
@@ -231,6 +292,7 @@ export const ExpensesPage: React.FC = () => {
         category,
         amountTjs: val,
         storeId: isSeller ? currentUser.storeId : storeId,
+        sourceAccount: paidFromCashRegister ? 'Центральная касса' : undefined,
         description: description.trim(),
         paidFromCashRegister,
         employeeId: selectedEmployeeId || undefined,
@@ -243,7 +305,7 @@ export const ExpensesPage: React.FC = () => {
         setAmountTjs('');
         setDescription('');
         setSelectedEmployeeId('');
-        const paidNote = paidFromCashRegister ? 'оплачен из кассы' : 'записан как не оплаченный';
+        const paidNote = paidFromCashRegister ? 'оплачен из Центральной кассы' : 'записан как не оплаченный';
         setStatus({ tone: 'success', text: `Расход на сумму ${val} TJS ${paidNote}${selectedEmp ? ` (зачислен сотруднику ${selectedEmp.name})` : ''}` });
       } else {
         setStatus({ tone: 'error', text: res.message || 'Ошибка проведения расхода' });
@@ -283,16 +345,46 @@ export const ExpensesPage: React.FC = () => {
 
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
 
-  const filteredExpenses = useMemo(() => {
-    const todayStr = getBusinessDateKey();
+  const activeEmployees = useMemo(() => {
+    return users.filter(u => u.isActive ?? u.active);
+  }, [users]);
 
+  const categoryCounts = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const exp of expenses) {
+      if (selectedStoreFilter !== 'ALL' && exp.storeId !== selectedStoreFilter) continue;
+      map[exp.category] = (map[exp.category] || 0) + 1;
+    }
+    return map;
+  }, [expenses, selectedStoreFilter]);
+
+  const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
       if (isSeller && e.storeId !== currentUser.storeId) return false;
       if (selectedStoreFilter !== 'ALL' && e.storeId !== selectedStoreFilter) return false;
 
       const expDateStr = getBusinessDateKey(new Date(e.date));
       if (periodFilter === 'TODAY' && expDateStr !== todayStr) return false;
-      if (periodFilter === 'SPECIFIC_MONTH' && !expDateStr.startsWith(selectedMonth)) return false;
+      if (periodFilter === 'YESTERDAY' && expDateStr !== yesterdayStr) return false;
+      if (periodFilter === 'MONTH' && !expDateStr.startsWith(thisMonthStr)) return false;
+      if (periodFilter === 'CUSTOM') {
+        if (selectedStartDate) {
+          const start = selectedStartDate;
+          const end = selectedEndDate || selectedStartDate;
+          const minDate = start < end ? start : end;
+          const maxDate = start < end ? end : start;
+          if (expDateStr < minDate || expDateStr > maxDate) return false;
+        }
+      }
+
+      if (statusFilter === 'UNPAID' && e.status !== 'UNPAID') return false;
+      if (statusFilter === 'PAID' && e.status === 'UNPAID') return false;
+
+      if (selectedEmployeeFilter === 'ANY_EMPLOYEE') {
+        if (!e.employeeId && e.category !== 'EMPLOYEE_ADVANCE' && e.category !== 'SALARY') return false;
+      } else if (selectedEmployeeFilter !== 'ALL') {
+        if (e.employeeId !== selectedEmployeeFilter) return false;
+      }
 
       if (selectedCategoryTab !== 'ALL') {
         const targetLabel = getCategoryLabel(selectedCategoryTab, customCategories).toLowerCase();
@@ -307,19 +399,43 @@ export const ExpensesPage: React.FC = () => {
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         const label = getCategoryLabel(e.category, customCategories).toLowerCase();
+        const empName = (e.employeeName || '').toLowerCase();
         const matches =
           label.includes(q) ||
           (e.category || '').toLowerCase().includes(q) ||
           (e.comment || e.description || '').toLowerCase().includes(q) ||
           (e.createdByName || '').toLowerCase().includes(q) ||
           (e.storeName || '').toLowerCase().includes(q) ||
-          e.amountTjs.toString().includes(q);
+          empName.includes(q) ||
+          (e.amountTjs || 0).toString().includes(q);
         if (!matches) return false;
       }
 
       return true;
-    }).sort((a, b) => new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime());
-  }, [expenses, isSeller, currentUser, periodFilter, selectedMonth, selectedStoreFilter, selectedCategoryTab, searchQuery, customCategories]);
+    }).sort((a, b) => {
+      if (sortBy === 'DATE_ASC') return new Date(a.date || 0).getTime() - new Date(b.date || 0).getTime();
+      if (sortBy === 'AMOUNT_DESC') return (b.amountTjs || 0) - (a.amountTjs || 0);
+      if (sortBy === 'AMOUNT_ASC') return (a.amountTjs || 0) - (b.amountTjs || 0);
+      return new Date(b.date || 0).getTime() - new Date(a.date || 0).getTime();
+    });
+  }, [
+    expenses,
+    isSeller,
+    currentUser,
+    periodFilter,
+    selectedStartDate,
+    selectedEndDate,
+    todayStr,
+    yesterdayStr,
+    thisMonthStr,
+    statusFilter,
+    selectedEmployeeFilter,
+    selectedStoreFilter,
+    selectedCategoryTab,
+    searchQuery,
+    customCategories,
+    sortBy
+  ]);
 
   const totalExpensesTjs = useMemo(() => filteredExpenses.reduce((acc, e) => acc + (e.amountTjs || 0), 0), [filteredExpenses]);
   // Each expense keeps the USD amount computed at its own day's exchange rate — summing those
@@ -334,10 +450,45 @@ export const ExpensesPage: React.FC = () => {
     () => filteredExpenses.reduce((acc, e) => acc + (e.status === 'UNPAID' ? e.amountTjs || 0 : 0), 0),
     [filteredExpenses]
   );
-  const deletingExpense = deletingId ? expenses.find(e => e.id === deletingId) : undefined;
+  const unpaidCount = useMemo(() => filteredExpenses.filter(e => e.status === 'UNPAID').length, [filteredExpenses]);
 
+  const totalUnpaidInScope = useMemo(() => {
+    return expenses.filter(e => e.status === 'UNPAID' && (selectedStoreFilter === 'ALL' || e.storeId === selectedStoreFilter)).length;
+  }, [expenses, selectedStoreFilter]);
+
+  const deletingExpense = deletingId ? expenses.find(e => e.id === deletingId) : undefined;
   const allCategoryOptions = [...STANDARD_CATEGORIES, ...customCategories];
-  const hasActiveFilters = periodFilter !== 'SPECIFIC_MONTH' || selectedStoreFilter !== 'ALL' || selectedCategoryTab !== 'ALL';
+
+  const isPeriodCustomized = periodFilter !== 'MONTH';
+  const isStoreFiltered = selectedStoreFilter !== 'ALL';
+  const isCategoryFiltered = selectedCategoryTab !== 'ALL';
+  const isStatusFiltered = statusFilter !== 'ALL';
+  const isEmployeeFiltered = selectedEmployeeFilter !== 'ALL';
+  const isSearchActive = Boolean(searchQuery.trim());
+  const isSortChanged = sortBy !== 'DATE_DESC';
+
+  const activeFiltersCount =
+    (isPeriodCustomized ? 1 : 0) +
+    (isStoreFiltered ? 1 : 0) +
+    (isCategoryFiltered ? 1 : 0) +
+    (isStatusFiltered ? 1 : 0) +
+    (isEmployeeFiltered ? 1 : 0) +
+    (isSearchActive ? 1 : 0) +
+    (isSortChanged ? 1 : 0);
+
+  const hasActiveFilters = activeFiltersCount > 0;
+
+  const handleResetFilters = () => {
+    setPeriodFilter('MONTH');
+    setSelectedStartDate('');
+    setSelectedEndDate('');
+    setSelectedStoreFilter('ALL');
+    setSelectedCategoryTab('ALL');
+    setStatusFilter('ALL');
+    setSelectedEmployeeFilter('ALL');
+    setSortBy('DATE_DESC');
+    setSearchQuery('');
+  };
 
   if (isSeller) {
     return (
@@ -353,80 +504,439 @@ export const ExpensesPage: React.FC = () => {
 
       <div className="border-b border-border bg-bg shrink-0">
         <div className="px-3 pb-3">
-          <div className="p-3 rounded-lg bg-surface border border-border flex items-center justify-between gap-3">
+          <div className="p-3.5 rounded-xl bg-surface border border-border flex flex-wrap items-center justify-between gap-3 shadow-xs">
             <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2 rounded-lg bg-danger/10 text-danger shrink-0">
-                <TrendingDown className="w-4 h-4" />
+              <div className="p-2.5 rounded-xl bg-danger/10 text-danger shrink-0">
+                <TrendingDown className="w-5 h-5" />
               </div>
               <div className="min-w-0">
-                <span className="text-xs text-fg-subtle block">Итого за период ({filteredExpenses.length} запис.)</span>
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-lg font-bold text-danger">-{totalExpensesTjs.toLocaleString()} TJS</span>
-                  <span className="text-xs text-fg-subtle">≈ -${totalExpensesUsd.toLocaleString()}</span>
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-xs text-fg-subtle font-medium">
+                    Итого за период: <strong className="text-fg font-semibold">{filteredExpenses.length}</strong> из {expenses.length} записей
+                  </span>
+                  {hasActiveFilters && (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent font-bold border border-accent/25">
+                      Фильтров: {activeFiltersCount}
+                    </span>
+                  )}
+                </div>
+                <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
+                  <span className="text-xl font-bold text-danger">-{formatMoney(totalExpensesTjs)} TJS</span>
+                  <span className="text-xs text-fg-subtle">≈ -${formatMoney(totalExpensesUsd)}</span>
+                  {filteredExpenses.length > 0 && (
+                    <span className="text-[11px] text-fg-subtle">
+                      · ср. {formatMoney(totalExpensesTjs / filteredExpenses.length)} TJS
+                    </span>
+                  )}
                 </div>
                 {unpaidTotalTjs > 0 && (
-                  <span className="text-xs font-semibold text-warning block">из них не оплачено: {unpaidTotalTjs.toLocaleString()} TJS</span>
+                  <button
+                    type="button"
+                    onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
+                    className="text-xs font-semibold text-warning hover:underline flex items-center gap-1.5 mt-1 cursor-pointer"
+                    title="Нажмите для фильтрации"
+                  >
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>из них не оплачено: <strong>{formatMoney(unpaidTotalTjs)} TJS</strong> ({unpaidCount} шт.)</span>
+                    <span className="text-[10px] underline ml-0.5">
+                      {statusFilter === 'UNPAID' ? '✕ сбросить фильтр' : '→ показать'}
+                    </span>
+                  </button>
                 )}
               </div>
             </div>
 
             <div className="flex items-center gap-2 shrink-0">
+              {hasActiveFilters && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  leftIcon={RotateCcw}
+                  onClick={handleResetFilters}
+                  className="text-xs font-semibold"
+                >
+                  Сбросить
+                </Button>
+              )}
               <Button variant="danger" leftIcon={Plus} onClick={() => setIsModalOpen(true)}>
-                Добавить
+                Добавить расход
               </Button>
             </div>
           </div>
         </div>
 
-        <div className="px-3 pb-3 flex items-center gap-2">
-          <SearchBar value={searchQuery} onChange={setSearchQuery} placeholder="Поиск по расходу / автору..." className="flex-1" />
-          <button
-            type="button"
-            onClick={() => setFiltersOpen(v => !v)}
-            className={`relative h-11 px-3 rounded-lg border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-colors ${
-              filtersOpen ? 'border-accent bg-accent/10 text-accent' : 'border-border text-fg-muted'
-            }`}
-          >
-            <SlidersHorizontal className="w-4 h-4" />
-            <span className="hidden sm:inline">Фильтры</span>
-            {hasActiveFilters && !filtersOpen && <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-accent" />}
-          </button>
+        {/* Search, Status, and Filter toggle bar */}
+        <div className="px-3 pb-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <SearchBar
+              value={searchQuery}
+              onChange={setSearchQuery}
+              placeholder="Поиск по расходу, категории, автору, сотруднику, сумме..."
+              className="flex-1 min-w-[200px]"
+            />
+
+            {/* Quick Status pills */}
+            <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => setStatusFilter('ALL')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  statusFilter === 'ALL'
+                    ? 'bg-surface text-fg shadow-xs border border-border/80'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Все
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('UNPAID')}
+                className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
+                  statusFilter === 'UNPAID'
+                    ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
+                    : 'text-fg-subtle hover:text-warning'
+                }`}
+              >
+                <span>Не оплачено</span>
+                {totalUnpaidInScope > 0 && (
+                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                    statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
+                  }`}>
+                    {totalUnpaidInScope}
+                  </span>
+                )}
+              </button>
+              <button
+                type="button"
+                onClick={() => setStatusFilter('PAID')}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  statusFilter === 'PAID'
+                    ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Оплачено
+              </button>
+            </div>
+
+            {/* Advanced Filters Button */}
+            <button
+              type="button"
+              onClick={() => setFiltersOpen(v => !v)}
+              className={`relative h-10 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all ${
+                filtersOpen || hasActiveFilters
+                  ? 'border-accent bg-accent/10 text-accent'
+                  : 'border-border bg-surface text-fg-muted hover:border-accent/40'
+              }`}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+              <span>Фильтры</span>
+              {hasActiveFilters && (
+                <span className="w-5 h-5 rounded-full bg-accent text-accent-fg font-bold text-[10px] flex items-center justify-center">
+                  {activeFiltersCount}
+                </span>
+              )}
+            </button>
+          </div>
+
+          {/* Quick Date Bar: Preset Pills + DateRangePicker */}
+          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+            <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartDate('');
+                  setSelectedEndDate('');
+                  setPeriodFilter('TODAY');
+                }}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  periodFilter === 'TODAY'
+                    ? 'bg-surface text-accent shadow-xs border border-border/80'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Сегодня
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartDate('');
+                  setSelectedEndDate('');
+                  setPeriodFilter('YESTERDAY');
+                }}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  periodFilter === 'YESTERDAY'
+                    ? 'bg-surface text-accent shadow-xs border border-border/80'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Вчера
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartDate('');
+                  setSelectedEndDate('');
+                  setPeriodFilter('MONTH');
+                }}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  periodFilter === 'MONTH'
+                    ? 'bg-surface text-accent shadow-xs border border-border/80'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Этот месяц
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setSelectedStartDate('');
+                  setSelectedEndDate('');
+                  setPeriodFilter('ALL');
+                }}
+                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
+                  periodFilter === 'ALL'
+                    ? 'bg-surface text-accent shadow-xs border border-border/80'
+                    : 'text-fg-subtle hover:text-fg'
+                }`}
+              >
+                Все время
+              </button>
+            </div>
+
+            {/* Custom Date Range Picker (Single Date or Range) */}
+            <DateRangePicker
+              startDate={selectedStartDate}
+              endDate={selectedEndDate}
+              isToday={periodFilter === 'TODAY'}
+              onChange={(start, end) => {
+                setSelectedStartDate(start);
+                setSelectedEndDate(end);
+                setPeriodFilter('CUSTOM');
+              }}
+              onResetToday={() => {
+                setSelectedStartDate('');
+                setSelectedEndDate('');
+                setPeriodFilter('TODAY');
+              }}
+              className="shrink-0"
+            />
+          </div>
+
+          {/* Active Filter Chips Bar (one-click removable tags) */}
+          {hasActiveFilters && (
+            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
+              <span className="text-[11px] text-fg-subtle font-medium">Активно:</span>
+              {periodFilter !== 'MONTH' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <Calendar className="w-3 h-3 text-accent" />
+                  <span>
+                    {periodFilter === 'TODAY'
+                      ? 'Сегодня'
+                      : periodFilter === 'YESTERDAY'
+                      ? 'Вчера'
+                      : periodFilter === 'ALL'
+                      ? 'Все время'
+                      : selectedStartDate === selectedEndDate || !selectedEndDate
+                      ? `Дата: ${selectedStartDate}`
+                      : `${selectedStartDate} — ${selectedEndDate}`}
+                  </span>
+                  <button
+                    onClick={() => {
+                      setPeriodFilter('MONTH');
+                      setSelectedStartDate('');
+                      setSelectedEndDate('');
+                    }}
+                    className="hover:text-danger ml-0.5"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {statusFilter !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <span>Статус: {statusFilter === 'UNPAID' ? 'Не оплачено' : 'Оплачено'}</span>
+                  <button onClick={() => setStatusFilter('ALL')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedStoreFilter !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <StoreIcon className="w-3 h-3 text-accent" />
+                  <span>{stores.find(s => s.id === selectedStoreFilter)?.name || selectedStoreFilter}</span>
+                  <button onClick={() => setSelectedStoreFilter('ALL')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedCategoryTab !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <Tag className="w-3 h-3 text-accent" />
+                  <span>{getCategoryLabel(selectedCategoryTab, customCategories)}</span>
+                  <button onClick={() => setSelectedCategoryTab('ALL')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {selectedEmployeeFilter !== 'ALL' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <User className="w-3 h-3 text-accent" />
+                  <span>
+                    {selectedEmployeeFilter === 'ANY_EMPLOYEE'
+                      ? 'Все сотрудники'
+                      : users.find(u => u.id === selectedEmployeeFilter)?.name || selectedEmployeeFilter}
+                  </span>
+                  <button onClick={() => setSelectedEmployeeFilter('ALL')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {sortBy !== 'DATE_DESC' && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <ArrowUpDown className="w-3 h-3 text-accent" />
+                  <span>
+                    {sortBy === 'DATE_ASC'
+                      ? 'Сначала старые'
+                      : sortBy === 'AMOUNT_DESC'
+                      ? 'Сумма: макс'
+                      : 'Сумма: мин'}
+                  </span>
+                  <button onClick={() => setSortBy('DATE_DESC')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              {searchQuery.trim() && (
+                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                  <span>Поиск: «{searchQuery}»</span>
+                  <button onClick={() => setSearchQuery('')} className="hover:text-danger ml-0.5">
+                    <X className="w-3 h-3" />
+                  </button>
+                </span>
+              )}
+              <button
+                onClick={handleResetFilters}
+                className="text-[11px] text-accent hover:underline font-bold ml-1"
+              >
+                Сбросить все
+              </button>
+            </div>
+          )}
         </div>
 
+        {/* Collapsible Advanced Filters Panel */}
         {filtersOpen && (
-          <div className="px-3 pb-3 border-t border-border pt-2.5">
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5 shrink-0">
-              <FilterPillGroup
-                options={[{ value: 'TODAY', label: 'Сегодня' }, { value: 'SPECIFIC_MONTH', label: 'Месяц' }]}
-                value={periodFilter}
-                onChange={(v) => setPeriodFilter(v as typeof periodFilter)}
-              />
-
-              {periodFilter === 'SPECIFIC_MONTH' && (
-                <MonthPicker
-                  value={selectedMonth}
-                  onChange={setSelectedMonth}
-                  className="h-9 px-3 rounded-lg border border-accent bg-surface text-xs font-semibold text-accent focus:outline-none"
-                />
-              )}
-
+          <div className="px-3 pb-3 border-t border-border pt-3 bg-surface-raised/40">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+              {/* Store Filter */}
               {!isSeller && (
-                <Select value={selectedStoreFilter} onChange={(e) => setSelectedStoreFilter(e.target.value)} className="h-9 px-3 pr-8 text-xs font-semibold w-auto shrink-0 cursor-pointer">
-                  <option value="ALL">Все филиалы</option>
-                  {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                <div>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Филиал / Точка:</label>
+                  <Select
+                    value={selectedStoreFilter}
+                    onChange={(e) => setSelectedStoreFilter(e.target.value)}
+                    className="w-full h-9 px-3 text-xs font-semibold"
+                  >
+                    <option value="ALL">Все филиалы и склады</option>
+                    {stores.map(s => (
+                      <option key={s.id} value={s.id}>
+                        {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+              )}
+
+              {/* Category Filter */}
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <label className="text-fg-subtle text-[11px] font-bold">Категория:</label>
+                  {canAddCategory && (
+                    <button
+                      type="button"
+                      onClick={() => setIsAddCategoryModalOpen(true)}
+                      className="text-[10px] text-accent hover:underline font-bold flex items-center gap-0.5"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Новая</span>
+                    </button>
+                  )}
+                </div>
+                <Select
+                  value={selectedCategoryTab}
+                  onChange={(e) => setSelectedCategoryTab(e.target.value)}
+                  className="w-full h-9 px-3 text-xs font-semibold"
+                >
+                  <option value="ALL">Все категории ({expenses.length})</option>
+                  {allCategoryOptions.map(c => {
+                    const cnt = categoryCounts[c.id] || 0;
+                    return (
+                      <option key={c.id} value={c.id}>
+                        {c.label} {cnt > 0 ? `(${cnt})` : ''}
+                      </option>
+                    );
+                  })}
                 </Select>
-              )}
+              </div>
 
-              <Select value={selectedCategoryTab} onChange={(e) => setSelectedCategoryTab(e.target.value)} className="h-9 px-3 pr-8 text-xs font-semibold w-auto shrink-0 cursor-pointer">
-                <option value="ALL">Все категории</option>
-                {allCategoryOptions.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
-              </Select>
+              {/* Employee Filter */}
+              <div>
+                <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Сотрудник / Назначение:</label>
+                <Select
+                  value={selectedEmployeeFilter}
+                  onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
+                  className="w-full h-9 px-3 text-xs font-semibold"
+                >
+                  <option value="ALL">Все расходы</option>
+                  <option value="ANY_EMPLOYEE">Только сотрудники (авансы/ЗП)</option>
+                  {activeEmployees.map(u => (
+                    <option key={u.id} value={u.id}>
+                      {u.name}{u.role === 'ADMIN' ? ' (Админ)' : ''}
+                    </option>
+                  ))}
+                </Select>
+              </div>
 
-              {canAddCategory && (
-                <Button variant="secondary" size="md" leftIcon={Plus} className="h-9 px-3 text-xs font-semibold shrink-0 whitespace-nowrap" onClick={() => setIsAddCategoryModalOpen(true)}>
-                  Категория
-                </Button>
-              )}
+              {/* Sorting */}
+              <div>
+                <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Сортировка:</label>
+                <Select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
+                  className="w-full h-9 px-3 text-xs font-semibold"
+                >
+                  <option value="DATE_DESC">Сначала новые (по дате)</option>
+                  <option value="DATE_ASC">Сначала старые (по дате)</option>
+                  <option value="AMOUNT_DESC">Сумма: по убыванию (макс)</option>
+                  <option value="AMOUNT_ASC">Сумма: по возрастанию (мин)</option>
+                </Select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-border/60">
+              <span className="text-[11px] text-fg-subtle">
+                Найдено <strong className="text-fg">{filteredExpenses.length}</strong> из {expenses.length} расходов
+              </span>
+              <div className="flex items-center gap-2">
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={handleResetFilters}
+                    className="text-xs text-danger hover:underline font-semibold flex items-center gap-1"
+                  >
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span>Сбросить фильтры</span>
+                  </button>
+                )}
+                <button
+                  type="button"
+                  onClick={() => setFiltersOpen(false)}
+                  className="px-3 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-fg-muted hover:text-fg"
+                >
+                  Свернуть
+                </button>
+              </div>
             </div>
           </div>
         )}
@@ -457,7 +967,9 @@ export const ExpensesPage: React.FC = () => {
                       {exp.status === 'UNPAID'
                         ? <Badge tone="warning">Не оплачено</Badge>
                         : <Badge tone="success">Оплачено</Badge>}
-                      {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && <Badge tone="neutral">Из кассы</Badge>}
+                      {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && (
+                        <Badge tone="neutral">{exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}</Badge>
+                      )}
                       {exp.employeeName && <Badge tone="accent">{exp.employeeName}</Badge>}
                     </div>
                     <p className="text-sm text-fg-muted mt-0.5">{exp.comment || exp.description || 'Операционный расход'}</p>
@@ -473,8 +985,8 @@ export const ExpensesPage: React.FC = () => {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-danger">-{(exp.amountTjs ?? 0).toLocaleString()} TJS</p>
-                    <p className="text-xs text-fg-subtle">≈ -${costUsd.toLocaleString()}</p>
+                    <p className="text-sm font-semibold text-danger">-{formatMoney(exp.amountTjs)} TJS</p>
+                    <p className="text-xs text-fg-subtle">≈ -${formatMoney(costUsd)}</p>
                     {(currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER') && (
                       <div className="flex items-center gap-1 mt-1.5 justify-end">
                         {exp.status === 'UNPAID' && (
@@ -498,8 +1010,8 @@ export const ExpensesPage: React.FC = () => {
         open={!!deletingId}
         title="Удалить расход?"
         message={deletingExpense?.status === 'UNPAID'
-          ? 'Расход не был оплачен — касса не изменится. Это действие нельзя отменить.'
-          : 'Средства вернутся в баланс кассы. Это действие нельзя отменить.'}
+          ? 'Расход не был оплачен — баланс кассы не изменится. Это действие нельзя отменить.'
+          : 'Расход будет отменён, средства вернутся в баланс Центральной кассы. Это действие нельзя отменить.'}
         confirmLabel="Удалить"
         loading={isSubmitting}
         onConfirm={handleConfirmDelete}
@@ -555,7 +1067,16 @@ export const ExpensesPage: React.FC = () => {
         footer={
           <>
             <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setIsModalOpen(false)}>Отмена</Button>
-            <Button variant="danger" fullWidth type="submit" form="add-expense-form" loading={isSubmitting}>Сохранить расход</Button>
+            <Button
+              variant="danger"
+              fullWidth
+              type="submit"
+              form="add-expense-form"
+              loading={isSubmitting}
+              disabled={paidFromCashRegister && parseFloat(amountTjs) > (centralCashStore?.cashBalanceTjs ?? 0)}
+            >
+              Сохранить расход
+            </Button>
           </>
         }
       >
@@ -596,7 +1117,7 @@ export const ExpensesPage: React.FC = () => {
           </FormField>
 
           {!isSeller && (
-            <FormField label="Филиал / склад" required>
+            <FormField label="Магазин" required>
               <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full">
                 {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
               </Select>
@@ -614,8 +1135,34 @@ export const ExpensesPage: React.FC = () => {
           <ToggleRow
             checked={paidFromCashRegister}
             onChange={setPaidFromCashRegister}
-            label="Списать сумму из наличной кассы"
+            label="Списать из Центральной кассы"
           />
+
+          {paidFromCashRegister && (
+            <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
+                  <p className="text-[11px] text-fg-subtle">Сумма спишется с центрального баланса</p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-xs font-bold text-accent">
+                  {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                </span>
+                <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
+              </div>
+            </div>
+          )}
+
+          {paidFromCashRegister && parseFloat(amountTjs) > (centralCashStore?.cashBalanceTjs ?? 0) && (
+            <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
+              Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: {formatMoney(parseFloat(amountTjs) || 0)} TJS).
+            </div>
+          )}
 
           <div className="flex items-center justify-between gap-2 px-0.5">
             <span className="text-xs text-fg-subtle">Статус оплаты</span>
@@ -624,7 +1171,7 @@ export const ExpensesPage: React.FC = () => {
               : <Badge tone="warning">Не оплачено</Badge>}
           </div>
           {!paidFromCashRegister && (
-            <p className="text-xs text-fg-subtle px-0.5">Касса не изменится. Оплатить расход можно позже кнопкой «Оплатить» в списке.</p>
+            <p className="text-xs text-fg-subtle px-0.5">Центральная касса не изменится. Оплатить расход можно позже кнопкой «Оплатить» в списке.</p>
           )}
         </form>
       </Dialog>
@@ -637,23 +1184,47 @@ export const ExpensesPage: React.FC = () => {
         footer={
           <>
             <Button variant="secondary" fullWidth disabled={isSubmitting} onClick={() => setPayingExpense(null)}>Отмена</Button>
-            <Button variant="primary" fullWidth loading={isSubmitting} disabled={!payingExpense?.storeId && !payStoreId} onClick={handleConfirmPay}>Оплатить</Button>
+            <Button
+              variant="primary"
+              fullWidth
+              loading={isSubmitting}
+              disabled={(centralCashStore?.cashBalanceTjs ?? 0) < (payingExpense?.amountTjs ?? 0)}
+              onClick={handleConfirmPay}
+            >
+              Оплатить из Центральной кассы
+            </Button>
           </>
         }
       >
         {payingExpense && (
           <div className="space-y-3.5">
             <p className="text-sm text-fg-muted">
-              {getCategoryLabel(payingExpense.category, customCategories)}: <span className="font-semibold text-danger">{payingExpense.amountTjs.toLocaleString()} TJS</span>
+              {getCategoryLabel(payingExpense.category, customCategories)}: <span className="font-semibold text-danger">{formatMoney(payingExpense.amountTjs)} TJS</span>
             </p>
-            {payingExpense.storeId ? (
-              <p className="text-xs text-fg-subtle">Сумма будет списана из кассы «{payingExpense.storeName || 'магазина'}».</p>
-            ) : (
-              <FormField label="Из какой кассы оплатить" required>
-                <Select value={payStoreId} onChange={(e) => setPayStoreId(e.target.value)} className="w-full">
-                  {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-                </Select>
-              </FormField>
+            <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
+                  <Landmark className="w-4 h-4" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
+                  <p className="text-[11px] text-fg-subtle">
+                    {payingExpense.storeName ? `Филиал: ${payingExpense.storeName}` : 'Общий расход компании'}
+                  </p>
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <span className="text-xs font-bold text-accent">
+                  {formatMoney(centralCashStore?.cashBalanceTjs)} TJS
+                </span>
+                <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
+              </div>
+            </div>
+
+            {(centralCashStore?.cashBalanceTjs ?? 0) < payingExpense.amountTjs && (
+              <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
+                Внимание: в Центральной кассе недостаточно средств (Остаток: {formatMoney(centralCashStore?.cashBalanceTjs)} TJS, требуется: {formatMoney(payingExpense.amountTjs)} TJS).
+              </div>
             )}
           </div>
         )}

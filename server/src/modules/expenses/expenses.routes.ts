@@ -5,6 +5,7 @@ import { prisma } from '../../prisma/prisma.service';
 import { createExpenseStandalone, updateExpense, deleteExpense, payExpense } from './expenses.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import { dateRangeForPeriod, type ReportPeriod } from '../reports/reports.service';
+import { dateRangeForCustomDates } from '../../common/business-date';
 import { getPayrollSummary, paySalary } from './payroll.service';
 
 const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'];
@@ -25,11 +26,11 @@ export function registerExpenseRoutes(app: Express) {
   app.get('/api/expenses', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
       const storeScopeId = req.user!.role === 'SELLER' ? req.user!.storeId ?? '__none__' : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
-      // period/month let the Reports export preview ask for exactly the range it's showing,
-      // instead of the client filtering the entire expense history it used to fetch in full.
+      const startDate = typeof req.query.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.startDate) ? req.query.startDate : undefined;
+      const endDate = typeof req.query.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.endDate) ? req.query.endDate : undefined;
       const period = VALID_PERIODS.includes(req.query.period as ReportPeriod) ? (req.query.period as ReportPeriod) : 'ALL';
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;
-      const dateRange = dateRangeForPeriod(period, month);
+      const dateRange = startDate ? dateRangeForCustomDates(startDate, endDate) : dateRangeForPeriod(period, month);
       // Explicit opt-in cap for the app's background/startup load — existing callers that
       // don't pass it keep today's full-history-for-that-period behavior. employeeId powers
       // one employee's full advance/expense history (Employees page), naturally bounded to

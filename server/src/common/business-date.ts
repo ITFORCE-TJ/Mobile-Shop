@@ -48,3 +48,19 @@ export function dateRangeForPeriod(period: ReportPeriod, month?: string): { gte:
   next.setUTCMonth(next.getUTCMonth() + 1);
   return { gte: startOfBusinessDate(`${key}-01`), lt: startOfBusinessDate(next.toISOString().slice(0, 10)) };
 }
+
+export function dateRangeForCustomDates(startDate: string, endDate?: string): { gte: Date; lt: Date } {
+  if (!startDate || !/^\d{4}-\d{2}-\d{2}$/.test(startDate)) {
+    throw new Error('Укажите корректную дату начала в формате YYYY-MM-DD');
+  }
+  let startKey = startDate;
+  let endKey = endDate && /^\d{4}-\d{2}-\d{2}$/.test(endDate) ? endDate : startDate;
+  if (startKey > endKey) {
+    const tmp = startKey;
+    startKey = endKey;
+    endKey = tmp;
+  }
+  const next = new Date(Date.parse(`${endKey}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
+  return { gte: startOfBusinessDate(startKey), lt: startOfBusinessDate(next) };
+}
+

@@ -4,41 +4,11 @@ import type { TransactionClient } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
 import { requireNonNegativeMoney, requirePositiveMoney, roundMoney } from '../../common/money';
 import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
-import { getStoreCashAccount } from '../finance/account.service';
+import { lockCashRegister } from '../finance/account.service';
 import { currentOwnerAllocations, readOwnerAllocations, replaceOwnerAllocations } from '../finance/owner-allocations';
 import type { OwnerProfitAllocation } from '../sales/profit';
 import { postTransaction } from '../finance/financial-transaction.service';
 import { allocateMoney } from '../../common/allocation';
-
-/** The store register is the authoritative cash balance used by every cash operation.
- * Older imports may predate the financial ledger. Reconcile its mirror explicitly,
- * under the store lock, before posting payment; never add money to the register. */
-async function preparePaymentAccount(tx: TransactionClient, storeId: string, actor: { id: string; name: string; role: string }) {
-  await tx.$queryRaw`SELECT id FROM stores WHERE id = ${storeId} FOR UPDATE`;
-  const store = await tx.store.findUnique({ where: { id: storeId } });
-  if (!store || !store.active) throw new Error('Касса магазина не найдена или неактивна');
-  const account = await getStoreCashAccount(tx, storeId, store.name);
-  await tx.$queryRaw`SELECT id FROM financial_accounts WHERE id = ${account.id} FOR UPDATE`;
-  const current = await tx.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
-  const difference = D(store.cashBalanceTjs).minus(current.balanceTjs);
-  if (!difference.eq(0)) {
-    await postTransaction(tx, {
-      type: 'ADJUSTMENT', direction: difference.gt(0) ? 'IN' : 'OUT', numberPrefix: 'AJ',
-      accountId: account.id, balanceCurrency: 'TJS', currency: 'TJS',
-      amount: difference.abs(), amountTjs: difference.abs(), amountUsd: 0,
-      shopId: storeId, sourceType: 'CASH_LEDGER_RECONCILIATION', sourceId: storeId,
-      description: `Сверка финансового счёта с кассой ${store.name} перед оплатой поставщику`,
-      createdByUserId: actor.id, guardBalance: false,
-    });
-    await tx.auditLog.create({ data: {
-      userId: actor.id, userName: actor.name, userRole: actor.role,
-      action: 'CASH_LEDGER_RECONCILIATION',
-      details: `Счёт ${account.id}: ${current.balanceTjs} → ${store.cashBalanceTjs} TJS; остаток кассы не изменён`,
-      financialDetails: moneyJson({ previousAccountBalanceTjs: current.balanceTjs, cashBalanceTjs: store.cashBalanceTjs, differenceTjs: difference }),
-    } });
-  }
-  return { store, account };
-}
 
 /** True if any of these devices has a sale, transfer, or repair record referencing it (hard FK, no cascade). */
 async function deviceHasTransactionHistory(tx: TransactionClient, deviceIds: string[]): Promise<boolean> {
@@ -66,7 +36,7 @@ interface SupplierBonusInput {
   campaignTitle?: string;
   bonusType: 'FREE_DEVICES' | 'CASH_DISCOUNT';
   amountUsd?: MoneyInput;
-  freeDevices?: { brand: string; model: string; storage: string; color: string; imei: string; costBasisUsd: MoneyInput }[];
+  freeDevices?: { brand: string; model: string; ram?: string; storage: string; color: string; imei: string; costBasisUsd: MoneyInput }[];
   destinationStoreId?: string;
   createdByUserId: string;
 }
@@ -150,14 +120,15 @@ export class SuppliersService {
       });
       if (!D(debtGuard.count).eq(1)) throw new Error('Задолженность изменилась, обновите данные и повторите оплату');
 
-      const { store, account: financeAccount } = await preparePaymentAccount(tx, input.storeId, actor);
-      // Unlike sales/expenses, supplier payments may be funded from the main
-      // warehouse's account — purchases (приходы) are recorded there and its
-      // balance is meant to fund paying those suppliers back, not just retail stores.
+      const { store, account: financeAccount } = await lockCashRegister(tx, input.storeId, actor, 'оплата поставщику');
+      if (store.isMainWarehouse === false) {
+        throw new Error('Оплата поставщикам производится только из Центральной кассы. Розничные кассы не используются для расчетов с поставщиками.');
+      }
+      // Supplier payments are funded strictly from the central cash register (Main Warehouse account).
       // amountUsd was collected in USD terms but store registers hold TJS; convert via today's rate if available.
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
       const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
-      if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для оплаты поставщику');
+      if (!D(cashGuard.count).eq(1)) throw new Error('В центральной кассе недостаточно наличных для оплаты поставщику');
 
       await postTransaction(tx, {
         type: 'SUPPLIER_PAYMENT',
@@ -177,7 +148,7 @@ export class SuppliersService {
         shopId: input.storeId,
         sourceType: 'SUPPLIER_PAYMENT',
         sourceId: payment.id,
-        description: `Выплата поставщику ${supplier.name}: $${amountUsd}`,
+        description: `Выплата поставщику ${supplier.name}: $${amountUsd} (Центральная касса)`,
         createdByUserId: actor.id,
         guardBalance: true,
       });
@@ -261,10 +232,13 @@ export class SuppliersService {
       });
       if (!D(debtGuard.count).eq(1)) throw new Error('Задолженность изменилась, обновите данные и повторите оплату');
 
-      const { store, account: financeAccount } = await preparePaymentAccount(tx, input.storeId, actor);
+      const { store, account: financeAccount } = await lockCashRegister(tx, input.storeId, actor, 'оплата поставщику');
+      if (store.isMainWarehouse === false) {
+        throw new Error('Оплата поставщикам производится только из Центральной кассы. Розничные кассы не используются для расчетов с поставщиками.');
+      }
       const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
       const cashGuard = await tx.store.updateMany({ where: { id: input.storeId, cashBalanceTjs: { gte: cashAmountTjs } }, data: { cashBalanceTjs: { decrement: cashAmountTjs } } });
-      if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для оплаты поставщику');
+      if (!D(cashGuard.count).eq(1)) throw new Error('В центральной кассе недостаточно наличных для оплаты накладной');
 
       await postTransaction(tx, {
         type: 'SUPPLIER_PAYMENT',
@@ -356,12 +330,16 @@ export class SuppliersService {
         const targetStatus = destinationStore.isMainWarehouse ? ('MAIN_WAREHOUSE' as const) : ('STORE_STOCK' as const);
 
         for (const device of input.freeDevices) {
+          if (!device.ram || !String(device.ram).trim()) {
+            throw new Error('RAM обязателен для каждого устройства');
+          }
           const costBasisUsd = requireNonNegativeMoney(device.costBasisUsd, 'Себестоимость бонусного устройства');
           const created = await tx.device.create({
             data: {
               imei: device.imei,
               brand: device.brand,
               model: device.model,
+              ram: String(device.ram).trim(),
               storage: device.storage,
               color: device.color,
               status: targetStatus,

@@ -153,8 +153,32 @@ model Store {
   purchaseInvoices      SupplierInvoice[]
   financialAccount      FinancialAccount?
   financialTransactions FinancialTransaction[]
+  cashHandovers         CashHandover[]
 
   @@map("stores")
+}
+
+// Daily cash handover: the admin collects a store register's whole balance into the
+// central register (the main warehouse's). The money itself moves as a TRANSFER in the
+// financial ledger; this row is the handover document behind it.
+model CashHandover {
+  id                     String   @id @default(uuid())
+  storeId                String
+  amountTjs              Decimal  @db.Decimal(14, 2)
+  exchangeRate           Decimal  @db.Decimal(10, 4)
+  amountUsd              Decimal  @db.Decimal(14, 2)
+  // Business-time-zone day (YYYY-MM-DD) the handover belongs to — drives "handed over today".
+  businessDate           String
+  acceptedByUserId       String
+  acceptedByName         String
+  financialTransactionId String   @unique
+  createdAt              DateTime @default(now())
+
+  store Store @relation(fields: [storeId], references: [id])
+
+  @@index([storeId, createdAt])
+  @@index([businessDate])
+  @@map("cash_handovers")
 }
 
 model User {
@@ -230,6 +254,7 @@ model Device {
   repairTickets   RepairTicket[]
   transferItems   TransferItem[]
   identifiers     DeviceIdentifier[]
+  bonusPoolEntries BonusPoolEntry[]
 
   @@index([imei])
   @@index([storeId, status])
@@ -307,6 +332,7 @@ model Sale {
   saleItems          SaleItem[]
   exchangeEvents     ExchangeEvent[]
   paymentAllocations CustomerPaymentAllocation[]
+  bonusPoolEntries   BonusPoolEntry[]
 
   @@index([storeId, createdAt])
   @@index([customerId])
@@ -330,6 +356,7 @@ model SaleItem {
   purchaseCostUsd Decimal @db.Decimal(14, 2)
   costBasisUsd    Decimal @db.Decimal(14, 2)
   isBelowCost     Boolean @default(false)
+  isBonus         Boolean @default(false)
 
   sale   Sale   @relation(fields: [saleId], references: [id], onDelete: Cascade)
   device Device @relation(fields: [deviceId], references: [id])
@@ -536,6 +563,58 @@ model SupplierBonusDevice {
   @@map("supplier_bonus_devices")
 }
 
+enum BonusPoolStatus {
+  PENDING
+  DISTRIBUTED
+  ANNULLED
+}
+
+model BonusPoolEntry {
+  id               String          @id @default(uuid())
+  deviceId         String
+  saleId           String?
+  saleItemId       String?
+  imei             String
+  brand            String
+  model            String
+  salePriceUsd     Decimal         @db.Decimal(14, 2)
+  salePriceTjs     Decimal         @db.Decimal(14, 2)
+  profitUsd        Decimal         @db.Decimal(14, 2)
+  profitTjs        Decimal         @db.Decimal(14, 2)
+  status           BonusPoolStatus @default(PENDING)
+  distributionId   String?
+  distributedAt    DateTime?
+  distributedBy    String?
+  distributionNote String?
+  annulledAt       DateTime?
+  annulledBy       String?
+  annulledNote     String?
+  createdAt        DateTime        @default(now())
+
+  sale   Sale?   @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  device Device  @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([createdAt])
+  @@map("bonus_pool_entries")
+}
+
+model BonusDistributionLog {
+  id                String   @id @default(uuid())
+  periodName        String
+  totalAmountUsd    Decimal  @db.Decimal(14, 2)
+  totalAmountTjs    Decimal? @db.Decimal(14, 2)
+  type              String   // 'DISTRIBUTION' | 'ANNULMENT'
+  allocations       Json
+  note              String?
+  performedByUserId String
+  performedByName   String?
+  createdAt         DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("bonus_distribution_logs")
+}
+
 model TransferRequest {
   id                String         @id @default(uuid())
   transferNumber    String         @unique
@@ -693,6 +772,7 @@ model Owner {
   totalPaidProfitUsd    Decimal  @default(0) @db.Decimal(14, 2)
   totalReinvestedUsd    Decimal  @default(0) @db.Decimal(14, 2)
   availableProfitUsd    Decimal  @default(0) @db.Decimal(14, 2)
+  storeId               String?
   createdAt             DateTime @default(now())
 
   user         User?              @relation(fields: [userId], references: [id], onDelete: SetNull)

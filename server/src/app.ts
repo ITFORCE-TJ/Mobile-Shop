@@ -21,7 +21,9 @@ import { registerNotificationRoutes } from './modules/notifications/notification
 import { registerExchangeRateRoutes } from './modules/exchange-rate/exchange-rate.routes';
 import { registerStoreRoutes } from './modules/stores/stores.routes';
 import { registerReportRoutes } from './modules/reports/reports.routes';
-import { requirePositiveMoney } from './common/money';
+import { registerBonusRoutes } from './modules/bonuses/bonuses.routes';
+import { registerCashCollectionRoutes } from './modules/finance/cash-collection.routes';
+import { requireNonNegativeMoney, requirePositiveMoney } from './common/money';
 import { requireTodayRate } from './modules/exchange-rate/exchange-rate.service';
 import { decimalJsonReplacer } from './common/decimal';
 import { operationContext } from './common/request-operation';
@@ -239,6 +241,38 @@ app.get('/api/devices', authenticateJwt, async (req: AuthenticatedRequest, res, 
   }
 });
 
+app.patch('/api/devices/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  try {
+    const { ram, storage, color, model } = req.body ?? {};
+    const existing = await prisma.device.findUnique({ where: { id: req.params.id } });
+    if (!existing) {
+      res.status(404).json({ message: 'Устройство не найдено' });
+      return;
+    }
+
+    if (ram !== undefined && (typeof ram !== 'string' || !ram.trim())) {
+      res.status(400).json({ message: 'RAM обязателен для устройства' });
+      return;
+    }
+
+    const updated = await prisma.device.update({
+      where: { id: req.params.id },
+      data: {
+        ...(ram !== undefined ? { ram: ram.trim() } : {}),
+        ...(typeof storage === 'string' && storage.trim() ? { storage: storage.trim() } : {}),
+        ...(typeof color === 'string' && color.trim() ? { color: color.trim() } : {}),
+        ...(typeof model === 'string' && model.trim() ? { model: model.trim() } : {}),
+      },
+      include: { store: true, timeline: { orderBy: { date: 'asc' as const } } },
+    });
+
+    RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
+    res.json(updated);
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
   try {
     const { supplierId, invoiceNumber, date, storeId, groups } = req.body ?? {};
@@ -255,6 +289,12 @@ app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), en
       if (store.isMainWarehouse && req.user!.role !== 'ADMIN') throw Object.assign(new Error('Приход на главный склад разрешён только администратору'), { statusCode: 403 });
 
       const normalizedDevices = groups.flatMap((group: any) => {
+        const isBonus = Boolean(group.isBonus);
+        const purchasePriceUsd = isBonus
+          ? requireNonNegativeMoney(group.purchasePriceUsd ?? 0, 'Закупочная цена')
+          : requirePositiveMoney(group.purchasePriceUsd, 'Закупочная цена');
+        const bonusCampaign = isBonus ? (String(group.bonusCampaign || '').trim() || 'Бонус от поставщика') : null;
+
         if (Array.isArray(group.items) && group.items.length > 0) {
           return group.items
             .filter((item: any) => item && typeof item.imei === 'string' && item.imei.trim().length > 0)
@@ -266,10 +306,12 @@ app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), en
                 imei2: explicitImei2 || imei2 || null,
                 brand: String(group.brand || '').trim(),
                 model: String(group.model || '').trim(),
-                ram: String(group.ram || '').trim() || null,
+                ram: String(group.ram || '').trim(),
                 storage: String(group.storage || '').trim(),
                 color: String(group.color || '').trim(),
-                purchasePriceUsd: requirePositiveMoney(group.purchasePriceUsd, 'Закупочная цена'),
+                purchasePriceUsd,
+                isBonus,
+                bonusCampaign,
               };
             });
         }
@@ -282,16 +324,18 @@ app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), en
             imei2: imei2 || null,
             brand: String(group.brand || '').trim(),
             model: String(group.model || '').trim(),
-            ram: String(group.ram || '').trim() || null,
+            ram: String(group.ram || '').trim(),
             storage: String(group.storage || '').trim(),
             color: String(group.color || '').trim(),
-            purchasePriceUsd: requirePositiveMoney(group.purchasePriceUsd, 'Закупочная цена'),
+            purchasePriceUsd,
+            isBonus,
+            bonusCampaign,
           };
         });
       });
 
-      if (normalizedDevices.length === 0 || normalizedDevices.some((device) => !device.imei || !device.brand || !device.model)) {
-        throw new Error('Каждое устройство должно содержать IMEI, бренд и модель');
+      if (normalizedDevices.length === 0 || normalizedDevices.some((device) => !device.imei || !device.brand || !device.model || !device.ram || !device.storage)) {
+        throw new Error('Каждое устройство должно содержать IMEI, бренд, модель, RAM и память');
       }
 
       const identifiers = normalizedDevices.flatMap((device) => [device.imei, device.imei2]).filter(Boolean);
@@ -313,15 +357,21 @@ app.post('/api/purchases', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), en
           isStorePurchase: !store.isMainWarehouse,
           storeId,
           groups: {
-            create: groups.map((group: any) => ({
-              brand: String(group.brand || '').trim(), model: String(group.model || '').trim(),
-              ram: String(group.ram || '').trim() || null,
-              storage: String(group.storage || '').trim(), color: String(group.color || '').trim(),
-              quantity: Array.isArray(group.items)
-                ? group.items.filter((i: any) => i && typeof i.imei === 'string' && i.imei.trim().length > 0).length
-                : (Array.isArray(group.imeis) ? group.imeis.filter(Boolean).length : 0),
-              purchasePriceUsd: requirePositiveMoney(group.purchasePriceUsd, 'Закупочная цена'),
-            })),
+            create: groups.map((group: any) => {
+              const isBonus = Boolean(group.isBonus);
+              const purchasePriceUsd = isBonus
+                ? requireNonNegativeMoney(group.purchasePriceUsd ?? 0, 'Закупочная цена')
+                : requirePositiveMoney(group.purchasePriceUsd, 'Закупочная цена');
+              return {
+                brand: String(group.brand || '').trim(), model: String(group.model || '').trim(),
+                ram: String(group.ram || '').trim(),
+                storage: String(group.storage || '').trim(), color: String(group.color || '').trim(),
+                quantity: Array.isArray(group.items)
+                  ? group.items.filter((i: any) => i && typeof i.imei === 'string' && i.imei.trim().length > 0).length
+                  : (Array.isArray(group.imeis) ? group.imeis.filter(Boolean).length : 0),
+                purchasePriceUsd,
+              };
+            }),
           },
         },
       });
@@ -400,6 +450,8 @@ registerNotificationRoutes(app);
 registerExchangeRateRoutes(app);
 registerStoreRoutes(app);
 registerReportRoutes(app);
+registerBonusRoutes(app);
+registerCashCollectionRoutes(app);
 
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {
   // Every error that reaches here gets logged server-side, regardless of what the client

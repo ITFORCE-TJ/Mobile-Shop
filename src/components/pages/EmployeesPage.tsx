@@ -798,22 +798,15 @@ export const EmployeesPage: React.FC = () => {
 
               <div>
                 <label className="block text-fg-subtle text-[10px] uppercase mb-1">РОЛЬ ДОСТУПА</label>
-                {editingUser && (editingUser.id === 'user-admin' || editingUser.login === 'admin') ? (
-                  <div className="p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-accent text-xs font-bold flex items-center justify-between">
-                    <span>ГЛАВНЫЙ АДМИНИСТРАТОР ({name || editingUser.name})</span>
-                    <Shield className="w-4 h-4 text-accent shrink-0" />
-                  </div>
-                ) : (
-                  <select
-                    value={role ?? 'SELLER'}
-                    onChange={(e) => setRole(e.target.value as Role)}
-                    className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                  >
-                    <option value="SELLER">Продавец (ограничен своим магазином, без себестоимости)</option>
-                    <option value="PARTNER">Партнер (все магазины, финансы, отчеты)</option>
-                    <option value="ADMIN">Администратор (полный доступ)</option>
-                  </select>
-                )}
+                <select
+                  value={role ?? 'SELLER'}
+                  onChange={(e) => setRole(e.target.value as Role)}
+                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                >
+                  <option value="SELLER">Продавец (ограничен своим магазином, без себестоимости)</option>
+                  <option value="PARTNER">Партнер (все магазины, финансы, отчеты)</option>
+                  <option value="ADMIN">Администратор (полный доступ)</option>
+                </select>
               </div>
 
               {role === 'SELLER' && (

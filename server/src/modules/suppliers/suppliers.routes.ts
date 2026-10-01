@@ -93,12 +93,20 @@ export function registerSupplierRoutes(app: Express) {
   app.post('/api/suppliers/:id/payments', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, sourceAccount, sourceAccountId, storeId, note } = req.body ?? {};
-      const resolvedStoreId = storeId || sourceAccountId;
-      const resolvedSourceAccount = sourceAccount || 'STORE_CASH';
-      if (!amountUsd || !resolvedStoreId) {
-        res.status(400).json({ message: 'Сумма оплаты (amountUsd) и касса списания (storeId/sourceAccountId) обязательны' });
+      if (!amountUsd) {
+        res.status(400).json({ message: 'Сумма оплаты (amountUsd) обязательна' });
         return;
       }
+      const centralStore = await prisma.store.findFirst({
+        where: { isMainWarehouse: true, active: true },
+        orderBy: { cashBalanceTjs: 'desc' },
+      }) ?? await prisma.store.findFirst({ where: { active: true } });
+      const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
+      if (!resolvedStoreId) {
+        res.status(400).json({ message: 'Центральная касса не найдена' });
+        return;
+      }
+      const resolvedSourceAccount = sourceAccount || 'STORE_CASH';
       const result = await SuppliersService.pay({
         supplierId: req.params.id,
         amountUsd: D(amountUsd),
@@ -117,12 +125,20 @@ export function registerSupplierRoutes(app: Express) {
   app.post('/api/supplier-invoices/:id/payments', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, sourceAccount, sourceAccountId, storeId } = req.body ?? {};
-      const resolvedStoreId = storeId || sourceAccountId;
-      const resolvedSourceAccount = sourceAccount || 'STORE_CASH';
-      if (!amountUsd || !resolvedStoreId) {
-        res.status(400).json({ message: 'Сумма оплаты (amountUsd) и касса списания (storeId/sourceAccountId) обязательны' });
+      if (!amountUsd) {
+        res.status(400).json({ message: 'Сумма оплаты (amountUsd) обязательна' });
         return;
       }
+      const centralStore = await prisma.store.findFirst({
+        where: { isMainWarehouse: true, active: true },
+        orderBy: { cashBalanceTjs: 'desc' },
+      }) ?? await prisma.store.findFirst({ where: { active: true } });
+      const resolvedStoreId = storeId || sourceAccountId || centralStore?.id;
+      if (!resolvedStoreId) {
+        res.status(400).json({ message: 'Центральная касса не найдена' });
+        return;
+      }
+      const resolvedSourceAccount = sourceAccount || 'STORE_CASH';
       const result = await SuppliersService.payInvoice({
         invoiceId: req.params.id,
         amountUsd: D(amountUsd),

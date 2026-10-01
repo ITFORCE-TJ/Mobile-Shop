@@ -1,10 +1,11 @@
 import crypto from 'crypto';
+import type { Role } from '@prisma/client';
 import { prisma } from '../prisma/prisma.service';
 
 export interface JwtPayload {
   userId: string;
   login: string;
-  role: 'ADMIN' | 'PARTNER' | 'SELLER';
+  role: Role;
   storeId?: string | null;
   sessionId?: string;
   exp?: number;

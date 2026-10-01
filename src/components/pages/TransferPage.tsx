@@ -1,4 +1,5 @@
 import React, { useState, useMemo, useEffect } from 'react';
+import { formatMoney } from '../../utils/money';
 import { useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { TransferRequest } from '../../types';
@@ -35,12 +36,9 @@ export const TransferPage: React.FC = () => {
   // A seller's default flow is pulling stock IN from the main warehouse into their own store
   // (the admin isn't always around to move it) — so that's the default, not sending stock out.
   const defaultFromId = isSeller ? (mainWarehouse?.id || currentUser?.storeId || stores[0]?.id || '') : stores[0]?.id || '';
-  const defaultToId = isSeller
-    ? (currentUser?.storeId || stores.find(s => s.id !== defaultFromId)?.id || '')
-    : (stores.find(s => s.id !== defaultFromId)?.id || stores[1]?.id || '');
 
   const [fromLocationId, setFromLocationId] = useState<string>(defaultFromId);
-  const [toLocationId, setToLocationId] = useState<string>(defaultToId);
+  const [toLocationId, setToLocationId] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
 
@@ -70,8 +68,15 @@ export const TransferPage: React.FC = () => {
   const [isSubmittingTransfer, setIsSubmittingTransfer] = useState(false);
   const [processingTransferId, setProcessingTransferId] = useState<string | null>(null);
 
-  const fromStoreName = stores.find(s => s.id === fromLocationId)?.name || 'Исходный склад';
-  const toStoreName = stores.find(s => s.id === toLocationId)?.name || 'Целевой склад';
+  const fromStore = stores.find(s => s.id === fromLocationId);
+  const fromStoreName = fromStore
+    ? (fromStore.isMainWarehouse ? `Центральный склад (${fromStore.name})` : `Магазин «${fromStore.name}»`)
+    : 'Исходный склад';
+
+  const toStore = stores.find(s => s.id === toLocationId);
+  const toStoreName = toStore
+    ? (toStore.isMainWarehouse ? `Центральный склад (${toStore.name})` : `Магазин «${toStore.name}»`)
+    : 'Не выбран';
 
   const availableDevicesAtFromLocation = useMemo(() => {
     return devices.filter(d => {
@@ -93,12 +98,11 @@ export const TransferPage: React.FC = () => {
     });
   }, [devices, fromLocationId, searchQuery]);
 
-  // A seller can also pull stock IN from the main warehouse (admin approval still required
-  // before it actually moves) — switching to that source locks the destination to their own store.
+  // When changing the source, always reset destination to empty so user explicitly picks where to send
   const handleSellerFromChange = (id: string) => {
     setFromLocationId(id);
     setSelectedDeviceIds([]);
-    setToLocationId(mainWarehouse && id === mainWarehouse.id ? (currentUser?.storeId || '') : (stores.find(s => s.id !== id)?.id || ''));
+    setToLocationId('');
   };
 
   const handleToggleSelectDevice = (id: string) => {
@@ -134,6 +138,10 @@ export const TransferPage: React.FC = () => {
   };
 
   const handleOpenConfirmModal = () => {
+    if (!toLocationId) {
+      setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
+      return;
+    }
     if (selectedDeviceIds.length === 0) {
       setStatusMessage({ type: 'error', text: 'Выберите хотя бы одно устройство для перемещения' });
       return;
@@ -146,6 +154,10 @@ export const TransferPage: React.FC = () => {
   };
 
   const handleExecuteTransfer = async () => {
+    if (!toLocationId) {
+      setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
+      return;
+    }
     if (isSubmittingTransfer) return;
     setIsSubmittingTransfer(true);
     try {
@@ -164,6 +176,7 @@ export const TransferPage: React.FC = () => {
             : `Перемещение (${selectedDeviceIds.length} шт.) выполнено.`
         });
         setSelectedDeviceIds([]);
+        setToLocationId('');
         setActiveTab('list');
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка создания перемещения' });
@@ -297,33 +310,42 @@ export const TransferPage: React.FC = () => {
                       onChange={(e) => {
                         setFromLocationId(e.target.value);
                         setSelectedDeviceIds([]);
+                        setToLocationId('');
                       }}
                       className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
                     >
                       {stores.map(s => (
-                        <option key={s.id} value={s.id}>{s.name}</option>
+                        <option key={s.id} value={s.id}>
+                          {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                        </option>
                       ))}
                     </select>
                   )}
                 </div>
 
                 <div>
-                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Куда (Получатель):</label>
-                  {isSeller && mainWarehouse && fromLocationId === mainWarehouse.id ? (
-                    <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
-                      <StoreIcon className="w-4 h-4 text-accent" />
-                      <span>{sellerStoreName}</span>
-                    </div>
-                  ) : (
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">
+                    Куда (Получатель): <span className="text-warning font-normal">* обязательно</span>
+                  </label>
                   <select
                     value={toLocationId ?? ''}
                     onChange={(e) => setToLocationId(e.target.value)}
-                    className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                    className={`w-full rounded-xl bg-surface-raised border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none transition-colors ${
+                      !toLocationId ? 'border-warning/70 ring-1 ring-warning/30' : 'border-border'
+                    }`}
                   >
+                    <option value="">-- Выберите получателя (куда) * --</option>
                     {stores.filter(s => s.id !== fromLocationId).map(s => (
-                      <option key={s.id} value={s.id}>{s.name}</option>
+                      <option key={s.id} value={s.id}>
+                        {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                      </option>
                     ))}
                   </select>
+                  {!toLocationId && (
+                    <p className="text-[10px] text-warning mt-1 flex items-center gap-1 font-medium">
+                      <AlertCircle className="w-3 h-3 shrink-0" />
+                      Необходимо вручную выбрать куда отправлять
+                    </p>
                   )}
                 </div>
               </div>
@@ -398,7 +420,7 @@ export const TransferPage: React.FC = () => {
                         </div>
 
                         <span className="text-xs font-bold text-accent shrink-0">
-                          {(dev.retailPriceTjs || 0).toLocaleString()} TJS
+                          {formatMoney(dev.retailPriceTjs)} TJS
                         </span>
                       </div>
                     );
@@ -410,7 +432,9 @@ export const TransferPage: React.FC = () => {
             {/* Bottom Floating Bar */}
             {selectedDeviceIds.length > 0 && (
               <div className="absolute bottom-3 inset-x-3 z-30">
-                <div className="p-3.5 rounded-2xl bg-surface border border-accent/40 shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md">
+                <div className={`p-3.5 rounded-2xl bg-surface border shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md transition-all ${
+                  !toLocationId ? 'border-warning/60 shadow-warning/5' : 'border-accent/40'
+                }`}>
                   <div className="flex items-center space-x-3">
                     <div className="w-9 h-9 rounded-xl bg-accent text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
                       {selectedDeviceIds.length}
@@ -420,16 +444,25 @@ export const TransferPage: React.FC = () => {
                         Выбрано: {selectedDeviceIds.length} устройств
                       </p>
                       <p className="text-[11px] text-fg-muted">
-                        Из: {fromStoreName} → В: {toStoreName}
+                        Из: <span className="font-semibold text-fg">{fromStoreName}</span> → В:{' '}
+                        {toLocationId ? (
+                          <span className="font-semibold text-accent">{toStoreName}</span>
+                        ) : (
+                          <span className="font-bold text-warning underline decoration-warning/50">Укажите получателя</span>
+                        )}
                       </p>
                     </div>
                   </div>
 
                   <button
                     onClick={handleOpenConfirmModal}
-                    className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg font-bold text-xs tracking-wider flex items-center space-x-1.5 transition-all shadow-xs"
+                    className={`px-4 py-2 rounded-xl font-bold text-xs tracking-wider flex items-center space-x-1.5 transition-all shadow-xs ${
+                      !toLocationId
+                        ? 'bg-warning hover:bg-warning/90 text-black'
+                        : 'bg-accent hover:bg-accent-strong text-accent-fg'
+                    }`}
                   >
-                    <span>Оформить</span>
+                    <span>{toLocationId ? 'Оформить' : 'Указать куда'}</span>
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
@@ -441,15 +474,17 @@ export const TransferPage: React.FC = () => {
           <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-bg">
             {!isSeller && (
               <div className="flex items-center justify-between pb-2 border-b border-border text-xs">
-                <span className="text-fg-muted font-medium">Фильтр по складу:</span>
+                <span className="text-fg-muted font-medium">Фильтр по локации:</span>
                 <select
                   value={historyFilterStoreId}
                   onChange={(e) => setHistoryFilterStoreId(e.target.value)}
                   className="bg-surface border border-border text-fg-muted rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-accent"
                 >
-                  <option value="ALL">Все склады</option>
+                  <option value="ALL">Все (склад и магазины)</option>
                   {stores.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                    </option>
                   ))}
                 </select>
               </div>

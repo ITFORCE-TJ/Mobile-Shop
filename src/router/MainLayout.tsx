@@ -10,6 +10,7 @@ import { TabletNavRail } from '../components/layout/TabletNavRail';
 import { Drawer } from '../components/layout/Drawer';
 import { MobileBottomNav } from '../components/layout/MobileBottomNav';
 import { DailyRateModal } from '../components/common/DailyRateModal';
+import { StoreSwitchModal } from '../components/common/StoreSwitchModal';
 import { PWAInstallPrompt } from '../components/pwa/PWAInstallPrompt';
 import { PWAUpdateNotifier } from '../components/pwa/PWAUpdateNotifier';
 import { useUIStore } from '../stores/useUIStore';
@@ -72,7 +73,7 @@ export function MainLayout() {
   const navigationLayout = useNavigationLayout();
   const location = useLocation();
   const { currentUser } = useAuthStore();
-  const { isDailyRateModalOpen, setDailyRateModalOpen } = useUIStore();
+  const { isDailyRateModalOpen, setDailyRateModalOpen, isStoreSwitchModalOpen, setStoreSwitchModalOpen } = useUIStore();
   const { isRateModalOpen, closeDailyRateModal, activePage, setActivePage, selectedStoreId, stores, isScannerOpen } = useAppFields('isRateModalOpen', 'closeDailyRateModal', 'activePage', 'setActivePage', 'selectedStoreId', 'stores', 'isScannerOpen');
 
   React.useEffect(() => {
@@ -107,7 +108,7 @@ export function MainLayout() {
         <main className="flex-1 flex flex-col min-w-0 max-w-full min-h-0 overflow-y-auto overflow-x-hidden relative bg-bg">
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
-              <Route path="/" element={<Navigate to="/sale" replace />} />
+              <Route path="/" element={<Navigate to={currentUser?.role === 'SELLER' ? "/sale" : "/finance"} replace />} />
               <Route path="/sale" element={<SalePage />} />
               <Route path="/sales-history" element={<SalesHistoryPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
@@ -127,7 +128,7 @@ export function MainLayout() {
               <Route path="/audit-log" element={<AuditLogPage />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="*" element={<Navigate to="/sale" replace />} />
+              <Route path="*" element={<Navigate to={currentUser?.role === 'SELLER' ? "/sale" : "/finance"} replace />} />
             </Routes>
           </Suspense>
         </main>
@@ -159,6 +160,10 @@ export function MainLayout() {
           setDailyRateModalOpen(false);
           closeDailyRateModal();
         }}
+      />
+      <StoreSwitchModal
+        isOpen={isStoreSwitchModalOpen}
+        onClose={() => setStoreSwitchModalOpen(false)}
       />
       {!native && isScannerOpen && (
         <Suspense fallback={null}>

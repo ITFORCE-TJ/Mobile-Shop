@@ -184,6 +184,7 @@ async function runE2ETests() {
           {
             brand: 'Apple',
             model: 'iPhone 15 Pro Audit',
+            ram: '8GB',
             storage: '256GB',
             color: 'Natural Titanium',
             purchasePriceUsd: D(900),
@@ -237,6 +238,7 @@ async function runE2ETests() {
           groups: [{
             brand: 'Samsung',
             model: 'Galaxy S24 Audit',
+            ram: '8GB',
             storage: '256GB',
             color: 'Black',
             purchasePriceUsd: D(700),

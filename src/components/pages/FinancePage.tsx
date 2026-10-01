@@ -6,11 +6,13 @@ import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { RestrictedAccess } from '../ui/RestrictedAccess';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { ProfitReport } from '../finance/ProfitReport';
+import { BonusesFinancePanel } from '../finance/BonusesFinancePanel';
 
-type Tab = 'REPORT' | 'STORES';
+type Tab = 'REPORT' | 'STORES' | 'BONUSES';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'REPORT', label: 'Отчёт' },
-  { value: 'STORES', label: 'По складам' },
+  { value: 'STORES', label: 'По магазинам' },
+  { value: 'BONUSES', label: 'Бонусы' },
 ];
 
 export const FinancePage: React.FC = () => {
@@ -52,7 +54,11 @@ export const FinancePage: React.FC = () => {
       </div>
 
       <div className="flex-1 overflow-y-auto">
-        <ProfitReport key={tab} view={tab === 'REPORT' ? 'summary' : 'stores'} month={reportMonth} onMonthChange={setReportMonth} />
+        {tab === 'BONUSES' ? (
+          <BonusesFinancePanel month={reportMonth} onMonthChange={setReportMonth} />
+        ) : (
+          <ProfitReport key={tab} view={tab === 'REPORT' ? 'summary' : 'stores'} month={reportMonth} onMonthChange={setReportMonth} />
+        )}
       </div>
     </div>
   );

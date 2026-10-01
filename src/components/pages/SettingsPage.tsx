@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { formatMoney } from '../../utils/money';
 import { Navigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Store as StoreType } from '../../types';
@@ -20,7 +21,8 @@ import {
   LogOut,
   Combine,
   Wrench,
-  Loader2
+  Loader2,
+  Warehouse
 } from 'lucide-react';
 
 export const SettingsPage: React.FC = () => {
@@ -154,7 +156,7 @@ export const SettingsPage: React.FC = () => {
 
   const handleOpenAdjust = (store: StoreType) => {
     setAdjustingStore(store);
-    setAdjustNewBalance((store.cashBalanceTjs ?? 0).toString());
+    setAdjustNewBalance((store.cashBalanceTjs ?? 0).toFixed(2));
     setAdjustReason('');
   };
 
@@ -175,7 +177,7 @@ export const SettingsPage: React.FC = () => {
       const res = await adjustStoreCashBalance(adjustingStore.id, parsed, adjustReason.trim());
       if (res.success) {
         setAdjustingStore(null);
-        setStatusMessage({ type: 'success', text: `Касса «${adjustingStore.name}» скорректирована на ${parsed.toLocaleString()} TJS` });
+        setStatusMessage({ type: 'success', text: `Касса «${adjustingStore.name}» скорректирована на ${formatMoney(parsed)} TJS` });
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка корректировки кассы' });
       }
@@ -319,16 +321,16 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between pb-2 border-b border-border">
               <div className="flex items-center space-x-2">
                 <Store className="w-4 h-4 text-accent" />
-                <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">ФИЛИАЛЫ И СКЛАДЫ ({stores.length})</h4>
+                <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">ЦЕНТРАЛЬНЫЙ СКЛАД И МАГАЗИНЫ ({stores.length})</h4>
               </div>
 
               <div className="flex items-center space-x-2">
                 <button
                   onClick={() => setIsAddStoreOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-xs font-bold text-accent flex items-center space-x-1.5 border border-border transition-colors"
+                  className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-xs font-bold text-accent flex items-center space-x-1.5 border border-border transition-colors cursor-pointer"
                 >
                   <Plus className="w-3.5 h-3.5" />
-                  <span>ДОБАВИТЬ ФИЛИАЛ</span>
+                  <span>ДОБАВИТЬ МАГАЗИН</span>
                 </button>
               </div>
             </div>
@@ -339,7 +341,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 pr-2">
                       <div className="flex items-center space-x-2">
-                        <Building className="w-3.5 h-3.5 text-accent shrink-0" />
+                        {s.isMainWarehouse ? <Warehouse className="w-4 h-4 text-warning shrink-0" /> : <Store className="w-4 h-4 text-accent shrink-0" />}
                         <span className="text-xs font-bold text-fg-muted uppercase truncate">{s.name}</span>
                       </div>
                       {s.address && (
@@ -351,16 +353,19 @@ export const SettingsPage: React.FC = () => {
                     </div>
                     <div className="flex items-center space-x-1 shrink-0">
                       {s.isMainWarehouse ? (
-                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30 uppercase">
-                          ЦЕНТРАЛЬНЫЙ
+                        <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-warning/15 text-warning border border-warning/30 uppercase">
+                          ЦЕНТРАЛЬНЫЙ СКЛАД
                         </span>
                       ) : (
                         <>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30 uppercase mr-1">
+                            МАГАЗИН
+                          </span>
                           {stores.length > 2 && (
                             <button
                               onClick={() => handleOpenMerge(s)}
                               className="p-1.5 rounded-lg hover:bg-accent/10 text-fg-subtle hover:text-accent transition-colors"
-                              title="Объединить с другим филиалом"
+                              title="Объединить с другим магазином"
                             >
                               <Combine className="w-3.5 h-3.5" />
                             </button>
@@ -368,7 +373,7 @@ export const SettingsPage: React.FC = () => {
                           <button
                             onClick={() => handleDeleteStore(s)}
                             className="p-1.5 rounded-lg hover:bg-danger/10 text-fg-subtle hover:text-danger transition-colors"
-                            title="Удалить филиал"
+                            title="Удалить магазин"
                           >
                             <Trash2 className="w-3.5 h-3.5" />
                           </button>
@@ -394,7 +399,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="pt-2 border-t border-border flex justify-between items-baseline text-xs">
                     <span className="text-fg-subtle text-[11px] uppercase">Остаток в кассе:</span>
                     <span className="font-bold text-accent">
-                      {(s.cashBalanceTjs ?? 0).toLocaleString()} TJS
+                      {formatMoney(s.cashBalanceTjs)} TJS
                     </span>
                   </div>
                 </div>
@@ -430,11 +435,11 @@ export const SettingsPage: React.FC = () => {
       {isAddStoreOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
           <form onSubmit={handleAddStore} className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-3">
-            <h4 className="text-sm font-bold text-fg-muted mb-2 uppercase">НОВАЯ ТОРГОВАЯ ТОЧКА</h4>
+            <h4 className="text-sm font-bold text-fg-muted mb-2 uppercase">НОВЫЙ МАГАЗИН</h4>
 
             <div className="text-xs space-y-3">
               <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Название филиала *</label>
+                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Название магазина *</label>
                 <input
                   type="text"
                   required
@@ -446,7 +451,7 @@ export const SettingsPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Адрес</label>
+                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Адрес магазина</label>
                 <input
                   type="text"
                   value={newStoreAddress ?? ''}
@@ -469,7 +474,7 @@ export const SettingsPage: React.FC = () => {
                 type="submit"
                 className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase"
               >
-                Создать
+                Создать магазин
               </button>
             </div>
           </form>
@@ -480,11 +485,11 @@ export const SettingsPage: React.FC = () => {
       {editingStore && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
           <form onSubmit={handleSaveEditStore} className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-3">
-            <h4 className="text-sm font-bold text-fg-muted mb-2 uppercase">РЕДАКТИРОВАТЬ ФИЛИАЛ</h4>
+            <h4 className="text-sm font-bold text-fg-muted mb-2 uppercase">РЕДАКТИРОВАТЬ МАГАЗИН</h4>
 
             <div className="text-xs space-y-3">
               <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Название филиала *</label>
+                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Название магазина *</label>
                 <input
                   type="text"
                   required
@@ -533,18 +538,18 @@ export const SettingsPage: React.FC = () => {
                 <Trash2 className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold uppercase text-fg-muted">УДАЛЕНИЕ ФИЛИАЛА</h3>
+                <h3 className="text-sm font-bold uppercase text-fg-muted">УДАЛЕНИЕ МАГАЗИНА</h3>
                 <p className="text-[11px] text-fg-muted mt-0.5">{deletingStoreConfirm.name}</p>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-surface-raised border border-border text-xs space-y-2">
               <p className="text-fg-muted font-semibold">
-                Вы действительно хотите удалить филиал «<span className="text-danger">{deletingStoreConfirm.name}</span>»?
+                Вы действительно хотите удалить магазин «<span className="text-danger">{deletingStoreConfirm.name}</span>»?
               </p>
               <p className="text-[11px] text-accent flex items-start space-x-1.5 pt-1">
                 <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Все остатки товаров из этого филиала будут <strong>автоматически перенесены на Главный склад</strong>.</span>
+                <span>Все остатки товаров из этого магазина будут <strong>автоматически перенесены на Центральный склад</strong>.</span>
               </p>
             </div>
 
@@ -561,7 +566,7 @@ export const SettingsPage: React.FC = () => {
                 onClick={handleConfirmDeleteStore}
                 className="flex-1 py-2.5 rounded-xl bg-danger hover:bg-danger/90 active:scale-95 text-xs font-bold uppercase text-white shadow-lg transition-colors"
               >
-                УДАЛИТЬ ФИЛИАЛ
+                УДАЛИТЬ МАГАЗИН
               </button>
             </div>
           </div>
@@ -577,14 +582,14 @@ export const SettingsPage: React.FC = () => {
                 <Combine className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold uppercase text-fg-muted">ОБЪЕДИНЕНИЕ ФИЛИАЛОВ</h3>
+                <h3 className="text-sm font-bold uppercase text-fg-muted">ОБЪЕДИНЕНИЕ МАГАЗИНОВ</h3>
                 <p className="text-[11px] text-fg-muted mt-0.5">{mergingStore.name}</p>
               </div>
             </div>
 
             <div className="p-3 rounded-xl bg-surface-raised border border-border text-xs space-y-3">
               <p className="text-fg-muted">
-                Все товары, продажи, ремонты, расходы, перемещения и касса филиала «<strong className="text-fg-muted">{mergingStore.name}</strong>» ({(mergingStore.cashBalanceTjs ?? 0).toLocaleString()} TJS) будут перенесены в:
+                Все товары, продажи, ремонты, расходы, перемещения и касса магазина «<strong className="text-fg-muted">{mergingStore.name}</strong>» ({formatMoney(mergingStore.cashBalanceTjs)} TJS) будут перенесены в:
               </p>
               <select
                 value={mergeTargetId}
@@ -592,12 +597,12 @@ export const SettingsPage: React.FC = () => {
                 className="w-full rounded-lg bg-surface border border-border px-3 py-2 text-fg-muted focus:outline-none focus:border-accent"
               >
                 {stores.filter(s => s.id !== mergingStore.id && !s.isMainWarehouse).map(s => (
-                  <option key={s.id} value={s.id}>{s.name} (Остаток: {(s.cashBalanceTjs ?? 0).toLocaleString()} TJS)</option>
+                  <option key={s.id} value={s.id}>{s.name} (Остаток: {formatMoney(s.cashBalanceTjs)} TJS)</option>
                 ))}
               </select>
               <p className="text-[11px] text-danger flex items-start space-x-1.5 pt-1">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Филиал «{mergingStore.name}» будет удалён после переноса. Действие необратимо.</span>
+                <span>Магазин «{mergingStore.name}» будет удалён после переноса. Действие необратимо.</span>
               </p>
             </div>
 
@@ -641,7 +646,7 @@ export const SettingsPage: React.FC = () => {
             <div className="text-xs space-y-3">
               <div>
                 <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Текущий остаток</label>
-                <p className="text-fg-muted">{(adjustingStore.cashBalanceTjs ?? 0).toLocaleString()} TJS</p>
+                <p className="text-fg-muted">{formatMoney(adjustingStore.cashBalanceTjs)} TJS</p>
               </div>
               <div>
                 <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Новый остаток (TJS) *</label>

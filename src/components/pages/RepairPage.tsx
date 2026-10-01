@@ -1,9 +1,10 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
-import { sumMoney } from '../../utils/money';
+import { sumMoney, formatMoney } from '../../utils/money';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useMemo, useEffect } from 'react';
+import { useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
-import { RepairTicket, RepairStatus } from '../../types';
+import { RepairTicket, RepairStatus, SaleItem } from '../../types';
 import {
   Wrench,
   Plus,
@@ -20,6 +21,17 @@ import { MonthPicker } from '../ui/MonthPicker';
 
 export const RepairPage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
+  const location = useLocation();
+  const navigatedState = location.state as {
+    saleReceiptNumber?: number;
+    item?: SaleItem;
+    customerName?: string;
+    saleId?: string;
+    saleStoreId?: string;
+    saleStoreName?: string;
+    saleDate?: string;
+  } | null;
+
   const {
     currentUser,
     repairs,
@@ -86,6 +98,16 @@ export const RepairPage: React.FC = () => {
   const [selectedStoreId, setSelectedStoreId] = useState<string>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
+
+  useEffect(() => {
+    if (currentUser?.role !== 'SELLER') {
+      if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
+        setSelectedStoreId(globalSelectedStoreId);
+      } else {
+        setSelectedStoreId('ALL');
+      }
+    }
+  }, [globalSelectedStoreId, currentUser?.role]);
   // Defaults to the store active on the POS Terminal page, same as the list-view
   // filter above; falls back to the first retail store once stores load if no
   // store is active there (e.g. "все магазины" was selected).
@@ -98,6 +120,26 @@ export const RepairPage: React.FC = () => {
       setCreateTicketStoreId(retailStores[0].id);
     }
   }, [retailStores, createTicketStoreId]);
+
+  useEffect(() => {
+    if (navigatedState?.item) {
+      const item = navigatedState.item;
+      setActiveTab('create');
+      setDeviceModel(`${item.brand} ${item.model}${item.storage ? ' ' + item.storage : ''}`);
+      setImei(item.imei || '');
+      setImei2(item.imei2 || '');
+      setClientName(navigatedState.customerName || '');
+      setReceiptSearch(navigatedState.saleReceiptNumber ? String(navigatedState.saleReceiptNumber) : '');
+      if (navigatedState.saleStoreId) {
+        setCreateTicketStoreId(navigatedState.saleStoreId);
+      }
+      setStatusBanner({
+        tone: 'info',
+        text: `Оформление приёма в ремонт: ${item.brand} ${item.model} (Чек #${navigatedState.saleReceiptNumber || ''}). Опишите поломку и оформите приём.`
+      });
+      window.history.replaceState({}, document.title);
+    }
+  }, [navigatedState]);
 
   const isSeller = currentUser?.role === 'SELLER';
   const effectiveStoreId = isSeller ? (currentUser?.storeId || retailStores[0]?.id || '') : selectedStoreId;
@@ -324,11 +366,18 @@ export const RepairPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
+      if (selectedTicket.status !== 'READY') {
+        const prepRes = await updateRepairStatus(selectedTicket.id, 'READY', 'Готов к выдаче');
+        if (!prepRes.success) {
+          setStatusBanner({ tone: 'error', text: prepRes.message || 'Ошибка подготовки к выдаче' });
+          return;
+        }
+      }
       const res = await updateRepairStatus(selectedTicket.id, 'ISSUED', 'Выдано клиенту', finalCost);
 
       setSelectedTicket(null);
       if (res.success) {
-        setStatusBanner({ tone: 'success', text: `Ремонт #${selectedTicket.ticketNumber} выдан. Расход ${finalCost} TJS автоматически списан со счета магазина.` });
+        setStatusBanner({ tone: 'success', text: `Ремонт #${selectedTicket.ticketNumber} выдан клиенту. Расход на ремонт ${finalCost} TJS зафиксирован и списан со счета магазина.` });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка выдачи ремонта' });
       }
@@ -590,7 +639,7 @@ export const RepairPage: React.FC = () => {
               <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
                 <span>Всего ремонтов: <strong className="text-fg-muted font-bold">{totalRepairsCount}</strong></span>
                 <span>Отремонтировано / Готово: <strong className="text-accent font-bold">{readyRepairsCount}</strong></span>
-                <span>Затраты (Расходы): <strong className="text-accent font-bold">{totalExpensesTjs.toLocaleString()} TJS</strong></span>
+                <span>Затраты (Расходы): <strong className="text-accent font-bold">{formatMoney(totalExpensesTjs)} TJS</strong></span>
               </div>
             </div>
 
@@ -633,14 +682,18 @@ export const RepairPage: React.FC = () => {
                         </div>
                       </div>
 
-                      <div className="flex flex-col md:items-end justify-between shrink-0 space-y-2">
+                        <div className="flex flex-col md:items-end justify-between shrink-0 space-y-2">
                         <div className="text-left md:text-right">
-                          <span className="text-[10px] text-fg-subtle uppercase block">Стоимость / Предоплата</span>
+                          <span className="text-[10px] text-fg-subtle uppercase block">
+                            {ticket.status === 'ISSUED' ? 'Расход на ремонт' : 'Расход'}
+                          </span>
                           <span className="text-xs font-bold text-accent">
-                            {ticket.estimatedCostTjs || 0} TJS
+                            {ticket.status === 'ISSUED'
+                              ? `${formatMoney(ticket.finalCostTjs)} TJS`
+                              : 'Задаётся при выдаче'}
                           </span>
                           {ticket.prepaymentTjs ? (
-                            <span className="text-[10px] text-accent block">(Аванс: {ticket.prepaymentTjs} TJS)</span>
+                            <span className="text-[10px] text-accent block">(Аванс: {formatMoney(ticket.prepaymentTjs)} TJS)</span>
                           ) : null}
                         </div>
 
@@ -654,7 +707,7 @@ export const RepairPage: React.FC = () => {
                               В РАБОТУ
                             </button>
                           )}
-                          {(ticket.status === 'ACCEPTED' || ticket.status === 'IN_PROGRESS') && (
+                          {ticket.status === 'IN_PROGRESS' && (
                             <button
                               onClick={() => handleUpdateStatusQuick(ticket.id, 'READY')}
                               className="px-3 py-1 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/30 text-xs font-bold text-accent transition-colors"
@@ -662,7 +715,7 @@ export const RepairPage: React.FC = () => {
                               ГОТОВ
                             </button>
                           )}
-                          {isReady && (
+                          {ticket.status !== 'ISSUED' && (
                             <button
                               onClick={() => handleOpenIssueModal(ticket)}
                               className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors"
@@ -703,10 +756,12 @@ export const RepairPage: React.FC = () => {
 
             <div className="space-y-3">
               <div>
-                <label className="block text-fg-subtle mb-1 text-[11px] uppercase">Итоговая стоимость ремонта (TJS):</label>
-                <input step="0.01"
+                <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold">Расход на ремонт (запчасти / работа мастера), TJS:</label>
+                <input
+                  step="0.01"
                   type="number"
                   min="0"
+                  placeholder="0.00"
                   value={issueFinalCost}
                   onChange={(e) => setIssueFinalCost(e.target.value)}
                   className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent font-bold focus:border-accent focus:outline-none"
@@ -716,11 +771,11 @@ export const RepairPage: React.FC = () => {
               {selectedTicket.prepaymentTjs ? (
                 <div className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 flex justify-between items-center text-xs">
                   <span>Учтен аванс (предоплата):</span>
-                  <span className="font-bold text-accent">-{selectedTicket.prepaymentTjs} TJS</span>
+                  <span className="font-bold text-accent">-{formatMoney(selectedTicket.prepaymentTjs)} TJS</span>
                 </div>
               ) : null}
               <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-[11px] text-fg-subtle">
-                Сумма расхода автоматически списывается со счета магазина.
+                Заданная цена расхода будет списана с кассы магазина как расход на ремонт (REPAIR_PARTS).
               </div>
             </div>
 
@@ -823,22 +878,18 @@ export const RepairPage: React.FC = () => {
 
             {/* Financial Details */}
             <div className="p-3 bg-surface-raised rounded-xl border border-border space-y-2">
-              <span className="text-fg-subtle block text-[10px] uppercase font-semibold">Расчет и стоимость</span>
+              <span className="text-fg-subtle block text-[10px] uppercase font-semibold">Расход на ремонт</span>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div>
-                  <span className="text-fg-subtle block text-[10px]">Ориентировочная стоимость:</span>
-                  <span className="font-bold text-fg-muted">{viewingTicket.estimatedCostTjs || 0} TJS</span>
+                  <span className="text-fg-subtle block text-[10px]">Расход на запчасти / работу:</span>
+                  <span className="font-bold text-accent">
+                    {viewingTicket.finalCostTjs ? `${formatMoney(viewingTicket.finalCostTjs)} TJS` : 'Задаётся при выдаче'}
+                  </span>
                 </div>
                 {viewingTicket.prepaymentTjs ? (
                   <div>
                     <span className="text-fg-subtle block text-[10px]">Предоплата (аванс):</span>
-                    <span className="font-bold text-accent">{viewingTicket.prepaymentTjs} TJS</span>
-                  </div>
-                ) : null}
-                {viewingTicket.finalCostTjs ? (
-                  <div>
-                    <span className="text-fg-subtle block text-[10px]">Итоговая стоимость:</span>
-                    <span className="font-bold text-accent">{viewingTicket.finalCostTjs} TJS</span>
+                    <span className="font-bold text-accent">{formatMoney(viewingTicket.prepaymentTjs)} TJS</span>
                   </div>
                 ) : null}
               </div>
@@ -863,7 +914,7 @@ export const RepairPage: React.FC = () => {
                   В РАБОТУ
                 </button>
               )}
-              {(viewingTicket.status === 'ACCEPTED' || viewingTicket.status === 'IN_PROGRESS') && (
+              {viewingTicket.status === 'IN_PROGRESS' && (
                 <button
                   onClick={() => {
                     handleUpdateStatusQuick(viewingTicket.id, 'READY');
@@ -874,7 +925,7 @@ export const RepairPage: React.FC = () => {
                   ГОТОВ
                 </button>
               )}
-              {viewingTicket.status === 'READY' && (
+              {viewingTicket.status !== 'ISSUED' && (
                 <button
                   onClick={() => {
                     const ticketToIssue = viewingTicket;

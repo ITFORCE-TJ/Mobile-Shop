@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { Bell, Store } from 'lucide-react';
+import { useUIStore } from '../../stores/useUIStore';
+import { Bell, Store, Landmark, ArrowRight } from 'lucide-react';
 
 export const TopBar: React.FC = () => {
   const navigate = useNavigate();
@@ -12,24 +13,24 @@ export const TopBar: React.FC = () => {
     setActivePage,
     stores,
     selectedStoreId,
+    setSelectedStoreId,
   } = useAppFields(
     'currentUser',
     'activePage',
     'setActivePage',
     'stores',
-    'selectedStoreId'
+    'selectedStoreId',
+    'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
+  const { setStoreSwitchModalOpen } = useUIStore();
 
-  // `resolved` tracks whether an actionable notification (e.g. an approval) has been
-  // handled — it says nothing about whether the user has actually seen it. Purely
-  // informational notifications are created already resolved, so counting only `read`
-  // is what makes the badge reflect "new to you", not "still needs action".
+  const isSeller = currentUser?.role === 'SELLER';
+  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
+  const sellerStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
+
   const unreadNotifsCount = notifications.filter(n => !n.read).length;
-  const userStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
-  const currentStoreDisplay = currentUser?.role === 'SELLER'
-    ? (userStoreName || 'Магазин не привязан')
-    : (userStoreName || (selectedStoreId && selectedStoreId !== 'all' ? stores.find(s => s.id === selectedStoreId)?.name : undefined) || 'Все магазины');
 
   const getPageTitle = () => {
     switch (activePage) {
@@ -55,28 +56,74 @@ export const TopBar: React.FC = () => {
   };
 
   return (
-    <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border bg-surface px-3 md:px-4 select-none shrink-0">
-      {/* Left: Page Title + Store Subtitle */}
-      <div className="flex items-center gap-2.5 min-w-0">
+    <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border bg-surface px-3 md:px-4 select-none shrink-0 gap-2">
+      {/* Left: Page Title */}
+      <div className="flex items-center gap-3 min-w-0">
         <div className="min-w-0">
-          <h1 className="text-sm md:text-base font-bold text-fg-muted truncate tracking-tight">
+          <h1 className="text-sm md:text-base font-bold text-fg truncate tracking-tight">
             {getPageTitle()}
           </h1>
-          <p className="text-[11px] text-fg-subtle truncate flex items-center">
-            <Store className="w-2.5 h-2.5 mr-1 text-accent shrink-0 inline" />
-            <span className="truncate">{currentStoreDisplay}</span>
-          </p>
+          {isSeller && (
+            <p className="text-[11px] text-fg-subtle truncate flex items-center">
+              <Store className="w-2.5 h-2.5 mr-1 text-accent shrink-0 inline" />
+              <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
+            </p>
+          )}
         </div>
       </div>
 
-      {/* Right: Notifications */}
-      <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+      {/* Center/Right: Quick Switcher for Admin/Partner */}
+      <div className="flex items-center gap-2 shrink-0">
+        {!isSeller && (
+          <div className="flex items-center gap-1.5">
+            {isCentralCashMode ? (
+              <button
+                type="button"
+                onClick={() => setStoreSwitchModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95"
+                title="Перейти в режим розничных продаж"
+              >
+                <Store className="w-3.5 h-3.5 text-accent" />
+                <span className="hidden sm:inline">Продавать в магазине</span>
+                <span className="sm:hidden">Магазины</span>
+                <ArrowRight className="w-3 h-3 opacity-60" />
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={() => setStoreSwitchModalOpen(true)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 text-xs font-bold transition-all shadow-2xs active:scale-95"
+                  title="Сменить магазин"
+                >
+                  <Store className="w-3.5 h-3.5" />
+                  <span className="max-w-[120px] sm:max-w-none truncate">{activeRetailStore?.name || 'Магазин'}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSelectedStoreId('all');
+                    setActivePage('FINANCE');
+                    navigate('/finance');
+                  }}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95 cursor-pointer"
+                  title="Вернуться в Центральную кассу"
+                >
+                  <Landmark className="w-3.5 h-3.5 text-accent" />
+                  <span className="hidden md:inline">В Центральную кассу</span>
+                  <span className="md:hidden">В центр</span>
+                </button>
+              </div>
+            )}
+          </div>
+        )}
 
+        {/* Notifications button */}
         <button
           onClick={() => {
             if (activePage === 'NOTIFICATIONS') {
-              setActivePage('SALE');
-              navigate('/sale');
+              setActivePage(isSeller ? 'SALE' : 'FINANCE');
+              navigate(isSeller ? '/sale' : '/finance');
             } else {
               setActivePage('NOTIFICATIONS');
               navigate('/notifications');

@@ -86,8 +86,8 @@ export function registerOwnerRoutes(app: Express) {
 
   app.post('/api/owners/:id/reinvest', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const { amountUsd, note } = req.body ?? {};
-      const owner = await OwnersService.reinvest(req.params.id, amountUsd, note, req.user!.userId);
+      const { amountUsd, destination, note } = req.body ?? {};
+      const owner = await OwnersService.reinvest(req.params.id, amountUsd, note, req.user!.userId, destination);
       RealtimeSyncGateway.broadcast('OWNER_TX', { ownerId: owner.id });
       res.json(owner);
     } catch (error) {

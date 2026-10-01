@@ -5,8 +5,8 @@ import { getRateForDate } from '../exchange-rate/exchange-rate.service';
 import { calculateRecognizedProfit } from '../sales/profit';
 import { roundMoney } from '../../common/money';
 
-import { dateRangeForPeriod, type ReportPeriod } from '../../common/business-date';
-export { dateRangeForPeriod, type ReportPeriod } from '../../common/business-date';
+import { dateRangeForPeriod, dateRangeForCustomDates, type ReportPeriod } from '../../common/business-date';
+export { dateRangeForPeriod, dateRangeForCustomDates, type ReportPeriod } from '../../common/business-date';
 
 interface ReportsSummaryInput {
   period: ReportPeriod;

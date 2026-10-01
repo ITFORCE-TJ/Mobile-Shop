@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { Smartphone, Lock, User, AlertCircle, ArrowRight, Eye, EyeOff, ShieldCheck, Loader2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -13,7 +14,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   if (currentUser) {
-    return <Navigate to="/sale" replace />;
+    return <Navigate to={currentUser.role === 'SELLER' ? "/sale" : "/finance"} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -28,7 +29,12 @@ export const LoginPage: React.FC = () => {
     try {
       const res = await login(loginInput.trim(), passwordInput);
       if (res.success) {
-        navigate('/sale');
+        const user = useAuthStore.getState().currentUser;
+        if (user?.role === 'SELLER') {
+          navigate('/sale');
+        } else {
+          navigate('/finance');
+        }
       } else {
         setError(res.message || 'Неверный логин или пароль');
       }

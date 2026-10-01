@@ -138,6 +138,18 @@ export class RefundService {
         });
       }));
 
+      if (tx.bonusPoolEntry) {
+        await tx.bonusPoolEntry.updateMany({
+          where: { saleId: sale.id, status: 'PENDING' },
+          data: {
+            status: 'ANNULLED',
+            annulledAt: new Date(),
+            annulledBy: actor.name,
+            annulledNote: `Возврат по чеку #${sale.receiptNumber}: ${input.reason}`,
+          },
+        });
+      }
+
       await tx.ledgerEntry.create({
         data: {
           type: 'REFUND',

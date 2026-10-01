@@ -63,6 +63,7 @@ export const BonusesPage: React.FC = () => {
   // Free device bonus spec
   const [bonusBrand, setBonusBrand] = useState('');
   const [bonusModel, setBonusModel] = useState('');
+  const [bonusRam, setBonusRam] = useState('');
   const [bonusStorage, setBonusStorage] = useState('');
   const [bonusColor, setBonusColor] = useState('');
   const [bonusImei, setBonusImei] = useState('');
@@ -74,6 +75,12 @@ export const BonusesPage: React.FC = () => {
   const brandOptions = useMemo(() => {
     const set = new Set<string>(['Apple', 'Samsung', 'Xiaomi', 'Google', 'OnePlus', 'Honor', 'Realme', 'Huawei', 'Nothing']);
     (devices || []).forEach(d => { if (d.brand) set.add(d.brand.trim()); });
+    return Array.from(set).sort();
+  }, [devices]);
+
+  const ramOptions = useMemo(() => {
+    const set = new Set<string>(['4 GB', '6 GB', '8 GB', '12 GB', '16 GB', '24 GB']);
+    (devices || []).forEach(d => { if (d.ram) set.add(d.ram.trim()); });
     return Array.from(set).sort();
   }, [devices]);
 
@@ -192,6 +199,16 @@ export const BonusesPage: React.FC = () => {
       return;
     }
 
+    if (bonusType === 'FREE_DEVICES' && !bonusRam.trim()) {
+      setStatusMessage({ type: 'error', text: 'Укажите RAM (ОЗУ) подарочного устройства' });
+      return;
+    }
+
+    if (bonusType === 'FREE_DEVICES' && !bonusStorage.trim()) {
+      setStatusMessage({ type: 'error', text: 'Укажите память (ROM) подарочного устройства' });
+      return;
+    }
+
     if (bonusType === 'FREE_DEVICES' && !bonusImei.trim()) {
       setStatusMessage({ type: 'error', text: 'Укажите реальный IMEI подарочного устройства' });
       return;
@@ -199,10 +216,11 @@ export const BonusesPage: React.FC = () => {
 
     const freeDevices = bonusType === 'FREE_DEVICES' ? [
       {
-        brand: bonusBrand,
-        model: bonusModel,
-        storage: bonusStorage,
-        color: bonusColor,
+        brand: bonusBrand.trim(),
+        model: bonusModel.trim(),
+        ram: bonusRam.trim(),
+        storage: bonusStorage.trim(),
+        color: bonusColor.trim() || 'Стандарт',
         imei: bonusImei.trim(),
         imei2: bonusImei2.trim() || undefined,
         costBasisUsd: 0
@@ -223,6 +241,7 @@ export const BonusesPage: React.FC = () => {
         setIsModalOpen(false);
         setBonusBrand('');
         setBonusModel('');
+        setBonusRam('');
         setBonusStorage('');
         setBonusColor('');
         setBonusImei('');
@@ -475,6 +494,18 @@ export const BonusesPage: React.FC = () => {
                     />
                     <datalist id="bonus-model-suggestions">
                       {getModelOptions(bonusBrand).map(m => <option key={m} value={m} />)}
+                    </datalist>
+                    <input
+                      type="text"
+                      required
+                      list="bonus-ram-suggestions"
+                      value={bonusRam ?? ''}
+                      onChange={(e) => setBonusRam(e.target.value)}
+                      placeholder="8 GB (ОЗУ) *"
+                      className="rounded-lg bg-surface border border-border px-2 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                    />
+                    <datalist id="bonus-ram-suggestions">
+                      {ramOptions.map(r => <option key={r} value={r} />)}
                     </datalist>
                     <input
                       type="text"
