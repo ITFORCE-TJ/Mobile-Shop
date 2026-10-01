@@ -11,11 +11,11 @@ import { getPayrollSummary, paySalary } from './payroll.service';
 const VALID_PERIODS: ReportPeriod[] = ['TODAY', 'MONTH', 'SPECIFIC_MONTH', 'ALL'];
 
 export function registerExpenseRoutes(app: Express) {
-  app.get('/api/payroll/:employeeId', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req, res, next) => {
+  app.get('/api/payroll/:employeeId', authenticateJwt, requireRoles('ADMIN'), async (req, res, next) => {
     try { res.json(await getPayrollSummary(req.params.employeeId, String(req.query.month || ''))); }
     catch (error) { next(error); }
   });
-  app.post('/api/payroll/:employeeId/payout', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/payroll/:employeeId/payout', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const expense = await paySalary({ employeeId: req.params.employeeId, month: req.body?.month,
         grossTjs: req.body?.grossTjs, note: req.body?.note, actorId: req.user!.userId });
@@ -25,7 +25,8 @@ export function registerExpenseRoutes(app: Express) {
   });
   app.get('/api/expenses', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const storeScopeId = req.user!.role === 'SELLER' ? req.user!.storeId ?? '__none__' : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
+      const isStoreScoped = req.user!.role === 'SELLER' || req.user!.role === 'PARTNER';
+      const storeScopeId = isStoreScoped ? req.user!.storeId ?? '__none__' : typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
       const startDate = typeof req.query.startDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.startDate) ? req.query.startDate : undefined;
       const endDate = typeof req.query.endDate === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(req.query.endDate) ? req.query.endDate : undefined;
       const period = VALID_PERIODS.includes(req.query.period as ReportPeriod) ? (req.query.period as ReportPeriod) : 'ALL';
@@ -92,6 +93,13 @@ export function registerExpenseRoutes(app: Express) {
 
   app.post('/api/expenses/:id/pay', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const existing = await prisma.expense.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
+        if (!existing || existing.storeId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Нет доступа к расходам другого магазина' });
+          return;
+        }
+      }
       const storeId = typeof req.body?.storeId === 'string' ? req.body.storeId : undefined;
       const expense = await payExpense(req.params.id, req.user!.userId, storeId);
       RealtimeSyncGateway.broadcast('EXPENSE_UPDATED', { expenseId: expense.id }, expense.storeId ? { storeIds: [expense.storeId] } : undefined);
@@ -101,8 +109,15 @@ export function registerExpenseRoutes(app: Express) {
     }
   });
 
-  app.put('/api/expenses/:id',authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.put('/api/expenses/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const existing = await prisma.expense.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
+        if (!existing || existing.storeId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Нет доступа к расходам другого магазина' });
+          return;
+        }
+      }
       const expense = await updateExpense(req.params.id, req.body ?? {}, req.user!.userId);
       RealtimeSyncGateway.broadcast('EXPENSE_UPDATED', { expenseId: expense.id });
       res.json(expense);
@@ -113,6 +128,13 @@ export function registerExpenseRoutes(app: Express) {
 
   app.delete('/api/expenses/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const existing = await prisma.expense.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
+        if (!existing || existing.storeId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Нет доступа к расходам другого магазина' });
+          return;
+        }
+      }
       const result = await deleteExpense(req.params.id, req.user!.userId);
       RealtimeSyncGateway.broadcast('EXPENSE_DELETED', { expenseId: req.params.id });
       res.json(result);

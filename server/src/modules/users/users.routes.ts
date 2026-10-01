@@ -3,14 +3,39 @@ import { authenticateJwt, requireRoles, type AuthenticatedRequest } from '../../
 import { UsersService } from './users.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 
+import { prisma } from '../../prisma/prisma.service';
+
 export function registerUserRoutes(app: Express) {
   // Readable by any authenticated role — every page needs to resolve colleague names
   // (sellers on receipts, assignees on tickets, etc.). Financial fields (salary, commission)
-  // are only included for ADMIN/PARTNER; SELLERs get name/role/store only. Mutations stay
-  // ADMIN-only below.
+  // are only included for ADMIN; SELLERs and PARTNERs get name/role/store only and are scoped
+  // to their own store. Mutations stay ADMIN-only below.
   app.get('/api/users', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
-      const isPrivileged = req.user!.role === 'ADMIN' || req.user!.role === 'PARTNER';
+      const isPrivileged = req.user!.role === 'ADMIN';
+      const isStoreScoped = req.user!.role === 'SELLER' || req.user!.role === 'PARTNER';
+      const storeId = req.user!.storeId;
+
+      if (isStoreScoped) {
+        const users = await prisma.user.findMany({
+          where: storeId ? { OR: [{ storeId }, { role: 'ADMIN' }] } : { role: 'ADMIN' },
+          select: {
+            id: true,
+            login: true,
+            name: true,
+            role: true,
+            active: true,
+            storeId: true,
+            store: { select: { id: true, name: true } },
+            createdAt: true,
+            updatedAt: true,
+          },
+          orderBy: { createdAt: 'asc' },
+        });
+        res.json(users);
+        return;
+      }
+
       res.json(await UsersService.list(isPrivileged));
     } catch (error) {
       next(error);

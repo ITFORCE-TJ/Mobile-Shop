@@ -41,14 +41,14 @@ export function requireRoles(...allowedRoles: Array<'ADMIN' | 'PARTNER' | 'SELLE
   };
 }
 
-// Store Scope Injector: Ensures SELLERs can only access their assigned store_id.
-// ADMIN and PARTNER oversee every store (owners/managers, not tied to one location).
+// Store Scope Injector: Ensures SELLERs and PARTNERs can only access their assigned storeId.
+// Only ADMIN oversees every store across the network.
 export function enforceStoreScope(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ message: 'Требуется авторизация' });
   }
 
-  if (req.user.role !== 'SELLER') {
+  if (req.user.role !== 'SELLER' && req.user.role !== 'PARTNER') {
     return next();
   }
 
@@ -60,15 +60,15 @@ export function enforceStoreScope(req: AuthenticatedRequest, res: Response, next
   next();
 }
 
-// Store Scope Injector for write bodies: Ensures SELLERs can only create records
+// Store Scope Injector for write bodies: Ensures SELLERs and PARTNERs can only create records
 // for their own assigned store, regardless of what storeId the client sent in the body.
-// ADMIN and PARTNER may write to any store.
+// Only ADMIN may write to any store.
 export function enforceBodyStoreScope(req: AuthenticatedRequest, res: Response, next: NextFunction) {
   if (!req.user) {
     return res.status(401).json({ message: 'Требуется авторизация' });
   }
 
-  if (req.user.role !== 'SELLER') {
+  if (req.user.role !== 'SELLER' && req.user.role !== 'PARTNER') {
     return next();
   }
 

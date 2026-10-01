@@ -49,9 +49,9 @@ export function refundOwnerProfit(
       if (!allocation || typeof allocation.ownerId !== 'string' ||
           typeof allocation.amountUsd !== 'number' || !Number.isFinite(allocation.amountUsd) ||
           seen.has(allocation.ownerId)) throw missingHistory();
-      if (!deltas.has(allocation.ownerId)) {
-        throw new Error('Партнёр из исходного распределения прибыли не найден. Восстановите его учётную запись перед возвратом.');
-      }
+      // A partner who has since moved to another store still gets back exactly what they were
+      // booked; the caller rejects the refund only if that owner record no longer exists.
+      if (!deltas.has(allocation.ownerId)) deltas.set(allocation.ownerId, 0);
       seen.add(allocation.ownerId);
       deltas.set(allocation.ownerId, roundMoney(D(deltas.get(allocation.ownerId)!).minus(allocation.amountUsd)));
     }

@@ -13,6 +13,10 @@ const notificationScope = (user: NonNullable<AuthenticatedRequest['user']>) => (
 export function registerNotificationRoutes(app: Express) {
   app.get('/api/notifications', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        res.json([]);
+        return;
+      }
       const user = req.user!;
       // Unbounded before: this ran on every login and every realtime resync, so it only got
       // slower as the business operated longer. Anything still unresolved stays visible no

@@ -64,12 +64,15 @@ export const TabletNavRail: React.FC = () => {
     'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen } = useUIStore();
+  const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
-  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
+  const isPartner = userRole === 'PARTNER';
+  const isAdmin = userRole === 'ADMIN';
+  const isStoreScoped = isSeller || isPartner;
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
@@ -85,6 +88,19 @@ export const TabletNavRail: React.FC = () => {
       ];
     }
 
+    if (isPartner) {
+      return [
+        { id: 'SALE' as PageId, label: 'POS', icon: ShoppingBag },
+        { id: 'SALES_HISTORY' as PageId, label: 'Продажи', icon: History },
+        { id: 'EXCHANGE' as PageId, label: 'Обмен', icon: RefreshCw },
+        { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
+        { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
+        { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+        { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
+        { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
+      ];
+    }
+
     if (isCentralCashMode) {
       const items: { id: PageId; label: string; icon: any }[] = [
         { id: 'FINANCE' as PageId, label: 'Финансы', icon: Landmark },
@@ -92,28 +108,16 @@ export const TabletNavRail: React.FC = () => {
         { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
         { id: 'BONUSES' as PageId, label: 'Бонусы', icon: Gift },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
-      ];
-      if (userRole === 'ADMIN') {
-        items.push({ id: 'PURCHASE' as PageId, label: 'Приход', icon: PlusCircle });
-      }
-      items.push(
+        { id: 'PURCHASE' as PageId, label: 'Приход', icon: PlusCircle },
         { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
-        { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench }
-      );
-      if (userRole === 'ADMIN') {
-        items.push({ id: 'SUPPLIERS' as PageId, label: 'Поставщ.', icon: Truck });
-      }
-      items.push({ id: 'OWNERS' as PageId, label: 'Партнеры', icon: Users });
-      if (userRole === 'ADMIN') {
-        items.push(
-          { id: 'EMPLOYEES' as PageId, label: 'Кадры', icon: UserCheck },
-          { id: 'AUDIT_LOG' as PageId, label: 'Аудит', icon: FileText }
-        );
-      }
-      items.push(
+        { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
+        { id: 'SUPPLIERS' as PageId, label: 'Поставщ.', icon: Truck },
+        { id: 'OWNERS' as PageId, label: 'Партнеры', icon: Users },
+        { id: 'EMPLOYEES' as PageId, label: 'Кадры', icon: UserCheck },
+        { id: 'AUDIT_LOG' as PageId, label: 'Аудит', icon: FileText },
         { id: 'NOTIFICATIONS' as PageId, label: 'Увед.', icon: Bell },
-        { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings }
-      );
+        { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
+      ];
       return items;
     }
 
@@ -132,16 +136,21 @@ export const TabletNavRail: React.FC = () => {
       { id: 'NOTIFICATIONS' as PageId, label: 'Увед.', icon: Bell },
       { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
     ];
-  }, [isSeller, isCentralCashMode]);
+  }, [isSeller, isPartner, isCentralCashMode]);
 
   return (
     <aside className="hidden md:flex lg:hidden flex-col w-20 border-r border-border bg-surface text-fg-muted select-none shrink-0 h-full sticky top-0 py-3 items-center justify-between z-30">
       <div className="flex flex-col items-center gap-1.5 w-full px-2">
-        {!isSeller ? (
+        {isAdmin ? (
           <button
             type="button"
             onClick={() => {
               if (!isCentralCashMode) {
+                triggerStoreTransition({
+                  storeName: 'Центральная касса (Главный офис)',
+                  storeId: 'all',
+                  isCentral: true,
+                });
                 setSelectedStoreId('all');
                 setActivePage('FINANCE');
                 navigate('/finance');
@@ -171,8 +180,8 @@ export const TabletNavRail: React.FC = () => {
             </span>
           </button>
         ) : (
-          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 text-accent font-extrabold text-xs flex items-center justify-center">
-            POS
+          <div className="w-10 h-10 rounded-lg bg-accent/10 border border-accent/30 text-accent font-extrabold text-[10px] flex items-center justify-center">
+            {isPartner ? 'ТОЧКА' : 'POS'}
           </div>
         )}
       </div>
@@ -181,7 +190,7 @@ export const TabletNavRail: React.FC = () => {
         {visibleItems.map((item) => {
           const Icon = item.icon;
           const routePath = PAGE_ROUTES[item.id] || '/sale';
-          const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isSeller ? 'SALE' : 'FINANCE'));
+          const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
 
           return (
             <button

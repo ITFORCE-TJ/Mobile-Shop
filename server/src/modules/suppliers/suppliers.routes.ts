@@ -62,7 +62,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.get('/api/supplier-bonuses', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.get('/api/supplier-bonuses', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       // Bonus campaigns are infrequent (nowhere near sale/device volume), so a generous
       // opt-in cap is enough here — no search/period infrastructure needed.
@@ -152,7 +152,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.post('/api/supplier-bonuses', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/supplier-bonuses', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const bonus = await SuppliersService.createBonus({ ...(req.body ?? {}), createdByUserId: req.user!.userId });
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -162,7 +162,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.put('/api/supplier-bonuses/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.put('/api/supplier-bonuses/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const bonus = await SuppliersService.updateBonus(req.params.id, { ...(req.body ?? {}), actorUserId: req.user!.userId });
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});
@@ -172,7 +172,7 @@ export function registerSupplierRoutes(app: Express) {
     }
   });
 
-  app.delete('/api/supplier-bonuses/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.delete('/api/supplier-bonuses/:id', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await SuppliersService.deleteBonus(req.params.id, req.user!.userId);
       RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {});

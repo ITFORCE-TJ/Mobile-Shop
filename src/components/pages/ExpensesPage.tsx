@@ -81,7 +81,10 @@ export const ExpensesPage: React.FC = () => {
   const { currentUser, expenses, fetchExpensesRange, stores, users, todayRate, createExpense, updateExpense, deleteExpense, payExpense, isInitialLoading, selectedStoreId: globalSelectedStoreId } = useAppFields('currentUser', 'expenses', 'fetchExpensesRange', 'stores', 'users', 'todayRate', 'createExpense', 'updateExpense', 'deleteExpense', 'payExpense', 'isInitialLoading', 'selectedStoreId');
 
   const isSeller = currentUser?.role === 'SELLER';
-  const canAddCategory = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  const isPartner = currentUser?.role === 'PARTNER';
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isStoreScoped = isSeller || isPartner;
+  const canAddCategory = isAdmin || isPartner;
 
   const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
   const centralCashStore = useMemo(() => {
@@ -106,14 +109,21 @@ export const ExpensesPage: React.FC = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [category, setCategory] = useState<ExpenseCategory>('RENT');
   const [amountTjs, setAmountTjs] = useState('');
-  const [storeId, setStoreId] = useState(retailStores[0]?.id || stores[0]?.id || '');
+  const [storeId, setStoreId] = useState(() => {
+    if (isStoreScoped) return currentUser?.storeId || '';
+    return retailStores[0]?.id || stores[0]?.id || '';
+  });
   const [selectedEmployeeId, setSelectedEmployeeId] = useState<string>('');
   const [description, setDescription] = useState('');
   const [paidFromCashRegister, setPaidFromCashRegister] = useState(true);
 
   useEffect(() => {
+    if (isStoreScoped) {
+      if (currentUser?.storeId) setStoreId(currentUser.storeId);
+      return;
+    }
     if (!storeId && retailStores.length > 0) setStoreId(retailStores[0].id);
-  }, [retailStores, storeId]);
+  }, [retailStores, storeId, isStoreScoped, currentUser?.storeId]);
 
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'YESTERDAY' | 'MONTH' | 'CUSTOM' | 'ALL'>('MONTH');
@@ -127,11 +137,17 @@ export const ExpensesPage: React.FC = () => {
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without
   // re-picking it; they can still switch it locally afterward.
-  const [selectedStoreFilter, setSelectedStoreFilter] = useState(
-    globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
-  );
+  const [selectedStoreFilter, setSelectedStoreFilter] = useState(() => {
+    if (isPartner) return currentUser?.storeId || '';
+    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') return globalSelectedStoreId;
+    return 'ALL';
+  });
 
   useEffect(() => {
+    if (isPartner) {
+      if (currentUser?.storeId) setSelectedStoreFilter(currentUser.storeId);
+      return;
+    }
     if (!isSeller) {
       if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
         setSelectedStoreFilter(globalSelectedStoreId);
@@ -139,7 +155,7 @@ export const ExpensesPage: React.FC = () => {
         setSelectedStoreFilter('ALL');
       }
     }
-  }, [globalSelectedStoreId, isSeller]);
+  }, [globalSelectedStoreId, isSeller, isPartner, currentUser?.storeId]);
 
   const todayStr = getBusinessDateKey();
   const thisMonthStr = todayStr.substring(0, 7);
@@ -204,7 +220,7 @@ export const ExpensesPage: React.FC = () => {
     setEditingExpense(exp);
     setEditCategory(exp.category);
     setEditAmountTjs((exp.amountTjs || 0).toFixed(2));
-    setEditStoreId(exp.storeId || stores[0]?.id || '');
+    setEditStoreId(isStoreScoped ? (currentUser?.storeId || '') : (exp.storeId || stores[0]?.id || ''));
     setEditDescription(exp.comment || exp.description || '');
   };
 
@@ -221,7 +237,7 @@ export const ExpensesPage: React.FC = () => {
       const res = await updateExpense(editingExpense.id, {
         category: editCategory,
         amountTjs: val,
-        storeId: editStoreId,
+        storeId: isStoreScoped ? (currentUser?.storeId || '') : editStoreId,
         comment: editDescription.trim(),
         description: editDescription.trim(),
       });
@@ -291,7 +307,7 @@ export const ExpensesPage: React.FC = () => {
       const res = await createExpense({
         category,
         amountTjs: val,
-        storeId: isSeller ? currentUser.storeId : storeId,
+        storeId: isStoreScoped ? (currentUser?.storeId || '') : storeId,
         sourceAccount: paidFromCashRegister ? 'Центральная касса' : undefined,
         description: description.trim(),
         paidFromCashRegister,
@@ -360,7 +376,7 @@ export const ExpensesPage: React.FC = () => {
 
   const filteredExpenses = useMemo(() => {
     return expenses.filter(e => {
-      if (isSeller && e.storeId !== currentUser.storeId) return false;
+      if (isStoreScoped && e.storeId !== currentUser?.storeId) return false;
       if (selectedStoreFilter !== 'ALL' && e.storeId !== selectedStoreFilter) return false;
 
       const expDateStr = getBusinessDateKey(new Date(e.date));
@@ -420,7 +436,7 @@ export const ExpensesPage: React.FC = () => {
     });
   }, [
     expenses,
-    isSeller,
+    isStoreScoped,
     currentUser,
     periodFilter,
     selectedStartDate,
@@ -460,7 +476,7 @@ export const ExpensesPage: React.FC = () => {
   const allCategoryOptions = [...STANDARD_CATEGORIES, ...customCategories];
 
   const isPeriodCustomized = periodFilter !== 'MONTH';
-  const isStoreFiltered = selectedStoreFilter !== 'ALL';
+  const isStoreFiltered = isAdmin && selectedStoreFilter !== 'ALL';
   const isCategoryFiltered = selectedCategoryTab !== 'ALL';
   const isStatusFiltered = statusFilter !== 'ALL';
   const isEmployeeFiltered = selectedEmployeeFilter !== 'ALL';
@@ -482,7 +498,7 @@ export const ExpensesPage: React.FC = () => {
     setPeriodFilter('MONTH');
     setSelectedStartDate('');
     setSelectedEndDate('');
-    setSelectedStoreFilter('ALL');
+    setSelectedStoreFilter(isPartner ? (currentUser?.storeId || '') : 'ALL');
     setSelectedCategoryTab('ALL');
     setStatusFilter('ALL');
     setSelectedEmployeeFilter('ALL');
@@ -761,7 +777,7 @@ export const ExpensesPage: React.FC = () => {
                   </button>
                 </span>
               )}
-              {selectedStoreFilter !== 'ALL' && (
+              {isAdmin && selectedStoreFilter !== 'ALL' && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
                   <StoreIcon className="w-3 h-3 text-accent" />
                   <span>{stores.find(s => s.id === selectedStoreFilter)?.name || selectedStoreFilter}</span>
@@ -830,7 +846,7 @@ export const ExpensesPage: React.FC = () => {
           <div className="px-3 pb-3 border-t border-border pt-3 bg-surface-raised/40">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               {/* Store Filter */}
-              {!isSeller && (
+              {isAdmin && (
                 <div>
                   <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Филиал / Точка:</label>
                   <Select
@@ -1042,14 +1058,16 @@ export const ExpensesPage: React.FC = () => {
               className="w-full h-11 rounded-lg bg-bg border border-border px-3 text-sm font-semibold text-danger focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent"
             />
           </FormField>
-          <FormField label="Точка / филиал">
-            <Select value={editStoreId} onChange={(e) => setEditStoreId(e.target.value)} className="w-full">
-              {/* All stores, not just retail ones: a payroll expense (salary/advance for
-                  an ADMIN/PARTNER) can legitimately be attributed to the main warehouse,
-                  and the dropdown must include the record's actual current store. */}
-              {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </Select>
-          </FormField>
+          {isAdmin && (
+            <FormField label="Точка / филиал">
+              <Select value={editStoreId} onChange={(e) => setEditStoreId(e.target.value)} className="w-full">
+                {/* All stores, not just retail ones: a payroll expense (salary/advance for
+                    an ADMIN/PARTNER) can legitimately be attributed to the main warehouse,
+                    and the dropdown must include the record's actual current store. */}
+                {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+              </Select>
+            </FormField>
+          )}
           <FormField label="Описание / примечание">
             <input
               type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)}
@@ -1116,7 +1134,7 @@ export const ExpensesPage: React.FC = () => {
             </div>
           </FormField>
 
-          {!isSeller && (
+          {isAdmin && (
             <FormField label="Магазин" required>
               <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full">
                 {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}

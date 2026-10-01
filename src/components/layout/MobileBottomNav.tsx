@@ -48,7 +48,9 @@ export const MobileBottomNav: React.FC = () => {
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
+  const isPartner = userRole === 'PARTNER';
+  const isAdmin = userRole === 'ADMIN';
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
 
@@ -202,7 +204,7 @@ export const MobileBottomNav: React.FC = () => {
       >
         <div className="relative">
           <Menu className="w-5 h-5" strokeWidth={drawerOpen ? 2.5 : 2} />
-          {unreadNotifs > 0 && (
+          {userRole !== 'PARTNER' && unreadNotifs > 0 && (
             <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
               {unreadNotifs}
             </span>

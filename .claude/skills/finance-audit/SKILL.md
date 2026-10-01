@@ -13,12 +13,12 @@ argument-hint: "[модуль, например sales | owners | reports, или
 ## Правила проекта (эталон для проверки)
 
 1. **Нет `number`-арифметики с деньгами.** Только `D()` из `server/src/common/decimal.ts`. Валидация через `requirePositiveMoney` / `requireNonNegativeMoney` / `roundMoney` из `common/money.ts`. На фронте используется `src/utils/money.ts`.
-2. **Курс:** запись вызывает `requireTodayRate(tx)` и **сохраняет** `exchangeRate` и USD-суммы в строке.
-3. **Отчёты в USD:** суммируется собственный `amountUsd` или `exchangeRate` каждой записи. Делить итог в TJS на сегодняшний курс **нельзя**.
-4. **Два слоя учёта синхронны:** денормализованные балансы (`Store.cashBalanceTjs`, `Supplier.totalDebtUsd`, `Owner.capitalBalanceUsd`, `LedgerEntry`) и `postTransaction()` (`FinancialTransaction` / `FinancialAccount`) обновляются **в одном** `prisma.$transaction`.
-5. **Прибыль владельцев:** `profitSharePercent` в сумме ровно 100%, остаток распределяется до цента (`allocateOwnerProfit`). Возврат и обмен **реверсируют** начисленную прибыль.
+2. **Курс:** запись вызывает `requireTodayRate(tx)` (только курс на сегодня, без подстановки старого) и **сохраняет** `exchangeRate` и USD-суммы в строке.
+3. **Отчёты в USD:** суммируется собственный `amountUsd` или `exchangeRate` каждой записи. Делить итог в TJS на сегодняшний курс **нельзя** (сегодняшний курс допустим только для показа TJS-эквивалента остатков).
+4. **Все деньги хранятся в USD, два слоя учёта синхронны:** кассы — `Store.cashBalanceUsd`; суммы в TJS переводятся по курсу дня операции. Денормализованные балансы (`Store.cashBalanceUsd`, `Supplier.totalDebtUsd`, `Owner.capitalBalanceUsd`, `LedgerEntry`) и `postTransaction(..., balanceCurrency: 'USD')` (`FinancialTransaction` / `FinancialAccount.balanceUsd`) обновляются **в одном** `prisma.$transaction`; касса = её финансовый счёт до цента. Журнал `LedgerEntry` только дополняется (сторно), не правится.
+5. **Прибыль владельцев:** доли берутся через `getOwnersForStore(storeId)` (в магазине с партнёром: админ = 100 − доля партнёра; без партнёра — админ 100%), остаток распределяется до цента (`allocateOwnerProfit`). Возврат и обмен **реверсируют** ровно сохранённые `ownerProfitAllocations`; курсовая разница возврата (`fxGainUsd`) тоже идёт партнёрам.
 6. **Атомарность и идемпотентность:** все денежные записи и `AuditLog` (с `financialDetails` через `moneyJson()`) находятся внутри одного callback `$transaction`.
-7. «Общий вложенный капитал» равен кассе главного склада и совпадает с суммарным капиталом партнёров.
+7. **Капитал:** `audit:owners` сходится (капитал = вложения + реинвест − изъятия по истории). Партнёры вкладывают в кассы своих магазинов, поэтому сравнивать капитал только с кассой главного склада нельзя — сверяйте суммарный капитал с суммой всех касс с учётом прибыли, склада и долга поставщикам.
 
 ## Как искать нарушения
 

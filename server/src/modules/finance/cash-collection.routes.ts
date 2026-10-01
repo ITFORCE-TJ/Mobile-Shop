@@ -5,7 +5,7 @@ import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import type { ReportPeriod } from '../reports/reports.service';
 
 export function registerCashCollectionRoutes(app: Express) {
-  app.get('/api/cash-collections', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.get('/api/cash-collections', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const period = req.query.period as ReportPeriod | undefined;
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;
@@ -17,7 +17,7 @@ export function registerCashCollectionRoutes(app: Express) {
     }
   });
 
-  app.post('/api/cash-collections', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/cash-collections', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { storeId, amountUsd, comment } = req.body ?? {};
       if (!storeId || amountUsd === undefined || amountUsd === null) {
@@ -39,7 +39,7 @@ export function registerCashCollectionRoutes(app: Express) {
     }
   });
 
-  app.post('/api/cash-collections/:id/cancel', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/cash-collections/:id/cancel', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const result = await CashCollectionService.cancel(req.params.id, req.user!.userId);
       RealtimeSyncGateway.broadcast('STORE_UPDATED', { storeId: result.storeId });

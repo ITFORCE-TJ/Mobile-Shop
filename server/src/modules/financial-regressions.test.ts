@@ -9,6 +9,7 @@ const db = vi.hoisted(() => {
     supplier: model(), supplierInvoice: model(), supplierPayment: model(), supplierPaymentAllocation: model(),
     store: model(), ledgerEntry: model(), auditLog: model(), sale: model(), owner: model(), device: model(), deviceTimelineEvent: model(),
     financialAccount: model(), financialTransaction: model(), financialCategory: model(), bonusPoolEntry: model(),
+    storeProfitShare: { ...model(), count: vi.fn() },
     $queryRaw: vi.fn(),
   };
 });
@@ -38,6 +39,8 @@ beforeEach(() => {
   db.financialTransaction.create.mockResolvedValue({ id: 'ftx-1' });
   db.$queryRaw.mockResolvedValue([{ issued: 1 }]);
   db.bonusPoolEntry.findMany.mockResolvedValue([]);
+  // No per-store partner shares: the company-wide owner split applies.
+  db.storeProfitShare.count.mockResolvedValue(0);
   db.owner.updateMany.mockResolvedValue({ count: 1 });
 });
 

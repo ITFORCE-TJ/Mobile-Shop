@@ -31,34 +31,40 @@ export async function replaceOwnerAllocations(tx: TransactionClient, previous: O
   }
 }
 
+/** The owner record of the admin, who receives every store's profit not assigned to partners. */
+export function findAdminOwner<T extends { storeId?: string | null; user?: { role?: string } | null }>(owners: T[]): T | undefined {
+  return owners.find((o) => o.user?.role === 'ADMIN') ?? owners.find((o) => !o.storeId && o.user?.role !== 'PARTNER');
+}
+
+/**
+ * Who shares a store's profit and in what proportion. Partner shares are stored per store
+ * (StoreProfitShare, set by the admin); the admin always gets the rest — and 100% of stores
+ * without partners, the main warehouse and operations not tied to a store. Without any store
+ * shares at all the legacy company-wide split on the owner rows applies.
+ */
 export async function getOwnersForStore(tx: TransactionClient, storeId?: string | null) {
-  const allOwners = await tx.owner.findMany({ include: { user: true } });
-  if (allOwners.length === 0) return [];
+  const owners = await tx.owner.findMany({ include: { user: { select: { role: true } } }, orderBy: { createdAt: 'asc' } });
+  if (owners.length === 0) return [];
 
-  const storeSpecificOwners = allOwners.filter((o) => Boolean(o.storeId));
-  if (!storeId || storeSpecificOwners.length === 0) {
-    const sum = allOwners.reduce((acc, o) => D(acc).plus(o.profitSharePercent), D(0));
-    if (sum.eq(100)) return allOwners;
-    const adminOwner = allOwners.find((o) => !o.storeId || o.user?.role === 'ADMIN');
-    return adminOwner ? [{ ...adminOwner, profitSharePercent: D(100) }] : allOwners;
+  const storeProfitShareCount = tx.storeProfitShare?.count ? await tx.storeProfitShare.count() : 0;
+  if (storeProfitShareCount === 0) {
+    const total = owners.reduce((sum, o) => D(sum).plus(o.profitSharePercent), D(0));
+    if (total.eq(100)) return owners;
+    const legacyAdmin = findAdminOwner(owners);
+    return legacyAdmin ? [{ ...legacyAdmin, profitSharePercent: D(100) }] : owners;
   }
 
-  const storePartner = allOwners.find((o) => o.storeId === storeId);
-  const adminOwner = allOwners.find((o) => !o.storeId || o.user?.role === 'ADMIN');
-
-  if (adminOwner && storePartner) {
-    const partnerShare = D(storePartner.profitSharePercent);
-    const adminShare = D(100).minus(partnerShare);
-    return [
-      { ...adminOwner, profitSharePercent: adminShare },
-      { ...storePartner, profitSharePercent: partnerShare },
-    ];
-  } else if (storePartner) {
-    return [{ ...storePartner, profitSharePercent: D(100) }];
-  } else if (adminOwner) {
-    return [{ ...adminOwner, profitSharePercent: D(100) }];
-  }
-  return allOwners;
+  const admin = findAdminOwner(owners);
+  if (!admin) throw new Error('Не найден владелец-администратор для распределения прибыли');
+  const shares = storeId && tx.storeProfitShare ? await tx.storeProfitShare.findMany({ where: { storeId }, orderBy: { ownerId: 'asc' } }) : [];
+  const partnerTotal = shares.reduce((sum, sh) => D(sum).plus(sh.sharePercent), D(0));
+  if (partnerTotal.gte(100)) throw new Error('Доли партнёров магазина должны быть меньше 100%: администратор всегда получает часть прибыли');
+  const partners = shares.map((sh) => {
+    const owner = owners.find((o) => o.id === sh.ownerId);
+    if (!owner) throw new Error('Партнёр из долей магазина не найден');
+    return { ...owner, profitSharePercent: D(sh.sharePercent) };
+  });
+  return [{ ...admin, profitSharePercent: D(100).minus(partnerTotal) }, ...partners.filter((p) => p.id !== admin.id)];
 }
 
 export async function currentOwnerAllocations(tx: TransactionClient, amountUsd: MoneyInput, storeId?: string | null) {

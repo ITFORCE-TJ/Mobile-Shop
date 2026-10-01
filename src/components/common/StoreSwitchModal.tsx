@@ -2,6 +2,7 @@ import React from 'react';
 import { formatMoney } from '../../utils/money';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
+import { useUIStore } from '../../stores/useUIStore';
 import { Store } from '../../types';
 import {
   Store as StoreIcon,
@@ -20,6 +21,7 @@ interface StoreSwitchModalProps {
 
 export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onClose }) => {
   const navigate = useNavigate();
+  const { triggerStoreTransition } = useUIStore();
   const {
     currentUser,
     stores,
@@ -52,6 +54,12 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
       soundEffects.playAddToCartSuccess();
     } catch (_) {}
 
+    triggerStoreTransition({
+      storeName: store.name,
+      storeId: store.id,
+      isCentral: false,
+    });
+
     setSelectedStoreId(store.id);
     setActivePage('SALE');
     navigate('/sale');
@@ -62,6 +70,12 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
     try {
       soundEffects.playAddToCartSuccess();
     } catch (_) {}
+
+    triggerStoreTransition({
+      storeName: 'Центральная касса (Главный офис)',
+      storeId: 'all',
+      isCentral: true,
+    });
 
     setSelectedStoreId('all');
     setActivePage('FINANCE');
@@ -137,17 +151,17 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
           {/* Dedicated Central Cash Card */}
           <div
             onClick={handleReturnToCentral}
-            className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+            className={`p-3.5 rounded-xl border transition-all duration-200 transform-gpu cursor-pointer flex items-center justify-between gap-3 group active:scale-[0.98] hover:scale-[1.01] ${
               isCentralCashActive
                 ? 'bg-accent/10 border-accent/50 shadow-xs'
-                : 'bg-surface hover:bg-accent/5 border-border hover:border-accent/40'
+                : 'bg-surface hover:bg-accent/5 border-border hover:border-accent/40 hover:shadow-xs'
             }`}
           >
             <div className="flex items-center gap-3 min-w-0">
               <div
-                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
                   isCentralCashActive
-                    ? 'bg-accent text-accent-fg shadow-xs'
+                    ? 'bg-accent text-accent-fg shadow-xs scale-105'
                     : 'bg-surface-raised border border-border text-accent group-hover:bg-accent group-hover:text-accent-fg'
                 }`}
               >
@@ -160,7 +174,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
                     Центральная касса (Главный офис)
                   </span>
                   {isCentralCashActive && (
-                    <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-accent/20 text-accent border border-accent/30">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-accent/20 text-accent border border-accent/30 animate-pulse">
                       Активна
                     </span>
                   )}
@@ -171,7 +185,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 text-xs font-semibold text-accent shrink-0 group-hover:translate-x-0.5 transition-transform">
+            <div className="flex items-center gap-1.5 text-xs font-semibold text-accent shrink-0 group-hover:translate-x-1 transition-transform">
               <span className="hidden sm:inline">
                 {isCentralCashActive ? 'Выбрана' : 'Перейти'}
               </span>
@@ -195,17 +209,17 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
               <div
                 key={store.id}
                 onClick={() => handleSelectStore(store)}
-                className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-center justify-between gap-3 group ${
+                className={`p-3.5 rounded-xl border transition-all duration-200 transform-gpu cursor-pointer flex items-center justify-between gap-3 group active:scale-[0.98] hover:scale-[1.01] ${
                   isSelected
                     ? 'bg-accent/10 border-accent/50 shadow-xs'
-                    : 'bg-surface hover:bg-surface-raised border-border hover:border-accent/40'
+                    : 'bg-surface hover:bg-surface-raised border-border hover:border-accent/40 hover:shadow-xs'
                 }`}
               >
                 <div className="flex items-center gap-3 min-w-0">
                   <div
-                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 ${
+                    className={`w-9 h-9 rounded-xl flex items-center justify-center shrink-0 transition-all ${
                       isSelected
-                        ? 'bg-accent text-accent-fg'
+                        ? 'bg-accent text-accent-fg shadow-xs scale-105'
                         : 'bg-surface-raised border border-border text-fg-muted group-hover:text-accent group-hover:border-accent/30'
                     }`}
                   >
@@ -216,7 +230,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold text-fg truncate">{store.name}</span>
                       {isSelected && (
-                        <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-accent/20 text-accent border border-accent/30">
+                        <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-accent/20 text-accent border border-accent/30 animate-pulse">
                           Активен
                         </span>
                       )}
@@ -235,7 +249,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1.5 text-xs font-semibold text-accent shrink-0 group-hover:translate-x-0.5 transition-transform">
+                <div className="flex items-center gap-1.5 text-xs font-semibold text-accent shrink-0 group-hover:translate-x-1 transition-transform">
                   <span className="hidden sm:inline">
                     {isSelected ? 'Выбран' : 'Перейти'}
                   </span>

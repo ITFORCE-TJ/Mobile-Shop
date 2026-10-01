@@ -99,6 +99,13 @@ export function registerRefundRoutes(app: Express) {
 
   app.post('/api/sales/:id/refund', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const saleRecord = await prisma.sale.findUnique({ where: { id: req.params.id }, select: { storeId: true } });
+        if (!saleRecord || saleRecord.storeId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Нет доступа к возврату товаров другого магазина' });
+          return;
+        }
+      }
       const { reason, refundAmountTjs, penaltyFeeTjs, paymentMethod } = req.body ?? {};
       if (!reason || refundAmountTjs == null || !paymentMethod) {
         res.status(400).json({ message: 'reason, refundAmountTjs и paymentMethod обязательны' });

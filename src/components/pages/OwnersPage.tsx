@@ -16,6 +16,8 @@ import {
   Briefcase,
   CreditCard,
   Coins,
+  Package,
+  Banknote,
   Loader2,
   CheckCircle2,
   AlertCircle,
@@ -59,26 +61,30 @@ export const OwnersPage: React.FC = () => {
   const {
     currentUser,
     owners,
+    storeProfitShares,
     users,
     stores,
+    devices,
     ownerTransactions,
     suppliers,
     todayRate,
     createOwnerTransaction,
-    updateOwnerProfitShares,
+    setStoreProfitShares,
     linkOwnerToUser,
     closeQuarterPeriod,
     initializeOwners
   } = useAppFields(
     'currentUser',
     'owners',
+    'storeProfitShares',
     'users',
     'stores',
+    'devices',
     'ownerTransactions',
     'suppliers',
     'todayRate',
     'createOwnerTransaction',
-    'updateOwnerProfitShares',
+    'setStoreProfitShares',
     'linkOwnerToUser',
     'closeQuarterPeriod',
     'initializeOwners'
@@ -168,10 +174,31 @@ export const OwnersPage: React.FC = () => {
     return stores.find(s => s.id === selectedSharesStoreId) || retailStores[0] || stores[0];
   }, [stores, selectedSharesStoreId, retailStores]);
 
+  // A partner's share is stored per store (the admin always gets the rest of that store's profit).
+  const sharePairOf = (storeId: string) => storeProfitShares.find(sh => sh.storeId === storeId);
+  const partnerForStore = (storeId: string) => {
+    const pair = sharePairOf(storeId);
+    return (pair && owners.find(o => o.id === pair.ownerId))
+      || owners.find(o => o.storeId === storeId && o.id !== adminOwner?.id);
+  };
+  const storeSplitLabel = (storeId: string) => {
+    const pair = sharePairOf(storeId);
+    const partner = pair ? owners.find(o => o.id === pair.ownerId) : undefined;
+    const adminShare = 100 - (pair?.sharePercent ?? 0);
+    return `${adminOwner?.name || 'Администратор'} ${adminShare}%${partner && pair ? ` / ${partner.name} ${pair.sharePercent}%` : ''}`;
+  };
+  const ownerShareLabel = (ownerId: string) => {
+    if (ownerId === adminOwner?.id) return 'остаток прибыли магазинов';
+    const pairs = storeProfitShares.filter(sh => sh.ownerId === ownerId);
+    if (!pairs.length) return 'доля не задана';
+    return pairs.map(sh => `${stores.find(st => st.id === sh.storeId)?.name || 'Магазин'} ${sh.sharePercent}%`).join(', ');
+  };
+
   const currentStorePartner = useMemo(() => {
     if (!currentSharesStore) return undefined;
-    return owners.find(o => o.storeId === currentSharesStore.id);
-  }, [owners, currentSharesStore]);
+    return partnerForStore(currentSharesStore.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [owners, currentSharesStore, storeProfitShares, adminOwner]);
 
   useEffect(() => {
     if (!selectedTxStoreId && stores.length > 0) {
@@ -332,6 +359,60 @@ export const OwnersPage: React.FC = () => {
   const totalSpentOnGoodsUsd = useMemo(() => (suppliers || []).reduce((acc, s) => acc + (s.totalPaidUsd ?? 0), 0), [suppliers]);
   const totalAvailableProfit = useMemo(() => owners.reduce((acc, o) => acc + (o.availableProfitUsd ?? 0), 0), [owners]);
 
+  // Devices currently in stock across warehouses and stores
+  const inStockDevices = useMemo(() => {
+    return (devices || []).filter(d =>
+      d.status === 'MAIN_WAREHOUSE' || d.status === 'STORE_STOCK' || d.status === 'IN_STOCK_AFTER_EXCHANGE'
+    );
+  }, [devices]);
+
+  // Total cost value of stock on hand (сколько на товар)
+  const totalStockCostUsd = useMemo(() => {
+    return inStockDevices.reduce((sum, d) => sum + (d.costBasisUsd ?? d.purchaseCostUsd ?? 0), 0);
+  }, [inStockDevices]);
+
+  // Total cash in all store registers and main warehouse (сколько налами лежит)
+  const totalCashInRegistersUsd = useMemo(() => {
+    return (stores || []).reduce((sum, s) => sum + (s.cashBalanceUsd || 0), 0);
+  }, [stores]);
+
+  // Total active assets (goods in stock + cash on hand)
+  const totalAssetsSumUsd = useMemo(() => {
+    return totalStockCostUsd + totalCashInRegistersUsd;
+  }, [totalStockCostUsd, totalCashInRegistersUsd]);
+
+  const stockRatioPercent = useMemo(() => {
+    if (totalAssetsSumUsd <= 0) return 0;
+    return Math.round((totalStockCostUsd / totalAssetsSumUsd) * 1000) / 10;
+  }, [totalStockCostUsd, totalAssetsSumUsd]);
+
+  const cashRatioPercent = useMemo(() => {
+    if (totalAssetsSumUsd <= 0) return 0;
+    return Math.round((totalCashInRegistersUsd / totalAssetsSumUsd) * 1000) / 10;
+  }, [totalCashInRegistersUsd, totalAssetsSumUsd]);
+
+  // Breakdown of stock and cash per store / warehouse
+  const storeAssetsBreakdown = useMemo(() => {
+    return stores.map(store => {
+      const storeDevs = inStockDevices.filter(d =>
+        d.locationId === store.id ||
+        (d as any).storeId === store.id ||
+        (store.isMainWarehouse && (d.status === 'MAIN_WAREHOUSE' || d.locationId === 'main_warehouse'))
+      );
+      const stockCost = storeDevs.reduce((sum, d) => sum + (d.costBasisUsd ?? d.purchaseCostUsd ?? 0), 0);
+      const cash = store.cashBalanceUsd || 0;
+      return {
+        id: store.id,
+        name: store.name,
+        isMainWarehouse: Boolean(store.isMainWarehouse),
+        stockCount: storeDevs.length,
+        stockCostUsd: stockCost,
+        cashUsd: cash,
+        totalUsd: stockCost + cash,
+      };
+    });
+  }, [stores, inStockDevices]);
+
   if (currentUser?.role === 'SELLER') {
     return (
       <div className="p-8 text-center text-fg-muted text-xs">
@@ -368,6 +449,12 @@ export const OwnersPage: React.FC = () => {
     );
   }
 
+  const loadStoreShareInputs = (storeId: string) => {
+    const partnerShare = sharePairOf(storeId)?.sharePercent ?? 0;
+    setPartnerShareVal(partnerShare.toString());
+    setAdminShareVal((Math.round((100 - partnerShare) * 10000) / 10000).toString());
+  };
+
   const openSharesModal = (targetStoreIdOrOwnerId?: string) => {
     let targetStore = retailStores[0] || stores[0];
     if (targetStoreIdOrOwnerId) {
@@ -375,42 +462,23 @@ export const OwnersPage: React.FC = () => {
       if (byStore) {
         targetStore = byStore;
       } else {
-        const byOwner = owners.find(o => o.id === targetStoreIdOrOwnerId);
-        if (byOwner?.storeId) {
-          const matched = stores.find(s => s.id === byOwner.storeId);
-          if (matched) targetStore = matched;
-        }
+        const ownerStoreId = storeProfitShares.find(sh => sh.ownerId === targetStoreIdOrOwnerId)?.storeId
+          || owners.find(o => o.id === targetStoreIdOrOwnerId)?.storeId;
+        const matched = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
+        if (matched) targetStore = matched;
       }
     }
+    if (targetStore?.isMainWarehouse) targetStore = retailStores[0] || targetStore;
     const storeId = targetStore?.id || '';
     setSelectedSharesStoreId(storeId);
-
-    const partner = owners.find(o => o.storeId === storeId);
-    if (partner) {
-      const pShare = partner.profitSharePercent ?? 40;
-      setPartnerShareVal(pShare.toString());
-      setAdminShareVal((Math.max(0, Math.min(100, Math.round((100 - pShare) * 10000) / 10000))).toString());
-    } else {
-      setPartnerShareVal('0');
-      setAdminShareVal('100');
-    }
-
-    setRebalanceOnSave(false);
+    loadStoreShareInputs(storeId);
     setStatusBanner(null);
     setIsSharesModalOpen(true);
   };
 
   const handleSharesStoreChange = (newStoreId: string) => {
     setSelectedSharesStoreId(newStoreId);
-    const partner = owners.find(o => o.storeId === newStoreId);
-    if (partner) {
-      const pShare = partner.profitSharePercent ?? 40;
-      setPartnerShareVal(pShare.toString());
-      setAdminShareVal((Math.max(0, Math.min(100, Math.round((100 - pShare) * 10000) / 10000))).toString());
-    } else {
-      setPartnerShareVal('0');
-      setAdminShareVal('100');
-    }
+    loadStoreShareInputs(newStoreId);
   };
 
   const handlePartnerShareInputChange = (valStr: string) => {
@@ -483,8 +551,8 @@ export const OwnersPage: React.FC = () => {
       return;
     }
 
-    if (adminNum < 0 || adminNum > 100 || partnerNum < 0 || partnerNum > 100) {
-      setStatusBanner({ tone: 'error', text: 'Доля должна быть в диапазоне от 0% до 100%' });
+    if (adminNum <= 0 || adminNum > 100 || partnerNum < 0 || partnerNum >= 100) {
+      setStatusBanner({ tone: 'error', text: 'Администратор всегда получает часть прибыли магазина: доля партнёра от 0% до 100% (не включая 100)' });
       return;
     }
 
@@ -499,24 +567,14 @@ export const OwnersPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const payload: { ownerId: string; sharePercent: number }[] = [
-        { ownerId: adminOwner.id, sharePercent: adminNum },
-        { ownerId: currentStorePartner.id, sharePercent: partnerNum },
-      ];
-
-      // Keep existing shares of all other store owners intact
-      owners.forEach(o => {
-        if (o.id !== adminOwner.id && o.id !== currentStorePartner.id) {
-          payload.push({ ownerId: o.id, sharePercent: o.profitSharePercent ?? 0 });
-        }
-      });
-
-      const res = await updateOwnerProfitShares(payload, undefined, rebalanceOnSave);
+      // Only this store's pair changes; other stores keep their own shares. A 0% share
+      // removes the partner from the store (the admin then gets all of its profit).
+      const res = await setStoreProfitShares(currentSharesStore!.id, [{ ownerId: currentStorePartner.id, sharePercent: partnerNum }]);
       if (res.success) {
         setIsSharesModalOpen(false);
         setStatusBanner({
           tone: 'success',
-          text: `Доли для магазина «${currentSharesStore?.name || ''}» успешно сохранены: ${adminOwner.name} ${adminNum}%, ${currentStorePartner.name} ${partnerNum}%${rebalanceOnSave ? ' (остатки прибыли пересчитаны)' : ''}`
+          text: `Доли магазина «${currentSharesStore?.name || ''}» сохранены: ${adminOwner.name} ${adminNum}%, ${currentStorePartner.name} ${partnerNum}%. Действуют для прибыли с этого момента.`
         });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка сохранения долей' });
@@ -692,8 +750,57 @@ export const OwnersPage: React.FC = () => {
                 ≈ {formatMoney(totalCapitalInvested * rate)} TJS
               </span>
             </div>
+            <div className="pt-2 border-t border-border flex items-center justify-between text-[10px] text-fg-subtle">
+              <span>Товар: <strong className="text-info font-bold">${formatMoney(totalStockCostUsd)}</strong></span>
+              <span>Нал: <strong className="text-accent font-bold">${formatMoney(totalCashInRegistersUsd)}</strong></span>
+            </div>
+          </div>
+
+          {/* Stock on Hand */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[11px] font-semibold text-fg-subtle uppercase">В товаре на складах</span>
+              <div className="w-7 h-7 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
+                <Package className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg sm:text-xl font-black text-info">
+                  ${formatMoney(totalStockCostUsd)}
+                </span>
+                <span className="text-xs font-bold text-fg-subtle">USD</span>
+              </div>
+              <span className="text-[11px] text-fg-muted block mt-0.5">
+                ≈ {formatMoney(totalStockCostUsd * rate)} TJS · {inStockDevices.length} шт
+              </span>
+            </div>
             <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              В товаре: <strong className="text-fg-muted">${formatMoney(totalSpentOnGoodsUsd)}</strong>
+              Себестоимость остатков ({stockRatioPercent}% активов)
+            </div>
+          </div>
+
+          {/* Cash in Registers */}
+          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
+            <div className="flex items-start justify-between gap-2">
+              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Наличными в кассах</span>
+              <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                <Banknote className="w-3.5 h-3.5" />
+              </div>
+            </div>
+            <div>
+              <div className="flex items-baseline gap-1">
+                <span className="text-lg sm:text-xl font-black text-accent">
+                  ${formatMoney(totalCashInRegistersUsd)}
+                </span>
+                <span className="text-xs font-bold text-fg-subtle">USD</span>
+              </div>
+              <span className="text-[11px] text-fg-muted block mt-0.5">
+                ≈ {formatMoney(totalCashInRegistersUsd * rate)} TJS · {stores.length} касс
+              </span>
+            </div>
+            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
+              Кассовый остаток ({cashRatioPercent}% активов)
             </div>
           </div>
 
@@ -720,58 +827,101 @@ export const OwnersPage: React.FC = () => {
               Доступный остаток прибыли
             </div>
           </div>
+        </div>
 
-          {/* Shares Ratio */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Соотношение долей</span>
-              <div className="w-7 h-7 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
-                <Percent className="w-3.5 h-3.5" />
-              </div>
+        {/* Section: Capital Allocation Breakdown (Goods vs Cash) */}
+        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-border">
+            <div className="flex items-center gap-2">
+              <PieChart className="w-4 h-4 text-accent" />
+              <h2 className="text-xs sm:text-sm font-bold text-fg uppercase tracking-wide">
+                Размещение вложений: сколько в товаре и сколько налами лежит
+              </h2>
             </div>
-            <div>
-              <div className="text-lg sm:text-xl font-black text-fg">
-                {displayOwners.map(o => `${o.profitSharePercent || 0}%`).join(' / ')}
-              </div>
-              <div className="h-1.5 w-full rounded-full bg-surface-raised overflow-hidden flex border border-border mt-2">
-                {displayOwners.map((o, idx) => {
-                  const colors = ['bg-accent', 'bg-info', 'bg-warning', 'bg-highlight'];
-                  return (
-                    <div
-                      key={o.id}
-                      className={`${colors[idx % colors.length]} h-full transition-all`}
-                      style={{ width: `${o.profitSharePercent || 0}%` }}
-                    />
-                  );
-                })}
-              </div>
-            </div>
-            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              {displayOwners.map(o => `${getOwnerDetails(o).name} (${o.profitSharePercent || 0}%)`).join(' · ')}
+            <div className="text-[11px] text-fg-subtle flex items-center gap-3">
+              <span>Всего активов: <strong className="text-fg font-bold">${formatMoney(totalAssetsSumUsd)}</strong></span>
+              <span>·</span>
+              <span>Курс: <strong className="text-accent font-semibold">{rate} TJS</strong></span>
             </div>
           </div>
 
-          {/* Exchange Rate */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Курс валюты</span>
-              <div className="w-7 h-7 rounded-lg bg-surface-raised border border-border flex items-center justify-center text-fg-muted shrink-0">
-                <Coins className="w-3.5 h-3.5" />
+          {/* Visual Split Ratio Progress Bar */}
+          <div className="space-y-2">
+            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-info" />
+                <span className="text-fg-muted font-medium">В товаре (склад):</span>
+                <span className="font-bold text-fg">${formatMoney(totalStockCostUsd)}</span>
+                <span className="text-fg-subtle text-[11px]">({stockRatioPercent}% · {inStockDevices.length} шт)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-accent" />
+                <span className="text-fg-muted font-medium">Наличными (кассы):</span>
+                <span className="font-bold text-fg">${formatMoney(totalCashInRegistersUsd)}</span>
+                <span className="text-fg-subtle text-[11px]">({cashRatioPercent}% · {stores.length} касс)</span>
               </div>
             </div>
-            <div>
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-lg sm:text-xl font-black text-fg">1 USD</span>
-                <span className="text-xs font-bold text-fg-subtle">=</span>
-                <span className="text-lg sm:text-xl font-black text-accent">{rate} TJS</span>
+
+            <div className="w-full h-3 bg-surface-raised rounded-full overflow-hidden flex border border-border">
+              <div
+                className="bg-info h-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, stockRatioPercent))}%` }}
+                title={`В товаре: $${formatMoney(totalStockCostUsd)} (${stockRatioPercent}%)`}
+              />
+              <div
+                className="bg-accent h-full transition-all duration-300"
+                style={{ width: `${Math.min(100, Math.max(0, cashRatioPercent))}%` }}
+                title={`Наличными: $${formatMoney(totalCashInRegistersUsd)} (${cashRatioPercent}%)`}
+              />
+            </div>
+          </div>
+
+          {/* Per-Store / Warehouse Breakdown Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+            {storeAssetsBreakdown.map(item => (
+              <div
+                key={item.id}
+                className="p-3 rounded-xl bg-surface-raised border border-border flex flex-col justify-between space-y-2 shadow-2xs"
+              >
+                <div className="flex items-center justify-between gap-1.5">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    {item.isMainWarehouse ? (
+                      <Warehouse className="w-3.5 h-3.5 text-warning shrink-0" />
+                    ) : (
+                      <Store className="w-3.5 h-3.5 text-accent shrink-0" />
+                    )}
+                    <span className="font-bold text-xs text-fg truncate">{item.name}</span>
+                  </div>
+                  {item.isMainWarehouse && (
+                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 shrink-0">
+                      Склад
+                    </span>
+                  )}
+                </div>
+
+                <div className="space-y-1 text-xs">
+                  <div className="flex items-center justify-between text-fg-muted">
+                    <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                      <Package className="w-3 h-3 text-info shrink-0" />
+                      Товар ({item.stockCount} шт):
+                    </span>
+                    <span className="font-bold text-fg">${formatMoney(item.stockCostUsd)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-fg-muted">
+                    <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                      <Banknote className="w-3 h-3 text-accent shrink-0" />
+                      Касса налом:
+                    </span>
+                    <span className="font-bold text-accent">${formatMoney(item.cashUsd)}</span>
+                  </div>
+                </div>
+
+                <div className="pt-1.5 border-t border-border flex items-center justify-between text-[11px]">
+                  <span className="text-fg-subtle font-medium">Итого на точке:</span>
+                  <span className="font-bold text-fg">${formatMoney(item.totalUsd)}</span>
+                </div>
               </div>
-              <span className="text-[11px] text-fg-subtle block mt-0.5">
-                Расчетный курс операций
-              </span>
-            </div>
-            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              Автоматический пересчет
-            </div>
+            ))}
           </div>
         </div>
 
@@ -796,7 +946,8 @@ export const OwnersPage: React.FC = () => {
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             {displayOwners.map((owner) => {
               const info = getOwnerDetails(owner);
-              const share = owner.profitSharePercent ?? 0;
+              const ownerPairs = storeProfitShares.filter(sh => sh.ownerId === owner.id);
+              const share = owner.id === adminOwner?.id ? null : ownerPairs.reduce((max, sh) => Math.max(max, sh.sharePercent), 0);
               const capUsd = owner.capitalBalanceUsd ?? 0;
               const capTjs = Math.round(capUsd * rate);
               const profitUsd = owner.availableProfitUsd ?? 0;
@@ -851,7 +1002,7 @@ export const OwnersPage: React.FC = () => {
                         className="px-2.5 py-1 rounded-xl bg-surface-raised hover:bg-surface border border-border text-accent font-bold text-xs transition-colors shrink-0 cursor-pointer"
                         title="Нажмите для настройки доли"
                       >
-                        {share}% доли
+                        {ownerShareLabel(owner.id)}
                       </button>
                     </div>
 
@@ -859,7 +1010,7 @@ export const OwnersPage: React.FC = () => {
                     <div className="w-full bg-surface-raised h-1.5 rounded-full overflow-hidden border border-border">
                       <div
                         className="bg-accent h-full rounded-full transition-all duration-300"
-                        style={{ width: `${Math.min(100, Math.max(0, share))}%` }}
+                        style={{ width: `${share === null ? 100 : Math.min(100, Math.max(0, share))}%` }}
                       />
                     </div>
 
@@ -891,6 +1042,30 @@ export const OwnersPage: React.FC = () => {
                         </span>
                       </div>
                     </div>
+
+                    {/* Attached store stock & cash assets snapshot */}
+                    {(() => {
+                      const targetStoreId = owner.storeId;
+                      const partnerStore = targetStoreId ? storeAssetsBreakdown.find(s => s.id === targetStoreId) : null;
+                      if (!partnerStore) return null;
+                      return (
+                        <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
+                          <span className="text-[11px] text-fg-subtle flex items-center gap-1 font-semibold truncate">
+                            <Store className="w-3.5 h-3.5 text-accent shrink-0" />
+                            {partnerStore.name}:
+                          </span>
+                          <div className="flex items-center gap-2 text-[11px] shrink-0">
+                            <span className="text-fg-muted">
+                              Товар: <strong className="text-info font-bold">${formatMoney(partnerStore.stockCostUsd)}</strong> ({partnerStore.stockCount} шт)
+                            </span>
+                            <span>·</span>
+                            <span className="text-fg-muted">
+                              Касса: <strong className="text-accent font-bold">${formatMoney(partnerStore.cashUsd)}</strong>
+                            </span>
+                          </div>
+                        </div>
+                      );
+                    })()}
 
                     {/* Lifetime Financial Metrics */}
                     <div className="p-2.5 rounded-xl bg-surface-raised/50 border border-border flex items-center justify-around text-center text-xs">
@@ -1495,15 +1670,11 @@ export const OwnersPage: React.FC = () => {
                 onChange={(e) => handleSharesStoreChange(e.target.value)}
                 className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer"
               >
-                {stores.map((s) => {
-                  const partner = owners.find(o => o.storeId === s.id);
-                  const partnerInfo = partner ? ` — Партнёр: ${partner.name} (${partner.profitSharePercent ?? 40}%)` : ' — (партнёр не назначен)';
-                  return (
-                    <option key={s.id} value={s.id}>
-                      {s.name} {s.isMainWarehouse ? '(Склад)' : ''}{partnerInfo}
-                    </option>
-                  );
-                })}
+                {retailStores.map((s) => (
+                  <option key={s.id} value={s.id}>
+                    {s.name} — {storeSplitLabel(s.id)}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -1642,7 +1813,7 @@ export const OwnersPage: React.FC = () => {
                         {isValid ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
                         <span>Сумма долей: {total}%</span>
                       </span>
-                      <span className="text-[11px]">{isValid ? '100% ✓ (Корректно)' : 'требуется ровно 100%'}</span>
+                      <span className="text-[11px]">{!isValid ? 'требуется ровно 100%' : aVal <= 0 ? 'у администратора должна остаться доля' : '100% ✓ (Корректно)'}</span>
                     </div>
                   );
                 })()}
@@ -1663,21 +1834,10 @@ export const OwnersPage: React.FC = () => {
               </div>
             )}
 
-            {/* Rebalance checkbox */}
-            <label className="flex items-start gap-2 p-2.5 rounded-xl border border-border bg-surface-raised cursor-pointer">
-              <input
-                type="checkbox"
-                checked={rebalanceOnSave}
-                onChange={(e) => setRebalanceOnSave(e.target.checked)}
-                className="rounded bg-surface border-border text-accent focus:ring-0 mt-0.5"
-              />
-              <span className="space-y-0.5">
-                <span className="block font-semibold text-fg text-[11px]">Пересчитать текущие остатки прибыли</span>
-                <span className="block text-[10px] text-fg-subtle leading-tight">
-                  Распределить накопленный остаток прибыли заново по новым долям.
-                </span>
-              </span>
-            </label>
+            <p className="text-[10px] text-fg-subtle leading-snug">
+              Новые доли применяются к прибыли с момента сохранения. Уже начисленная прибыль и возвраты
+              прошлых продаж считаются по долям, действовавшим в момент продажи.
+            </p>
 
             <div className="flex space-x-2 pt-1 border-t border-border">
               <button
@@ -1920,7 +2080,7 @@ export const OwnersPage: React.FC = () => {
                     {displayOwners.map((o) => (
                       <tr key={o.id} className="hover:bg-surface/50">
                         <td className="p-2.5 font-bold text-fg">{getOwnerDetails(o).name}</td>
-                        <td className="p-2.5 text-center text-fg-subtle">{o.profitSharePercent || 0}%</td>
+                        <td className="p-2.5 text-center text-fg-subtle">{ownerShareLabel(o.id)}</td>
                         <td className="p-2.5 text-right font-semibold text-fg">${formatMoney(o.totalAccruedProfitUsd)}</td>
                         <td className="p-2.5 text-right text-info">${formatMoney(o.totalPaidProfitUsd)}</td>
                         <td className="p-2.5 text-right text-accent">${formatMoney(o.totalReinvestedUsd)}</td>

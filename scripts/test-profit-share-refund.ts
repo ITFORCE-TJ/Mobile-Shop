@@ -277,6 +277,51 @@ try {
   assert.equal((await getPayrollSummary('user-ahmad', thisPayrollMonth)).paidAdvancesTjs, 0);
   console.log('PASS: advance paid today for 2000-01 is deducted from 2000-01 payroll, not this month');
 
+  // Store partners: Рустам owns 40% of Сиёма, the admin the rest (and 100% of stores
+  // without a partner, e.g. the main warehouse).
+  // Shares are stored per store–partner pair and only the admin sets them.
+  await assert.rejects(OwnersService.setStoreShares('store-siyoma', [{ ownerId: 'owner-partner', sharePercent: 100 }], 'user-admin'), /от 0 до 100%/);
+  await assert.rejects(OwnersService.setStoreShares('store-siyoma', [{ ownerId: 'owner-admin', sharePercent: 10 }], 'user-admin'), /Доля администратора не задаётся/);
+  await assert.rejects(OwnersService.setStoreShares('main-warehouse', [{ ownerId: 'owner-partner', sharePercent: 40 }], 'user-admin'), /главного склада/);
+  await OwnersService.setStoreShares('store-siyoma', [{ ownerId: 'owner-partner', sharePercent: 40 }], 'user-admin');
+  // The legacy company-wide editor can no longer overwrite the admin's share.
+  await assert.rejects(shares(70), /для каждого магазина/);
+  const pairSale = await makeSale();
+  const pairAllocations = (await prisma.auditLog.findFirstOrThrow({ where: { targetId: pairSale.sale.id, action: 'SALE' } })).financialDetails as { ownerProfitAllocations: { ownerId: string; amountUsd: number }[] };
+  assert.deepEqual(pairAllocations.ownerProfitAllocations, [{ ownerId: 'owner-admin', amountUsd: 60 }, { ownerId: 'owner-partner', amountUsd: 40 }]);
+  console.log('PASS: Сиёма pair 40% set by the admin splits a $100 profit 60/40; admin must keep a share; main warehouse stays 100% admin');
+  const { updateExpense, payExpense } = await import('../server/src/modules/expenses/expenses.service');
+
+  // Moving an expense to another store moves its charge to that store's owners, even with the
+  // same amount: $100 at Сиёма (−60/−40) moved to the main warehouse becomes −100/0.
+  const movedExpense = await createExpenseStandalone({ category: 'Аренда', amountTjs: D(1000), storeId: 'store-siyoma',
+    paidFromCashRegister: false, createdByUserId: 'user-admin' });
+  assert.deepEqual(await change(() => updateExpense(movedExpense.id, { storeId: 'main-warehouse' }, 'user-admin')),
+    [{ accrued: -40, available: -40 }, { accrued: 40, available: 40 }]);
+  console.log('PASS: expense moved from a partner store to the main warehouse moves the $40 charge back to the admin');
+
+  // An expense paid later leaves the register at the payment-day rate, and is re-stated to it:
+  // 1050 TJS registered at 10 ($105) and paid at 11 costs $95.45.
+  await OwnersService.investment('owner-admin', D(500), 'Главный счет', undefined, 'user-admin');
+  const laterExpense = await createExpenseStandalone({ category: 'Аренда', amountTjs: D(1050), storeId: 'main-warehouse',
+    paidFromCashRegister: false, createdByUserId: 'user-admin' });
+  const mainCash = async () => D((await prisma.store.findUniqueOrThrow({ where: { id: 'main-warehouse' } })).cashBalanceUsd);
+  await setTodayRate(11, 'user-admin');
+  const mainCashBefore = await mainCash();
+  assert.deepEqual(await change(() => payExpense(laterExpense.id, 'user-admin')),
+    [{ accrued: 9.55, available: 9.55 }, { accrued: 0, available: 0 }]);
+  assert.equal((await mainCash()).minus(mainCashBefore), -95.45);
+  assert.equal((await prisma.expense.findUniqueOrThrow({ where: { id: laterExpense.id } })).amountUsd, 95.45);
+  await setTodayRate(10, 'user-admin');
+  console.log('PASS: 1050 TJS expense paid at 11 takes $95.45 from the register and is re-stated from $105');
+
+  // A partner who moved to another store still gets their original share reversed on refund.
+  const partnerSale = await makeSale();
+  await OwnersService.setStoreShares('store-siyoma', [], 'user-admin');
+  assert.deepEqual(await change(() => refund(partnerSale.sale.id)), [{ accrued: -60, available: -60 }, { accrued: -40, available: -40 }]);
+  await prisma.storeProfitShare.deleteMany({});
+  console.log('PASS: refund after the partner was removed from the store reverses the original 60/40 split');
+
   const legacy = await makeSale();
   await prisma.auditLog.updateMany({ where: { targetId: legacy.sale.id, action: 'SALE' },
     data: { financialDetails: moneyJson({ recognizedProfitUsd: D(100) }) } });

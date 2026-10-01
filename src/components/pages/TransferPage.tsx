@@ -31,11 +31,12 @@ export const TransferPage: React.FC = () => {
   } = useAppFields('currentUser', 'stores', 'devices', 'transfers', 'createTransferRequest', 'approveTransfer', 'rejectTransfer', 'openScanner', 'selectedStoreId');
 
   const isSeller = currentUser?.role === 'SELLER';
+  const isPartner = currentUser?.role === 'PARTNER';
+  const isStoreScoped = isSeller || isPartner;
   const sellerStoreName = currentUser?.storeName || (currentUser?.storeId ? stores.find(s => s.id === currentUser.storeId)?.name : undefined) || 'Мой магазин';
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
-  // A seller's default flow is pulling stock IN from the main warehouse into their own store
-  // (the admin isn't always around to move it) — so that's the default, not sending stock out.
-  const defaultFromId = isSeller ? (mainWarehouse?.id || currentUser?.storeId || stores[0]?.id || '') : stores[0]?.id || '';
+  // Store-scoped users default to pulling stock IN from the main warehouse into their own store
+  const defaultFromId = isStoreScoped ? (mainWarehouse?.id || currentUser?.storeId || stores[0]?.id || '') : stores[0]?.id || '';
 
   const [fromLocationId, setFromLocationId] = useState<string>(defaultFromId);
   const [toLocationId, setToLocationId] = useState<string>('');
@@ -218,7 +219,7 @@ export const TransferPage: React.FC = () => {
 
   const visibleTransfers = useMemo(() => {
     return (transfers || []).filter((t: TransferRequest) => {
-      if (isSeller) {
+      if (isStoreScoped) {
         return t.fromLocationId === currentUser.storeId || t.toLocationId === currentUser.storeId;
       }
       if (historyFilterStoreId !== 'ALL') {
@@ -226,7 +227,7 @@ export const TransferPage: React.FC = () => {
       }
       return true;
     }).sort((a: TransferRequest, b: TransferRequest) => new Date(b.requestedAt || 0).getTime() - new Date(a.requestedAt || 0).getTime());
-  }, [transfers, isSeller, currentUser, historyFilterStoreId]);
+  }, [transfers, isStoreScoped, currentUser, historyFilterStoreId]);
 
   const pendingCount = visibleTransfers.filter((t: TransferRequest) => t.status === 'PENDING_APPROVAL').length;
 
@@ -288,14 +289,14 @@ export const TransferPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
                 <div>
                   <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Откуда (Отправитель):</label>
-                  {isSeller ? (
+                  {isStoreScoped ? (
                     mainWarehouse && mainWarehouse.id !== currentUser?.storeId ? (
                       <select
                         value={fromLocationId ?? ''}
                         onChange={(e) => handleSellerFromChange(e.target.value)}
                         className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
                       >
-                        <option value={mainWarehouse.id}>{mainWarehouse.name}</option>
+                        <option value={mainWarehouse.id}>{mainWarehouse.name} (Центр)</option>
                         <option value={currentUser?.storeId || ''}>{sellerStoreName}</option>
                       </select>
                     ) : (
@@ -335,11 +336,21 @@ export const TransferPage: React.FC = () => {
                     }`}
                   >
                     <option value="">-- Выберите получателя (куда) * --</option>
-                    {stores.filter(s => s.id !== fromLocationId).map(s => (
-                      <option key={s.id} value={s.id}>
-                        {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
-                      </option>
-                    ))}
+                    {isStoreScoped ? (
+                      stores
+                        .filter(s => s.id !== fromLocationId && (s.id === currentUser?.storeId || s.id === mainWarehouse?.id))
+                        .map(s => (
+                          <option key={s.id} value={s.id}>
+                            {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                          </option>
+                        ))
+                    ) : (
+                      stores.filter(s => s.id !== fromLocationId).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                        </option>
+                      ))
+                    )}
                   </select>
                   {!toLocationId && (
                     <p className="text-[10px] text-warning mt-1 flex items-center gap-1 font-medium">
@@ -472,7 +483,7 @@ export const TransferPage: React.FC = () => {
         ) : (
           /* HISTORY & APPROVALS TAB */
           <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-bg">
-            {!isSeller && (
+            {!isStoreScoped && (
               <div className="flex items-center justify-between pb-2 border-b border-border text-xs">
                 <span className="text-fg-muted font-medium">Фильтр по локации:</span>
                 <select

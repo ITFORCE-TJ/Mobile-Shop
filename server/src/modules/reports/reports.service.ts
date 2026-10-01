@@ -321,12 +321,9 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
 
   const mainWarehouseStockCostUsd = D(mainWarehouseStock.reduce((sum, d) => D(sum).plus((d.costBasisUsd ?? d.purchasePriceUsd ?? 0)), D(0)).toFixed(2));
   const mainWarehouseStockCostTjs = roundMoney(D(mainWarehouseStockCostUsd).mul(rate));
-  const mainWarehouseCashTjs = (mainWarehouseStore as any)?.cashBalanceTjs !== undefined && (mainWarehouseStore as any)?.cashBalanceTjs !== null
-    ? (mainWarehouseStore as any).cashBalanceTjs
-    : roundMoney(D(mainWarehouseStore?.cashBalanceUsd ?? 0).mul(rate));
-  const mainWarehouseCashUsd = mainWarehouseStore?.cashBalanceUsd !== undefined && mainWarehouseStore?.cashBalanceUsd !== null
-    ? D(mainWarehouseStore.cashBalanceUsd)
-    : D((D(mainWarehouseCashTjs).div(rate)).toFixed(2));
+  // Registers are kept in USD; the TJS figure only values them at today's rate for display.
+  const mainWarehouseCashUsd = D(mainWarehouseStore?.cashBalanceUsd ?? 0);
+  const mainWarehouseCashTjs = roundMoney(mainWarehouseCashUsd.mul(rate));
 
   const salesByStore = groupByStore(keptSalesAllStores);
   const profitEventsByStore = groupByStore(profitEvents);
@@ -412,9 +409,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         unitsSold: storeUnits,
         salesCount: storeSales.length,
         refundsCount: refundedSalesAllStores.filter((sale) => sale.storeId === store.id).length,
-        cashTjs: (store as any).cashBalanceTjs !== undefined && (store as any).cashBalanceTjs !== null
-          ? (store as any).cashBalanceTjs
-          : roundMoney(D(store.cashBalanceUsd || 0).mul(rate)),
+        cashUsd: D(store.cashBalanceUsd ?? 0),
+        cashTjs: roundMoney(D(store.cashBalanceUsd ?? 0).mul(rate)),
         stockCount: stock.length,
         stockCostUsd: D(stockCostUsd.toFixed(2)),
         stockCostTjs: roundMoney(D(stockCostUsd).mul(rate)),

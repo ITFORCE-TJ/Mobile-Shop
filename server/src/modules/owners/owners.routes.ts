@@ -6,7 +6,7 @@ import { OwnersService } from './owners.service';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 
 export function registerOwnerRoutes(app: Express) {
-  app.get('/api/owners', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (_req, res, next) => {
+  app.get('/api/owners', authenticateJwt, requireRoles('ADMIN'), async (_req, res, next) => {
     try {
       const count = await prisma.owner.count();
       if (count === 0) {
@@ -18,7 +18,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/link-user', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/:id/link-user', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const owner = await OwnersService.linkUser(req.params.id, req.body?.userId || null, req.user!.userId);
       RealtimeSyncGateway.broadcast('OWNER_TX', { ownerId: owner.id });
@@ -28,7 +28,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/init', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/init', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const owners = await OwnersService.initializeDefaultOwners(req.user?.userId);
       RealtimeSyncGateway.broadcast('OWNER_TX', {});
@@ -38,7 +38,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.get('/api/owner-transactions', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.get('/api/owner-transactions', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       // Owner-level capital moves (investment/withdrawal/payout/reinvest) are nowhere near
       // per-sale volume, so a generous opt-in cap is enough — existing callers that don't
@@ -51,7 +51,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/investment', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/:id/investment', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, destination, note } = req.body ?? {};
       const owner = await OwnersService.investment(req.params.id, amountUsd, destination ?? 'Главный счет', note, req.user!.userId);
@@ -62,7 +62,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/withdrawal', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/:id/withdrawal', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, source, note } = req.body ?? {};
       const owner = await OwnersService.withdrawal(req.params.id, amountUsd, source ?? 'Главный счет', note, req.user!.userId);
@@ -73,7 +73,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/payout', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/:id/payout', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, source, note } = req.body ?? {};
       const owner = await OwnersService.payout(req.params.id, amountUsd, source ?? 'Главный счет', note, req.user!.userId);
@@ -84,7 +84,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/reinvest', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/:id/reinvest', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { amountUsd, destination, note } = req.body ?? {};
       const owner = await OwnersService.reinvest(req.params.id, amountUsd, note, req.user!.userId, destination);
@@ -95,7 +95,31 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/profit-shares', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  // Partner shares per store: everyone with finance access can read them, only the admin sets them.
+  app.get('/api/store-profit-shares', authenticateJwt, requireRoles('ADMIN'), async (_req, res, next) => {
+    try {
+      res.json(await OwnersService.listStoreShares());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.put('/api/stores/:storeId/profit-shares', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
+    try {
+      const { shares } = req.body ?? {};
+      if (!Array.isArray(shares)) {
+        res.status(400).json({ message: 'Укажите доли партнёров магазина (shares)' });
+        return;
+      }
+      const result = await OwnersService.setStoreShares(req.params.storeId, shares, req.user!.userId);
+      RealtimeSyncGateway.broadcast('OWNER_TX', {});
+      res.json(result);
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.post('/api/owners/profit-shares', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { shares, rebalanceBalances } = req.body ?? {};
       if (!Array.isArray(shares) || D(shares.length).eq(0)) {
@@ -110,7 +134,7 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/quarter-close', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/owners/quarter-close', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const { quarterName, transferRemainingToCapital } = req.body ?? {};
       if (!quarterName) {

@@ -155,6 +155,7 @@ model Store {
   financialAccount      FinancialAccount?
   financialTransactions FinancialTransaction[]
   cashHandovers         CashHandover[]
+  profitShares          StoreProfitShare[]
 
   @@map("stores")
 }
@@ -780,8 +781,29 @@ model Owner {
 
   user         User?              @relation(fields: [userId], references: [id], onDelete: SetNull)
   transactions OwnerTransaction[]
+  storeShares  StoreProfitShare[]
 
   @@map("owners")
+}
+
+// A partner's share of one store's profit, set by the admin per store. The admin owner
+// always receives the rest of that store's profit (100% minus the store's partner shares),
+// and 100% of stores without partners. A partner can hold different shares in several stores.
+model StoreProfitShare {
+  id              String   @id @default(uuid())
+  storeId         String
+  ownerId         String
+  sharePercent    Decimal  @db.Decimal(7, 4)
+  updatedByUserId String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  store Store @relation(fields: [storeId], references: [id], onDelete: Cascade)
+  owner Owner @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@unique([storeId, ownerId])
+  @@index([storeId])
+  @@map("store_profit_shares")
 }
 
 model OwnerTransaction {

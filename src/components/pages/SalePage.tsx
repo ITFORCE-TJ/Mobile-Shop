@@ -30,6 +30,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { Dialog } from '../ui/Dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soundEffects } from '../../utils/sound';
+import { useUIStore } from '../../stores/useUIStore';
 
 interface CartItem {
   device: Device;
@@ -38,6 +39,7 @@ interface CartItem {
 
 export const SalePage: React.FC = () => {
   const navigate = useNavigate();
+  const { triggerStoreTransition } = useUIStore();
   const {
     currentUser,
     devices,
@@ -69,15 +71,17 @@ export const SalePage: React.FC = () => {
 
   const isRealAdmin = currentUser?.role === 'ADMIN';
   const isSeller = currentUser?.role === 'SELLER';
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
+  const isPartner = currentUser?.role === 'PARTNER';
+  const isStoreScoped = isSeller || isPartner;
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
   const [localSaleStoreId, setLocalSaleStoreId] = useState<string>('');
 
   const selectableStores = useMemo(() => {
     return stores.filter(s => !s.isMainWarehouse);
   }, [stores]);
 
-  const effectiveStoreId = isSeller
+  const effectiveStoreId = isStoreScoped
     ? currentUser?.storeId
     : (isCentralCashMode
         ? (selectableStores.some(s => s.id === localSaleStoreId) ? localSaleStoreId : (selectableStores[0]?.id || ''))
@@ -310,6 +314,12 @@ export const SalePage: React.FC = () => {
                   value={effectiveStoreId}
                   onChange={(e) => {
                     const newStoreId = e.target.value;
+                    const targetStore = selectableStores.find(s => s.id === newStoreId);
+                    triggerStoreTransition({
+                      storeName: targetStore?.name || 'Магазин',
+                      storeId: newStoreId,
+                      isCentral: false,
+                    });
                     setSelectedStoreId(newStoreId);
                     setLocalSaleStoreId(newStoreId);
                   }}
@@ -333,11 +343,16 @@ export const SalePage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => {
+                  triggerStoreTransition({
+                    storeName: 'Центральная касса (Главный офис)',
+                    storeId: 'all',
+                    isCentral: true,
+                  });
                   setSelectedStoreId('all');
                   setActivePage('FINANCE');
                   navigate('/finance');
                 }}
-                className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 text-xs font-semibold text-accent transition-colors shrink-0 shadow-2xs cursor-pointer"
+                className="inline-flex items-center gap-1 h-8 px-2 sm:px-2.5 rounded-lg bg-surface hover:bg-accent/10 border border-border hover:border-accent/30 text-xs font-semibold text-accent transition-colors shrink-0 shadow-2xs cursor-pointer active:scale-95"
                 title="Вернуться в режим Центральной кассы"
               >
                 <Landmark className="w-3.5 h-3.5" />
@@ -363,7 +378,10 @@ export const SalePage: React.FC = () => {
       </div>
 
       {/* Catalog */}
-      <div className={`flex-1 overflow-y-auto divide-y divide-border ${cart.length > 0 ? 'pb-32 md:pb-24' : 'pb-4'}`}>
+      <div
+        key={effectiveStoreId}
+        className={`animate-store-catalog flex-1 overflow-y-auto divide-y divide-border ${cart.length > 0 ? 'pb-32 md:pb-24' : 'pb-4'}`}
+      >
         {isInitialLoading ? (
           <LoadingState label="Загрузка каталога…" />
         ) : groupedVariants.length === 0 ? (

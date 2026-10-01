@@ -3,7 +3,7 @@ import { getBusinessDateKey } from '../utils/businessDate';
 import { hasCurrentDailyRate } from '../utils/dailyRatePrompt';
 import { refreshAfterMutation } from '../utils/refreshAfterMutation';
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef, useLayoutEffect } from 'react';
-import { User, Store, Device, Sale, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, RepairTicket, RepairStatus, TransferRequest, AuditLogEntry, DailyRate, PageId, PaymentMethod, ExpenseCategory, ThemeMode } from '../types';
+import { User, Store, Device, Sale, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, StoreProfitShare, RepairTicket, RepairStatus, TransferRequest, AuditLogEntry, DailyRate, PageId, PaymentMethod, ExpenseCategory, ThemeMode } from '../types';
 import { useSharedState } from '../hooks/useSharedState';
 import { createStore as createContextStore, useStore, type StoreApi } from 'zustand';
 import { useShallow } from 'zustand/react/shallow';
@@ -75,6 +75,8 @@ interface AppContextType {
   // reaches further back by an explicit period/month, or employeeId for one employee's
   fetchExpensesRange: (params: { period?: 'TODAY' | 'MONTH' | 'SPECIFIC_MONTH' | 'ALL'; month?: string; startDate?: string; endDate?: string; storeId?: string; employeeId?: string }) => Promise<Expense[]>;
   owners: Owner[];
+  /** Partner shares per store (the admin owner receives the rest of each store's profit). */
+  storeProfitShares: StoreProfitShare[];
   ownerTransactions: OwnerTransaction[];
   users: User[];
   // notifications moved to NotificationsContext/useNotifications() (performance audit,
@@ -260,6 +262,7 @@ interface AppContextType {
   }) => Promise<{ success: boolean; message?: string }>;
 
   initializeOwners: () => Promise<{ success: boolean; message?: string }>;
+  setStoreProfitShares: (storeId: string, shares: { ownerId: string; sharePercent: number }[]) => Promise<{ success: boolean; message?: string }>;
   updateOwnerProfitShares: (owner1Share: number | { ownerId: string; sharePercent: number }[], owner2Share?: number, rebalanceBalances?: boolean) => Promise<{ success: boolean; message?: string }>;
   linkOwnerToUser: (ownerId: string, userId: string | null) => Promise<{ success: boolean; message?: string }>;
 
@@ -297,7 +300,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [currentUser, setCurrentUserState] = useState<User | null>(authUser);
   const [todayRate, setTodayRateState] = useSharedState<DailyRate | null>(null);
   const [activePage, setActivePageState] = useState<PageId>('SALE');
-  const [selectedStoreId, setSelectedStoreIdState] = useState<string>(authUser?.role === 'SELLER' && authUser.storeId ? authUser.storeId : 'all');
+  const [selectedStoreId, setSelectedStoreIdState] = useState<string>((authUser?.role === 'SELLER' || authUser?.role === 'PARTNER') && authUser.storeId ? authUser.storeId : 'all');
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [stores, setStores] = useSharedState<Store[]>([]);
@@ -321,6 +324,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [bonuses, setBonuses] = useSharedState<SupplierBonus[]>([]);
   const [expenses, setExpenses] = useSharedState<Expense[]>([]);
   const [owners, setOwners] = useSharedState<Owner[]>([]);
+  const [storeProfitShares, setStoreProfitSharesState] = useSharedState<StoreProfitShare[]>([]);
   const [ownerTransactions, setOwnerTransactions] = useSharedState<OwnerTransaction[]>([]);
   const [auditLogs, setAuditLogs] = useSharedState<AuditLogEntry[]>([]);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
@@ -603,9 +607,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
   const fetchOwners = useCallback(() => coalesceFetch('owners', async () => {
     try {
-      const raw = await apiClient<any[]>('/owners');
+      const [raw, shares] = await Promise.all([
+        apiClient<any[]>('/owners'),
+        apiClient<any[]>('/store-profit-shares'),
+      ]);
       ownerNamesRef.current = new Map(raw.map((o) => [o.id, o.name]));
       setOwners(raw.map(mapOwner));
+      setStoreProfitSharesState(shares.map((sh) => ({ id: sh.id, storeId: sh.storeId, ownerId: sh.ownerId, sharePercent: Number(sh.sharePercent) })));
     } catch (error) {
       // SELLER role is forbidden from this endpoint — leave owners empty, not an error.
       if ((error as { status?: number }).status !== 403) throw error;
@@ -667,8 +675,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       // 2. Secondary modules batched to avoid connection pool saturation
       await Promise.all([fetchSales(), fetchTransfers(), fetchRepairs(), fetchExpenses()]);
-      await Promise.all([fetchSuppliers(), fetchInvoices(), fetchBonuses(), fetchOwners()]);
-      await Promise.all([fetchOwnerTransactions(), fetchNotifications(), fetchAuditLogs()]);
+      if (currentUser?.role === 'ADMIN') {
+        await Promise.all([fetchSuppliers(), fetchInvoices(), fetchBonuses(), fetchOwners()]);
+        await Promise.all([fetchOwnerTransactions(), fetchAuditLogs()]);
+      }
+      if (currentUser?.role !== 'PARTNER') {
+        await fetchNotifications();
+      }
     })();
     refetchInFlight.current = task;
     const clear = () => { if (refetchInFlight.current === task) refetchInFlight.current = null; };
@@ -849,7 +862,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       };
       useAuthStore.getState().setAuth(mappedUser, result.token);
       setCurrentUserState(mappedUser);
-      if (mappedUser.role === 'SELLER' && mappedUser.storeId) {
+      if ((mappedUser.role === 'SELLER' || mappedUser.role === 'PARTNER') && mappedUser.storeId) {
         setSelectedStoreIdState(mappedUser.storeId);
         setActivePageState('SALE');
       } else {
@@ -892,7 +905,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const setSelectedStoreId = (storeId: string) => {
-    if (currentUser?.role === 'SELLER') return;
+    if (currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER') return;
     setSelectedStoreIdState(storeId);
     useUIStore.getState().setSelectedStoreId(storeId);
   };
@@ -1402,6 +1415,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: false, message: 'Неизвестный тип операции' };
   };
 
+  const setStoreProfitShares: AppContextType['setStoreProfitShares'] = async (storeId, shares) => {
+    try {
+      await apiClient(`/stores/${storeId}/profit-shares`, { method: 'PUT', body: JSON.stringify({ shares }) });
+      markLocalMutation(['owners']);
+      await refreshAfterMutation([fetchOwners()]);
+      return { success: true };
+    } catch (err) {
+      return { success: false, message: errorMessage(err, 'Не удалось сохранить доли магазина') };
+    }
+  };
+
   const updateOwnerProfitShares: AppContextType['updateOwnerProfitShares'] = async (owner1ShareOrShares, owner2Share, rebalanceBalances = false) => {
     const shares = Array.isArray(owner1ShareOrShares)
       ? owner1ShareOrShares
@@ -1612,6 +1636,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         expenses,
         fetchExpensesRange,
         owners,
+        storeProfitShares,
         ownerTransactions,
         users,
         auditLogs,
@@ -1657,6 +1682,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         payExpense,
         initializeOwners,
         createOwnerTransaction,
+        setStoreProfitShares,
         updateOwnerProfitShares,
         linkOwnerToUser,
         createUser,

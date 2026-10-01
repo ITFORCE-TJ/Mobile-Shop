@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { decimal, moneyNumber, sumMoney } from '../../utils/money';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
@@ -18,7 +18,12 @@ import {
   ChevronDown,
   Users,
   Sparkles,
+  Briefcase,
+  Package,
+  Banknote,
+  ArrowRight,
 } from 'lucide-react';
+import { useUIStore } from '../../stores/useUIStore';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
 import { Badge } from '../ui/Badge';
@@ -153,9 +158,11 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     users,
     todayRate,
     selectedStoreId: globalSelectedStoreId,
+    setSelectedStoreId,
     owners,
+    storeProfitShares,
     setActivePage,
-  } = useAppFields('currentUser', 'stores', 'users', 'todayRate', 'selectedStoreId', 'owners', 'setActivePage');
+  } = useAppFields('currentUser', 'stores', 'users', 'todayRate', 'selectedStoreId', 'setSelectedStoreId', 'owners', 'storeProfitShares', 'setActivePage');
 
   const period = 'SPECIFIC_MONTH';
   // Summary view defaults to whichever store is active on the POS Terminal page (same
@@ -201,6 +208,60 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     if (linked?.role === 'PARTNER') return 'Партнёр';
     return 'Владелец';
   };
+
+  const adminOwner = useMemo(() => {
+    return owners.find(o => (!o.storeId && !users.find(u => u.id === o.userId)?.storeId) || users.find(u => u.id === o.userId)?.role === 'ADMIN') || owners[0];
+  }, [owners, users]);
+
+  const getOwnerStoreId = useCallback((owner: { storeId?: string | null; userId?: string | null }) => {
+    return owner.storeId || (owner.userId ? users.find((u) => u.id === owner.userId)?.storeId : null) || null;
+  }, [users]);
+
+  const getStorePartner = useCallback((storeId: string) => {
+    return owners.find((o) => {
+      const sId = getOwnerStoreId(o);
+      const role = o.userId ? users.find((u) => u.id === o.userId)?.role : undefined;
+      return sId === storeId && (role === 'PARTNER' || Boolean(sId));
+    });
+  }, [owners, users, getOwnerStoreId]);
+
+  // Partner shares are stored per store (set by the admin); the admin gets the rest of each
+  // store's profit — the same split the server books on every sale.
+  const getOwnerShareForStore = useCallback((owner: { id: string }, storeId: string) => {
+    const pairs = storeProfitShares.filter((sh) => sh.storeId === storeId);
+    if (owner.id === adminOwner?.id) {
+      return moneyNumber(decimal(100).minus(sumMoney(pairs.map((sh) => sh.sharePercent))));
+    }
+    return pairs.find((sh) => sh.ownerId === owner.id)?.sharePercent ?? 0;
+  }, [adminOwner, storeProfitShares]);
+
+  const getOwnerPeriodTotal = useCallback((owner: { id: string; storeId?: string | null; userId?: string | null; profitSharePercent?: number }, data: ReportsSummary) => {
+    const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
+    let periodUsd = 0;
+    let periodTjs = 0;
+
+    const breakdown = selectedStore === 'all' ? data.storeBreakdown : data.storeBreakdown.filter(s => s.storeId === selectedStore);
+
+    for (const store of breakdown) {
+      const share = getOwnerShareForStore(owner, store.storeId);
+      if (share > 0) {
+        periodUsd = moneyNumber(decimal(periodUsd).plus(decimal(store.netProfitUsd).mul(share).div(100)));
+        periodTjs = moneyNumber(decimal(periodTjs).plus(decimal(store.netProfitTjs).mul(share).div(100)));
+      }
+    }
+
+    if (selectedStore === 'all' && isOwnerAdmin && (data.periodCashBonusesUsd > 0 || data.mainWarehouseExpenses.expensesUsd > 0)) {
+      const centralUsd = data.periodCashBonusesUsd - data.mainWarehouseExpenses.expensesUsd;
+      const centralTjs = data.periodCashBonusesTjs - data.mainWarehouseExpenses.expensesTjs;
+      periodUsd += centralUsd;
+      periodTjs += centralTjs;
+    }
+
+    return {
+      periodAccruedUsd: +(periodUsd.toFixed(2)),
+      periodAccruedTjs: +(periodTjs.toFixed(2)),
+    };
+  }, [adminOwner, getOwnerShareForStore, selectedStore]);
 
   // Period/store filtering happens on the server (/api/reports/summary), so what crosses the
   // network scales with the selected month, not with the business's entire history.
@@ -272,6 +333,32 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
   }, [salesReportStoreId, month, namesLookup, revision]);
 
   const data: ReportsSummary = summary ?? EMPTY_SUMMARY;
+
+  const totalCapitalInvested = useMemo(() => owners.reduce((acc, o) => acc + (o.capitalBalanceUsd || 0), 0), [owners]);
+
+  const totalStockCostUsd = useMemo(() => {
+    if (selectedStore !== 'all') {
+      const current = data.storeBreakdown.find((s) => s.storeId === selectedStore);
+      return current?.stockCostUsd ?? 0;
+    }
+    return (data.mainWarehouseStockCostUsd || 0) + data.storeBreakdown.reduce((sum, s) => sum + (s.stockCostUsd || 0), 0);
+  }, [data, selectedStore]);
+
+  const totalStockCount = useMemo(() => {
+    if (selectedStore !== 'all') {
+      const current = data.storeBreakdown.find((s) => s.storeId === selectedStore);
+      return current?.stockCount ?? 0;
+    }
+    return (data.mainWarehouseStockCount || 0) + data.storeBreakdown.reduce((sum, s) => sum + (s.stockCount || 0), 0);
+  }, [data, selectedStore]);
+
+  const totalCashInRegistersUsd = useMemo(() => {
+    if (selectedStore !== 'all') {
+      const current = data.storeBreakdown.find((s) => s.storeId === selectedStore);
+      return current?.cashUsd ?? 0;
+    }
+    return (data.mainWarehouseCashUsd || 0) + data.storeBreakdown.reduce((sum, s) => sum + (s.cashUsd || 0), 0);
+  }, [data, selectedStore]);
 
   const salesReportTable = useMemo(() => {
     if (!salesReportStoreId || reportDataLoading) return null;
@@ -396,6 +483,45 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
               </div>
             </div>
 
+            {/* Capital & Active Assets Snapshot (Stock vs Cash) */}
+            <div className="p-3 sm:p-3.5 rounded-xl bg-surface border border-border shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                  <Briefcase className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Капитал учредителей</span>
+                  <span className="font-bold text-fg text-sm">{usd(totalCapitalInvested)}</span>
+                </div>
+              </div>
+
+              <div className="h-6 w-px bg-border hidden sm:block" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
+                  <Package className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">В товаре на складах</span>
+                  <span className="font-bold text-info text-sm">
+                    {usd(totalStockCostUsd)} <span className="font-normal text-fg-subtle text-xs">({totalStockCount} шт)</span>
+                  </span>
+                </div>
+              </div>
+
+              <div className="h-6 w-px bg-border hidden sm:block" />
+
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                  <Banknote className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Наличными в кассах</span>
+                  <span className="font-bold text-accent text-sm">{usd(totalCashInRegistersUsd)}</span>
+                </div>
+              </div>
+            </div>
+
             {/* How net profit is built — clearly distinguishing core operations from separate bonus income */}
             <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2.5 text-sm">
               <div className="flex items-center justify-between pb-1 border-b border-border">
@@ -478,9 +604,15 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   {sortedOwners.map((owner) => {
                     const roleLabel = getOwnerRoleLabel(owner);
-                    const share = owner.profitSharePercent || 0;
-                    const periodAccruedUsd = +(data.netProfitUsd * share / 100).toFixed(2);
-                    const periodAccruedTjs = +(data.netProfitTjs * share / 100).toFixed(2);
+                    const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
+                    const ownerStoreId = getOwnerStoreId(owner);
+                    const attachedStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
+                    // Shares are per store: list each store this owner shares in.
+                    const ownerStoreShares = storeProfitShares
+                      .filter((sh) => sh.ownerId === owner.id)
+                      .map((sh) => `${stores.find((st) => st.id === sh.storeId)?.name ?? 'Магазин'} ${sh.sharePercent}%`)
+                      .join(', ');
+                    const { periodAccruedUsd, periodAccruedTjs } = getOwnerPeriodTotal(owner, data);
                     return (
                       <div key={owner.id} className="p-3 rounded-xl bg-surface-raised border border-border flex flex-col justify-between gap-2.5 shadow-xs">
                         <div className="flex items-start justify-between gap-2">
@@ -494,7 +626,13 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                               <span className="text-xs font-bold text-fg-muted">{owner.name}</span>
                             </div>
                             <p className="text-[11px] text-fg-subtle mt-1">
-                              Доля прибыли: <strong className="text-fg-muted">{share}%</strong>
+                              {isOwnerAdmin ? (
+                                <>Остаток прибыли каждого магазина после долей партнёров</>
+                              ) : ownerStoreShares ? (
+                                <>Доля: <strong className="text-fg-muted">{ownerStoreShares}</strong></>
+                              ) : (
+                                <span className="text-warning font-semibold">Доля в магазинах не задана (0%)</span>
+                              )}
                             </p>
                           </div>
                           <div className="text-right shrink-0">
@@ -527,9 +665,14 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           <th className="py-2 px-3 text-right">Чистая прибыль</th>
                           {sortedOwners.map((owner) => {
                             const roleLabel = getOwnerRoleLabel(owner);
+                            const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
+                            const ownerStoreId = getOwnerStoreId(owner);
+                            const attachedStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
                             return (
                               <th key={owner.id} className="py-2 px-3 text-right">
-                                {roleLabel} ({owner.name}, {owner.profitSharePercent}%)
+                                {roleLabel} ({owner.name}
+                                {attachedStore ? `, ${attachedStore.name}` : isOwnerAdmin ? ', Все магазины' : ''}
+                                {isOwnerAdmin ? '' : `, ${storeProfitShares.filter((sh) => sh.ownerId === owner.id).map((sh) => `${sh.sharePercent}%`).join('/') || '0%'}`})
                               </th>
                             );
                           })}
@@ -546,11 +689,11 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                               {signedUsd(store.netProfitUsd)}
                             </td>
                             {sortedOwners.map((owner) => {
-                              const share = owner.profitSharePercent || 0;
-                              const ownerProfit = +(store.netProfitUsd * share / 100).toFixed(2);
+                              const share = getOwnerShareForStore(owner, store.storeId);
+                              const ownerProfit = share > 0 ? +(store.netProfitUsd * share / 100).toFixed(2) : 0;
                               return (
-                                <td key={owner.id} className={`py-2.5 px-3 text-right font-bold ${ownerProfit >= 0 ? 'text-fg-muted' : 'text-danger'}`}>
-                                  {signedUsd(ownerProfit)}
+                                <td key={owner.id} className={`py-2.5 px-3 text-right font-bold ${share === 0 ? 'text-fg-subtle/40 font-normal' : ownerProfit >= 0 ? 'text-fg-muted' : 'text-danger'}`}>
+                                  {share > 0 ? signedUsd(ownerProfit) : '—'}
                                 </td>
                               );
                             })}
@@ -570,11 +713,11 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                                 {signedUsd(centralNetUsd)}
                               </td>
                               {sortedOwners.map((owner) => {
-                                const share = owner.profitSharePercent || 0;
-                                const ownerCentral = +(centralNetUsd * share / 100).toFixed(2);
+                                const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
+                                const ownerCentral = isOwnerAdmin ? centralNetUsd : 0;
                                 return (
-                                  <td key={owner.id} className={`py-2.5 px-3 text-right font-semibold ${ownerCentral >= 0 ? 'text-fg-muted' : 'text-danger'}`}>
-                                    {signedUsd(ownerCentral)}
+                                  <td key={owner.id} className={`py-2.5 px-3 text-right font-semibold ${!isOwnerAdmin ? 'text-fg-subtle/40 font-normal' : ownerCentral >= 0 ? 'text-fg-muted' : 'text-danger'}`}>
+                                    {isOwnerAdmin ? signedUsd(ownerCentral) : '—'}
                                   </td>
                                 );
                               })}
@@ -589,11 +732,10 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                             {signedUsd(data.netProfitUsd)}
                           </td>
                           {sortedOwners.map((owner) => {
-                            const share = owner.profitSharePercent || 0;
-                            const totalOwner = +(data.netProfitUsd * share / 100).toFixed(2);
+                            const { periodAccruedUsd } = getOwnerPeriodTotal(owner, data);
                             return (
-                              <td key={owner.id} className={`py-2.5 px-3 text-right ${totalOwner >= 0 ? 'text-accent' : 'text-danger'}`}>
-                                {signedUsd(totalOwner)}
+                              <td key={owner.id} className={`py-2.5 px-3 text-right ${periodAccruedUsd >= 0 ? 'text-accent' : 'text-danger'}`}>
+                                {signedUsd(periodAccruedUsd)}
                               </td>
                             );
                           })}
@@ -671,27 +813,68 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
           </>
         ) : (
           <>
+            <div className="p-3 sm:p-3.5 rounded-xl bg-surface border border-border shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-accent shrink-0" />
+                <span className="text-fg-subtle">Общий капитал: <strong className="text-fg font-bold">{usd(totalCapitalInvested)}</strong></span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Package className="w-4 h-4 text-info shrink-0" />
+                <span className="text-fg-subtle">В товаре на складах: <strong className="text-info font-bold">{usd(totalStockCostUsd)}</strong> ({totalStockCount} шт)</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Banknote className="w-4 h-4 text-accent shrink-0" />
+                <span className="text-fg-subtle">Наличными в кассах: <strong className="text-accent font-bold">{usd(totalCashInRegistersUsd)}</strong></span>
+              </div>
+            </div>
+
             <p className="text-xs text-fg-subtle px-0.5">Отчёт за {periodLabel}. Нажмите на магазин, чтобы увидеть расходы по статьям и лучшие модели.</p>
 
             {data.storeBreakdown.map((store) => {
               const expanded = expandedStoreId === store.storeId;
               return (
-                <div key={store.storeId} className="rounded-xl bg-surface border border-border overflow-hidden">
-                  <button
-                    type="button"
-                    onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
-                    className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-surface-raised transition-colors"
-                  >
-                    <span className="flex items-center gap-2 min-w-0">
-                      <StoreIcon className="w-4 h-4 text-accent shrink-0" />
+                <div key={store.storeId} className="rounded-xl bg-surface border border-border overflow-hidden transition-all duration-200 hover:border-accent/40">
+                  <div className="w-full p-3.5 flex items-center justify-between gap-3 text-left hover:bg-surface-raised/60 transition-colors">
+                    <button
+                      type="button"
+                      onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
+                      className="flex items-center gap-2 min-w-0 flex-1 text-left cursor-pointer group"
+                    >
+                      <StoreIcon className="w-4 h-4 text-accent shrink-0 group-hover:scale-110 transition-transform" />
                       <span className="font-bold text-sm text-fg-muted truncate">{store.storeName}</span>
                       <Badge tone="neutral">{store.salesCount} чеков</Badge>
-                    </span>
-                    <span className="flex items-center gap-2 shrink-0">
+                    </button>
+                    <div className="flex items-center gap-2.5 shrink-0">
                       <span className={`text-sm font-bold ${store.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>{signedUsd(store.netProfitUsd)}</span>
-                      <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${expanded ? 'rotate-180' : ''}`} />
-                    </span>
-                  </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useUIStore.getState().triggerStoreTransition({
+                            storeName: store.storeName,
+                            storeId: store.storeId,
+                            isCentral: false,
+                          });
+                          setSelectedStoreId(store.storeId);
+                          setActivePage('SALE');
+                          navigate('/sale');
+                        }}
+                        className="hidden sm:inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-[11px] font-semibold text-fg transition-all active:scale-95 shadow-2xs cursor-pointer"
+                        title="Перейти в режим розничных продаж этой точки"
+                      >
+                        <StoreIcon className="w-3 h-3 text-accent" />
+                        <span>В кассу</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setExpandedStoreId(expanded ? null : store.storeId)}
+                        className="p-1 rounded-lg hover:bg-surface text-fg-subtle hover:text-fg transition-colors cursor-pointer"
+                        title={expanded ? 'Свернуть' : 'Развернуть'}
+                      >
+                        <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform duration-200 ${expanded ? 'rotate-180' : ''}`} />
+                      </button>
+                    </div>
+                  </div>
 
                   <div className="px-3.5 pb-3.5 grid grid-cols-2 sm:grid-cols-4 gap-x-3 gap-y-2.5">
                     <Metric label="Выручка" value={usd(store.revenueUsd)} sub={tjs(store.revenueTjs)} />
@@ -710,43 +893,57 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                   </div>
 
                   {/* Partner / Admin profit allocation for this store */}
-                  {sortedOwners.length > 0 && (
-                    <div className="px-3.5 pb-3.5 pt-2.5 border-t border-border/70">
-                      <div className="flex items-center justify-between gap-2 mb-2">
-                        <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
-                          <Users className="w-3.5 h-3.5 text-accent" />
-                          <span>Начислено партнерам с магазина ({store.storeName}):</span>
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                        {sortedOwners.map((owner) => {
-                          const roleLabel = getOwnerRoleLabel(owner);
-                          const share = owner.profitSharePercent || 0;
-                          const ownerStoreNet = +(store.netProfitUsd * share / 100).toFixed(2);
-                          const ownerStoreNetTjs = +(store.netProfitTjs * share / 100).toFixed(2);
-                          return (
-                            <div key={owner.id} className="p-2.5 rounded-lg bg-surface-raised border border-border flex items-center justify-between gap-2">
-                              <div className="flex items-center gap-1.5 min-w-0">
-                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${
-                                  roleLabel === 'Администратор' ? 'bg-accent/15 text-accent border-accent/30' : 'bg-info/15 text-info border-info/30'
-                                }`}>
-                                  {roleLabel}
+                  {(() => {
+                    const storePartner = getStorePartner(store.storeId);
+                    const storeOwners = storePartner && storePartner.id !== adminOwner?.id
+                      ? [adminOwner, storePartner].filter(Boolean)
+                      : [adminOwner].filter(Boolean);
+
+                    if (storeOwners.length === 0) return null;
+
+                    return (
+                      <div className="px-3.5 pb-3.5 pt-2.5 border-t border-border/70">
+                        <div className="flex items-center justify-between gap-2 mb-2">
+                          <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider flex items-center gap-1.5">
+                            <Users className="w-3.5 h-3.5 text-accent" />
+                            <span>Начислено партнерам с магазина ({store.storeName}):</span>
+                          </span>
+                          {!storePartner && (
+                            <span className="text-[10px] text-fg-subtle italic">
+                              Партнёр не прикреплен (100% администратору)
+                            </span>
+                          )}
+                        </div>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                          {storeOwners.map((owner) => {
+                            const roleLabel = getOwnerRoleLabel(owner);
+                            const share = getOwnerShareForStore(owner, store.storeId);
+                            const ownerStoreNet = +(store.netProfitUsd * share / 100).toFixed(2);
+                            const ownerStoreNetTjs = +(store.netProfitTjs * share / 100).toFixed(2);
+                            return (
+                              <div key={owner.id} className="p-2.5 rounded-lg bg-surface-raised border border-border flex items-center justify-between gap-2">
+                                <div className="flex items-center gap-1.5 min-w-0">
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${
+                                    roleLabel === 'Администратор' ? 'bg-accent/15 text-accent border-accent/30' : 'bg-info/15 text-info border-info/30'
+                                  }`}>
+                                    {roleLabel}
+                                  </span>
+                                  <span className="font-semibold text-fg-muted truncate">{owner.name}</span>
+                                  <span className="text-[10px] text-fg-subtle shrink-0">({share}%)</span>
+                                </div>
+                                <span className={`font-bold shrink-0 ${ownerStoreNet >= 0 ? 'text-accent' : 'text-danger'}`}>
+                                  {signedUsd(ownerStoreNet)} <span className="text-[10px] font-normal text-fg-subtle">({tjs(ownerStoreNetTjs)})</span>
                                 </span>
-                                <span className="font-semibold text-fg-muted truncate">{owner.name}</span>
-                                <span className="text-[10px] text-fg-subtle shrink-0">({share}%)</span>
                               </div>
-                              <span className={`font-bold shrink-0 ${ownerStoreNet >= 0 ? 'text-accent' : 'text-danger'}`}>
-                                {signedUsd(ownerStoreNet)} <span className="text-[10px] font-normal text-fg-subtle">({tjs(ownerStoreNetTjs)})</span>
-                              </span>
-                            </div>
-                          );
-                        })}
+                            );
+                          })}
+                        </div>
                       </div>
-                    </div>
-                  )}
+                    );
+                  })()}
 
                   {expanded && (
-                    <div className="px-3.5 pb-3.5 pt-3 border-t border-border grid sm:grid-cols-2 gap-4">
+                    <div className="animate-in fade-in-50 duration-200 px-3.5 pb-3.5 pt-3 border-t border-border grid sm:grid-cols-2 gap-4">
                       <div>
                         <h5 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider mb-2">Расходы по статьям</h5>
                         <ExpenseCategoryList data={store} />

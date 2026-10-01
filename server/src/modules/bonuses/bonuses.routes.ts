@@ -3,7 +3,7 @@ import { authenticateJwt, type AuthenticatedRequest, requireRoles } from '../../
 import { BonusesService } from './bonuses.service';
 
 export function registerBonusRoutes(app: Express) {
-  app.get('/api/bonuses/pool', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (_req: AuthenticatedRequest, res, next) => {
+  app.get('/api/bonuses/pool', authenticateJwt, requireRoles('ADMIN'), async (_req: AuthenticatedRequest, res, next) => {
     try {
       const result = await BonusesService.getBonusPool();
       res.json(result);

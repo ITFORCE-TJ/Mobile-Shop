@@ -92,34 +92,47 @@ export const RepairPage: React.FC = () => {
     return () => { cancelled = true; };
   }, [selectedMonth, fetchRepairsRange, dataRefreshRevision]);
 
+  const isSeller = currentUser?.role === 'SELLER';
+  const isPartner = currentUser?.role === 'PARTNER';
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isStoreScoped = isSeller || isPartner;
+
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without
   // re-picking it; they can still switch it locally afterward.
-  const [selectedStoreId, setSelectedStoreId] = useState<string>(
-    globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
-  );
+  const [selectedStoreId, setSelectedStoreId] = useState<string>(() => {
+    if (isStoreScoped) return currentUser?.storeId || '';
+    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') return globalSelectedStoreId;
+    return 'ALL';
+  });
 
   useEffect(() => {
-    if (currentUser?.role !== 'SELLER') {
-      if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
-        setSelectedStoreId(globalSelectedStoreId);
-      } else {
-        setSelectedStoreId('ALL');
-      }
+    if (isStoreScoped) {
+      if (currentUser?.storeId) setSelectedStoreId(currentUser.storeId);
+      return;
     }
-  }, [globalSelectedStoreId, currentUser?.role]);
-  // Defaults to the store active on the POS Terminal page, same as the list-view
-  // filter above; falls back to the first retail store once stores load if no
-  // store is active there (e.g. "все магазины" was selected).
-  const [createTicketStoreId, setCreateTicketStoreId] = useState<string>(
-    globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : ''
-  );
+    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
+      setSelectedStoreId(globalSelectedStoreId);
+    } else {
+      setSelectedStoreId('ALL');
+    }
+  }, [globalSelectedStoreId, isStoreScoped, currentUser?.storeId]);
+
+  const [createTicketStoreId, setCreateTicketStoreId] = useState<string>(() => {
+    if (isStoreScoped) return currentUser?.storeId || '';
+    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') return globalSelectedStoreId;
+    return '';
+  });
 
   useEffect(() => {
+    if (isStoreScoped) {
+      if (currentUser?.storeId) setCreateTicketStoreId(currentUser.storeId);
+      return;
+    }
     if (!createTicketStoreId && retailStores.length > 0) {
       setCreateTicketStoreId(retailStores[0].id);
     }
-  }, [retailStores, createTicketStoreId]);
+  }, [retailStores, createTicketStoreId, isStoreScoped, currentUser?.storeId]);
 
   useEffect(() => {
     if (navigatedState?.item) {
@@ -141,10 +154,9 @@ export const RepairPage: React.FC = () => {
     }
   }, [navigatedState]);
 
-  const isSeller = currentUser?.role === 'SELLER';
-  const effectiveStoreId = isSeller ? (currentUser?.storeId || retailStores[0]?.id || '') : selectedStoreId;
+  const effectiveStoreId = isStoreScoped ? (currentUser?.storeId || retailStores[0]?.id || '') : selectedStoreId;
 
-  const currentStoreName = isSeller
+  const currentStoreName = isStoreScoped
     ? (currentUser?.storeName || retailStores.find(s => s.id === currentUser?.storeId)?.name || 'Магазин')
     : (selectedStoreId === 'ALL' ? 'Все филиалы (Розница)' : retailStores.find(s => s.id === selectedStoreId)?.name || 'Магазин');
 
@@ -322,7 +334,7 @@ export const RepairPage: React.FC = () => {
         comment: masterNote.trim() || undefined,
         estimatedCostTjs: parseFloat(estimatedCostTjs) || 0,
         prepaymentTjs: parseFloat(prepaymentTjs) || 0,
-        storeId: isSeller ? undefined : createTicketStoreId || undefined,
+        storeId: isStoreScoped ? (currentUser?.storeId || undefined) : (createTicketStoreId || undefined),
       });
 
       if (res.success) {
@@ -452,7 +464,7 @@ export const RepairPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 text-xs overflow-x-auto scrollbar-none">
-            {!isSeller && (
+            {!isStoreScoped && (
               <select
                 value={selectedStoreId}
                 onChange={(e) => setSelectedStoreId(e.target.value)}
@@ -528,7 +540,7 @@ export const RepairPage: React.FC = () => {
                 </div>
               </div>
 
-              {!isSeller && (
+              {!isStoreScoped && (
                 <div className="min-w-0">
                   <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold truncate">Торговая точка (Где было продано / принято) *</label>
                   <select

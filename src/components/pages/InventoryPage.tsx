@@ -205,6 +205,7 @@ export const InventoryPage: React.FC = () => {
   const isSeller = currentUser?.role === 'SELLER';
   const isAdmin = currentUser?.role === 'ADMIN';
   const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  const isStoreScoped = currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER';
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isEditingRam, setIsEditingRam] = useState(false);
@@ -241,20 +242,24 @@ export const InventoryPage: React.FC = () => {
 
   // Selected location: 'ALL' (all goods in company), or specific store/warehouse ID
   const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
-    if (isSeller) return currentUser?.storeId || '';
+    if (isStoreScoped) return currentUser?.storeId || '';
     if (globalSelectedStoreId && globalSelectedStoreId !== 'all') return globalSelectedStoreId;
     return 'ALL';
   });
 
   useEffect(() => {
-    if (!isSeller) {
-      if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
-        setSelectedLocationId(globalSelectedStoreId);
-      } else {
-        setSelectedLocationId('ALL');
+    if (isStoreScoped) {
+      if (currentUser?.storeId) {
+        setSelectedLocationId(currentUser.storeId);
       }
+      return;
     }
-  }, [globalSelectedStoreId, isSeller]);
+    if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
+      setSelectedLocationId(globalSelectedStoreId);
+    } else {
+      setSelectedLocationId('ALL');
+    }
+  }, [globalSelectedStoreId, isStoreScoped, currentUser?.storeId]);
 
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
@@ -297,7 +302,7 @@ export const InventoryPage: React.FC = () => {
   const devicesInActiveLocation = useMemo(() => {
     return devices.filter(d => {
       if (!IN_STOCK_STATUSES.includes(d.status)) return false;
-      if (isSeller) {
+      if (isStoreScoped) {
         return d.locationId === currentUser?.storeId;
       }
       if (selectedLocationId === 'ALL') {
@@ -661,7 +666,7 @@ export const InventoryPage: React.FC = () => {
       <div className="p-2.5 sm:p-3 border-b border-border bg-surface space-y-2.5 shrink-0 shadow-xs">
         {/* Row 1: Mode Switcher (List of Goods vs Locations List) & Location Selector */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {!isSeller ? (
+          {!isStoreScoped ? (
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-surface-raised border border-border shrink-0">
               <button
                 type="button"
@@ -709,7 +714,7 @@ export const InventoryPage: React.FC = () => {
           )}
 
           {/* Quick Location Dropdown Filter */}
-          {!isSeller && (
+          {!isStoreScoped && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-fg-subtle font-medium hidden sm:inline">Локация:</span>
               <select

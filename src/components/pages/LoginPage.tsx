@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Navigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useUIStore } from '../../stores/useUIStore';
 import { Smartphone, Lock, User, AlertCircle, ArrowRight, Eye, EyeOff, ShieldCheck, Loader2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -14,7 +15,7 @@ export const LoginPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
 
   if (currentUser) {
-    return <Navigate to={currentUser.role === 'SELLER' ? "/sale" : "/finance"} replace />;
+    return <Navigate to={currentUser.role === 'ADMIN' ? "/finance" : "/sale"} replace />;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -30,7 +31,11 @@ export const LoginPage: React.FC = () => {
       const res = await login(loginInput.trim(), passwordInput);
       if (res.success) {
         const user = useAuthStore.getState().currentUser;
-        if (user?.role === 'SELLER') {
+        if (user?.role === 'SELLER' || user?.role === 'PARTNER') {
+          useUIStore.getState().triggerStoreTransition({
+            storeName: user.storeName || 'Магазин',
+            isCentral: false,
+          });
           navigate('/sale');
         } else {
           navigate('/finance');

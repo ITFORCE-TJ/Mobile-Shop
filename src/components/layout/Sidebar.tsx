@@ -76,12 +76,15 @@ export const Sidebar: React.FC = () => {
     'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen } = useUIStore();
+  const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
-  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
+  const isPartner = userRole === 'PARTNER';
+  const isAdmin = userRole === 'ADMIN';
+  const isStoreScoped = isSeller || isPartner;
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const sellerStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
@@ -109,27 +112,57 @@ export const Sidebar: React.FC = () => {
       ];
     }
 
-    // 2. Admin/Partner in Central Cash Mode (Default upon login)
+    // 2. Partner: works on site in their own store, has more privileges than seller
+    // Strictly hidden: Finance, Bonuses, Owners/Capital, Employees, Audit Log, Notifications
+    if (isPartner) {
+      return [
+        {
+          title: `Точка: ${sellerStoreName || 'Магазин'}`,
+          items: [
+            { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['PARTNER'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['PARTNER'] },
+            { id: 'EXCHANGE', label: 'Обмен Trade-In', icon: RefreshCw, roles: ['PARTNER'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['PARTNER'] },
+          ],
+        },
+        {
+          title: 'Склад',
+          items: [
+            { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['PARTNER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['PARTNER'] },
+          ],
+        },
+        {
+          title: 'Управление точкой',
+          items: [
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['PARTNER'] },
+            { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['PARTNER'] },
+          ],
+        },
+      ];
+    }
+
+    // 3. Admin in Central Cash Mode (Default upon login)
     // Only Central Cash & Management items appear — Retail POS is hidden to keep focus clean.
     if (isCentralCashMode) {
       return [
         {
           title: 'Центральная касса и финансы',
           items: [
-            { id: 'FINANCE', label: 'Финансы и отчёты', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'BONUSES', label: 'Бонусы поставщиков', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'FINANCE', label: 'Финансы и отчёты', icon: Landmark, roles: ['ADMIN'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN'] },
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['ADMIN'] },
+            { id: 'BONUSES', label: 'Бонусы поставщиков', icon: Gift, roles: ['ADMIN'] },
+            { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN'] },
           ],
         },
         {
           title: 'Склад и логистика',
           items: [
-            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN'] },
             { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN'] },
-            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
             { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN'] },
           ],
         },
@@ -138,33 +171,33 @@ export const Sidebar: React.FC = () => {
           items: [
             { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
             { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
-            { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN'] },
+            { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['ADMIN'] },
           ],
         },
       ];
     }
 
-    // 3. Admin/Partner in Retail Store Mode (selling at chosen store)
+    // 4. Admin in Retail Store Mode (selling at chosen store)
     return [
       {
         title: `Продажи: ${activeRetailStore?.name || 'Магазин'}`,
         items: [
-          { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'EXCHANGE', label: 'Обмен Trade-In', icon: RefreshCw, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN'] },
+          { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN'] },
+          { id: 'EXCHANGE', label: 'Обмен Trade-In', icon: RefreshCw, roles: ['ADMIN'] },
+          { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
+          { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN'] },
+          { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
         ],
       },
       {
         title: 'Финансы (Центральный офис)',
         items: [
-          { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN'] },
+          { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN'] },
+          { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN'] },
+          { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN'] },
         ],
       },
       {
@@ -172,12 +205,12 @@ export const Sidebar: React.FC = () => {
         items: [
           { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
           { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
-          { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN'] },
+          { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['ADMIN'] },
         ],
       },
     ];
-  }, [isSeller, isCentralCashMode, activeRetailStore]);
+  }, [isSeller, isPartner, isCentralCashMode, activeRetailStore, sellerStoreName]);
 
   return (
     <aside className="hidden lg:flex flex-col w-60 border-r border-border bg-surface text-fg-muted select-none shrink-0 h-full sticky top-0">
@@ -188,16 +221,21 @@ export const Sidebar: React.FC = () => {
           <span className="font-bold text-xs tracking-wider text-fg-muted uppercase">Mobile Shop</span>
         </div>
         <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-raised border border-border text-fg-subtle font-semibold">
-          {isSeller ? 'POS' : isCentralCashMode ? 'ОФИС' : 'РОЗНИЦА'}
+          {isSeller ? 'POS' : isPartner ? 'ПАРТНЕР' : isCentralCashMode ? 'ОФИС' : 'РОЗНИЦА'}
         </span>
       </div>
 
       {/* Admin Mode Switcher Card */}
-      {!isSeller && (
+      {isAdmin && (
         <div className="px-2.5 pt-2.5 pb-1 shrink-0">
           {isCentralCashMode ? (
             <div
               onClick={() => {
+                triggerStoreTransition({
+                  storeName: 'Центральная касса (Главный офис)',
+                  storeId: 'all',
+                  isCentral: true,
+                });
                 setSelectedStoreId('all');
                 setActivePage('FINANCE');
                 navigate('/finance');
@@ -252,11 +290,16 @@ export const Sidebar: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    triggerStoreTransition({
+                      storeName: 'Центральная касса (Главный офис)',
+                      storeId: 'all',
+                      isCentral: true,
+                    });
                     setSelectedStoreId('all');
                     setActivePage('FINANCE');
                     navigate('/finance');
                   }}
-                  className="px-2 py-1 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-[10px] font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer"
+                  className="px-2 py-1 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-[10px] font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
                   title="Автоматически перейти в Центральную кассу"
                 >
                   <Landmark className="w-3 h-3" />
@@ -283,7 +326,7 @@ export const Sidebar: React.FC = () => {
                 {visibleItems.map(item => {
                   const Icon = item.icon;
                   const routePath = PAGE_ROUTES[item.id] || '/sale';
-                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isSeller ? 'SALE' : 'FINANCE'));
+                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
                   const isNotif = item.id === 'NOTIFICATIONS';
 
                   return (

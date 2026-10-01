@@ -73,8 +73,11 @@ describe('refund owner allocations', () => {
     expect(() => refundOwnerProfit([sale(100), { action: 'EXCHANGE', financialDetails: {} }], currentOwners, 0)).toThrow('исходное распределение');
   });
 
-  it('rejects missing partners and corrupt duplicate allocations', () => {
-    expect(() => refundOwnerProfit([sale(100)], [{ id: 'a', profitSharePercent: 100 }], 0)).toThrow('не найден');
+  it('reverses a partner no longer in the store and rejects corrupt duplicate allocations', () => {
+    // 'b' has since left the store: it still gets back exactly its original 40.
+    expect(refundOwnerProfit([sale(100)], [{ id: 'a', profitSharePercent: 100 }], 0)).toEqual([
+      { ownerId: 'a', amountUsd: -60 }, { ownerId: 'b', amountUsd: -40 },
+    ]);
     expect(() => refundOwnerProfit([{ action: 'SALE', financialDetails: { ownerProfitAllocations: [
       { ownerId: 'a', amountUsd: 60 }, { ownerId: 'a', amountUsd: 40 },
     ] } }], currentOwners, 0)).toThrow('исходное распределение');

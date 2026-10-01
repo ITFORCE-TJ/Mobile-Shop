@@ -432,3 +432,113 @@ select optgroup,
   .work-screen :is(input, select, textarea),
   .dialog-panel :is(input, select, textarea) { font-size: max(16px, 1em); }
 }
+
+/* =========================================================================
+   STORE TRANSITION ANIMATIONS
+   Silky, snappy animations when switching stores or entering store POS
+   ========================================================================= */
+@keyframes storeOverlayIn {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes storeOverlayOut {
+  0% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes storeCardIn {
+  0% {
+    opacity: 0;
+    transform: scale(0.92) translateY(14px);
+  }
+  65% {
+    transform: scale(1.02) translateY(-2px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+@keyframes storeCardOut {
+  0% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(0.96) translateY(-10px);
+  }
+}
+
+@keyframes storeProgressBar {
+  0% {
+    width: 0%;
+  }
+  50% {
+    width: 72%;
+  }
+  100% {
+    width: 100%;
+  }
+}
+
+@keyframes storePulseGlow {
+  0%, 100% {
+    transform: scale(1);
+    box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4);
+  }
+  50% {
+    transform: scale(1.06);
+    box-shadow: 0 0 0 14px rgba(22, 163, 74, 0);
+  }
+}
+
+@keyframes storeCatalogFadeIn {
+  0% {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-store-overlay-in {
+  animation: storeOverlayIn 0.22s ease-out forwards;
+}
+
+.animate-store-overlay-out {
+  animation: storeOverlayOut 0.18s ease-in forwards;
+}
+
+.animate-store-card-in {
+  animation: storeCardIn 0.32s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+.animate-store-card-out {
+  animation: storeCardOut 0.18s cubic-bezier(0.4, 0, 1, 1) forwards;
+}
+
+.animate-store-progress {
+  animation: storeProgressBar 0.44s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+}
+
+.animate-store-pulse-glow {
+  animation: storePulseGlow 1.4s ease-in-out infinite;
+}
+
+.animate-store-catalog {
+  animation: storeCatalogFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+

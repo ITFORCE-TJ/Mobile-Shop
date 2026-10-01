@@ -88,14 +88,16 @@ export const SalesHistoryPage: React.FC = () => {
   const [isSubmittingRefund, setIsSubmittingRefund] = useState(false);
 
   const isSeller = currentUser?.role === 'SELLER';
-  const isAdmin = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
+  const isPartner = currentUser?.role === 'PARTNER';
+  const isStoreScoped = isSeller || isPartner;
+  const isAdmin = currentUser?.role === 'ADMIN';
 
-  // If seller: bound to their own store.
-  // If admin/partner: defaults to whichever retail store is currently selected globally,
+  // If store-scoped (seller/partner): bound to their own store.
+  // If admin: defaults to whichever retail store is currently selected globally,
   // or 'ALL' if in Central Cash mode (selectedStoreId === 'all' or empty).
   // Changing this filter is purely local to SalesHistoryPage and does NOT switch the global store.
   const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>(() => {
-    if (isSeller) return currentUser?.storeId || '';
+    if (isStoreScoped) return currentUser?.storeId || '';
     if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
       return globalSelectedStoreId;
     }
@@ -103,22 +105,24 @@ export const SalesHistoryPage: React.FC = () => {
   });
 
   useEffect(() => {
-    if (!isSeller) {
+    if (!isStoreScoped) {
       if (globalSelectedStoreId && globalSelectedStoreId !== 'all') {
         setSelectedStoreFilter(globalSelectedStoreId);
       } else {
         setSelectedStoreFilter('ALL');
       }
+    } else {
+      setSelectedStoreFilter(currentUser?.storeId || '');
     }
-  }, [globalSelectedStoreId, isSeller]);
+  }, [globalSelectedStoreId, isStoreScoped, currentUser?.storeId]);
 
-  const effectiveFetchStoreId = isSeller
+  const effectiveFetchStoreId = isStoreScoped
     ? (currentUser?.storeId || undefined)
     : (selectedStoreFilter === 'ALL' ? undefined : selectedStoreFilter);
 
   // Fetch sales for the selected period & store filter (or all stores if selectedStoreFilter === 'ALL')
   useEffect(() => {
-    if (isSeller && !effectiveFetchStoreId) return;
+    if (isStoreScoped && !effectiveFetchStoreId) return;
     let cancelled = false;
     fetchSalesRange({
       period: periodFilter === 'TODAY' ? 'TODAY' : undefined,
@@ -127,16 +131,16 @@ export const SalesHistoryPage: React.FC = () => {
       storeId: effectiveFetchStoreId,
     }).catch((e) => { if (!cancelled) console.error('Failed to load sales for period', e); });
     return () => { cancelled = true; };
-  }, [periodFilter, selectedStartDate, selectedEndDate, effectiveFetchStoreId, fetchSalesRange, dataRefreshRevision, isSeller]);
+  }, [periodFilter, selectedStartDate, selectedEndDate, effectiveFetchStoreId, fetchSalesRange, dataRefreshRevision, isStoreScoped]);
 
   const filteredSales = useMemo(() => {
-    if (isSeller && !currentUser?.storeId) return [];
+    if (isStoreScoped && !currentUser?.storeId) return [];
     const todayStr = getBusinessDateKey();
 
     return sales.filter((sale) => {
       if (currentUser?.role === 'SELLER' && sale.sellerId !== currentUser.id) return false;
-      if (isSeller && currentUser?.storeId && sale.storeId !== currentUser.storeId) return false;
-      if (!isSeller && selectedStoreFilter !== 'ALL' && sale.storeId !== selectedStoreFilter) return false;
+      if (isStoreScoped && currentUser?.storeId && sale.storeId !== currentUser.storeId) return false;
+      if (!isStoreScoped && selectedStoreFilter !== 'ALL' && sale.storeId !== selectedStoreFilter) return false;
 
       const saleDateStr = getBusinessDateKey(new Date(sale.date));
       if (periodFilter === 'TODAY' && saleDateStr !== todayStr) return false;

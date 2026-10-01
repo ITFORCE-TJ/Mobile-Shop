@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { formatMoney } from '../../utils/money';
 import { Navigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
@@ -60,6 +60,12 @@ export const SettingsPage: React.FC = () => {
   const [isSubmittingAdjust, setIsSubmittingAdjust] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const visibleStores = useMemo<StoreType[]>(() => {
+    if (isAdmin) return stores;
+    return stores.filter((s: StoreType) => !s.isMainWarehouse && s.id === currentUser?.storeId);
+  }, [stores, isAdmin, currentUser?.storeId]);
 
   if (currentUser?.role === 'SELLER') {
     return <Navigate to="/sale" replace />;
@@ -321,22 +327,26 @@ export const SettingsPage: React.FC = () => {
             <div className="flex items-center justify-between pb-2 border-b border-border">
               <div className="flex items-center space-x-2">
                 <Store className="w-4 h-4 text-accent" />
-                <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">ЦЕНТРАЛЬНЫЙ СКЛАД И МАГАЗИНЫ ({stores.length})</h4>
+                <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">
+                  {isAdmin ? `ЦЕНТРАЛЬНЫЙ СКЛАД И МАГАЗИНЫ (${visibleStores.length})` : `МОЙ МАГАЗИН`}
+                </h4>
               </div>
 
-              <div className="flex items-center space-x-2">
-                <button
-                  onClick={() => setIsAddStoreOpen(true)}
-                  className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-xs font-bold text-accent flex items-center space-x-1.5 border border-border transition-colors cursor-pointer"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>ДОБАВИТЬ МАГАЗИН</span>
-                </button>
-              </div>
+              {isAdmin && (
+                <div className="flex items-center space-x-2">
+                  <button
+                    onClick={() => setIsAddStoreOpen(true)}
+                    className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-xs font-bold text-accent flex items-center space-x-1.5 border border-border transition-colors cursor-pointer"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>ДОБАВИТЬ МАГАЗИН</span>
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
-              {stores.map((s) => (
+              {visibleStores.map((s: StoreType) => (
                 <div key={s.id} className="p-3.5 rounded-xl bg-surface-raised border border-border flex flex-col justify-between space-y-2.5">
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 pr-2">
@@ -361,38 +371,46 @@ export const SettingsPage: React.FC = () => {
                           <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-accent/15 text-accent border border-accent/30 uppercase mr-1">
                             МАГАЗИН
                           </span>
-                          {stores.length > 2 && (
-                            <button
-                              onClick={() => handleOpenMerge(s)}
-                              className="p-1.5 rounded-lg hover:bg-accent/10 text-fg-subtle hover:text-accent transition-colors"
-                              title="Объединить с другим магазином"
-                            >
-                              <Combine className="w-3.5 h-3.5" />
-                            </button>
+                          {isAdmin && (
+                            <>
+                              {visibleStores.length > 2 && (
+                                <button
+                                  onClick={() => handleOpenMerge(s)}
+                                  className="p-1.5 rounded-lg hover:bg-accent/10 text-fg-subtle hover:text-accent transition-colors"
+                                  title="Объединить с другим магазином"
+                                >
+                                  <Combine className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteStore(s)}
+                                className="p-1.5 rounded-lg hover:bg-danger/10 text-fg-subtle hover:text-danger transition-colors"
+                                title="Удалить магазин"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
+                        </>
+                      )}
+                      {(isAdmin || (currentUser?.role === 'PARTNER' && s.id === currentUser?.storeId)) && (
+                        <>
                           <button
-                            onClick={() => handleDeleteStore(s)}
-                            className="p-1.5 rounded-lg hover:bg-danger/10 text-fg-subtle hover:text-danger transition-colors"
-                            title="Удалить магазин"
+                            onClick={() => handleOpenAdjust(s)}
+                            className="p-1.5 rounded-lg hover:bg-warning/10 text-fg-subtle hover:text-warning transition-colors"
+                            title="Скорректировать кассу"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Wrench className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => handleEditStore(s)}
+                            className="p-1.5 rounded-lg hover:bg-surface text-fg-subtle hover:text-fg-muted transition-colors"
+                            title="Редактировать филиал"
+                          >
+                            <Pencil className="w-3.5 h-3.5" />
                           </button>
                         </>
                       )}
-                      <button
-                        onClick={() => handleOpenAdjust(s)}
-                        className="p-1.5 rounded-lg hover:bg-warning/10 text-fg-subtle hover:text-warning transition-colors"
-                        title="Скорректировать кассу"
-                      >
-                        <Wrench className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => handleEditStore(s)}
-                        className="p-1.5 rounded-lg hover:bg-surface text-fg-subtle hover:text-fg-muted transition-colors"
-                        title="Редактировать филиал"
-                      >
-                        <Pencil className="w-3.5 h-3.5" />
-                      </button>
                     </div>
                   </div>
 

@@ -8,7 +8,7 @@ export function registerReportRoutes(app: Express) {
   // Computes the whole "Финансовый и балансовый отчет" dataset server-side, scoped to the
   // requested period/store at the DB level — this is what used to be a client-side useMemo
   // filtering the FULL, ever-growing sales/expenses history fetched on every login.
-  app.get('/api/reports/summary', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
+  app.get('/api/reports/summary', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
       const period = VALID_PERIODS.includes(req.query.period as ReportPeriod) ? (req.query.period as ReportPeriod) : 'TODAY';
       const month = typeof req.query.month === 'string' ? req.query.month : undefined;

@@ -81,14 +81,17 @@ export const Drawer: React.FC = () => {
     'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen } = useUIStore();
+  const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
 
   if (!drawerOpen) return null;
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
-  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
+  const isPartner = userRole === 'PARTNER';
+  const isAdmin = userRole === 'ADMIN';
+  const isStoreScoped = isSeller || isPartner;
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const userStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
 
   const unreadNotifs = notifications.filter(n => !n.read).length;
@@ -115,25 +118,53 @@ export const Drawer: React.FC = () => {
       ];
     }
 
+    if (isPartner) {
+      return [
+        {
+          title: `Точка: ${userStoreName || 'Магазин'}`,
+          items: [
+            { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['PARTNER'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['PARTNER'] },
+            { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['PARTNER'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['PARTNER'] },
+          ],
+        },
+        {
+          title: 'Склад',
+          items: [
+            { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['PARTNER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['PARTNER'] },
+          ],
+        },
+        {
+          title: 'Управление точкой',
+          items: [
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['PARTNER'] },
+            { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['PARTNER'] },
+          ],
+        },
+      ];
+    }
+
     if (isCentralCashMode) {
       return [
         {
           title: 'Центральная касса и финансы',
           items: [
-            { id: 'FINANCE', label: 'Финансы и отчёты', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'BONUSES', label: 'Бонусы поставщиков', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'FINANCE', label: 'Финансы и отчёты', icon: Landmark, roles: ['ADMIN'] },
+            { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN'] },
+            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['ADMIN'] },
+            { id: 'BONUSES', label: 'Бонусы поставщиков', icon: Gift, roles: ['ADMIN'] },
+            { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN'] },
           ],
         },
         {
           title: 'Склад и логистика',
           items: [
-            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN'] },
             { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN'] },
-            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
+            { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
             { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN'] },
           ],
         },
@@ -142,8 +173,8 @@ export const Drawer: React.FC = () => {
           items: [
             { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
             { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
-            { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
-            { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+            { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN'] },
+            { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN'] },
           ],
         },
       ];
@@ -154,21 +185,21 @@ export const Drawer: React.FC = () => {
       {
         title: `Продажи: ${activeRetailStore?.name || 'Магазин'}`,
         items: [
-          { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'SALE', label: 'POS Терминал', icon: ShoppingBag, roles: ['ADMIN'] },
+          { id: 'SALES_HISTORY', label: 'История продаж', icon: History, roles: ['ADMIN'] },
+          { id: 'EXCHANGE', label: 'Обмен (Trade-In)', icon: RefreshCw, roles: ['ADMIN'] },
+          { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
+          { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN'] },
+          { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
         ],
       },
       {
         title: 'Финансы (Центральный офис)',
         items: [
-          { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'FINANCE', label: 'Финансы', icon: Landmark, roles: ['ADMIN'] },
+          { id: 'EXPENSES', label: 'Расходы', icon: Wallet, roles: ['ADMIN'] },
+          { id: 'BONUSES', label: 'Бонусы', icon: Gift, roles: ['ADMIN'] },
+          { id: 'OWNERS', label: 'Партнеры и капитал', icon: Users, roles: ['ADMIN'] },
         ],
       },
       {
@@ -176,12 +207,12 @@ export const Drawer: React.FC = () => {
         items: [
           { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
           { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
-          { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN', 'PARTNER'] },
-          { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN', 'PARTNER'] },
+          { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN'] },
+          { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN'] },
         ],
       },
     ];
-  }, [isSeller, isCentralCashMode, activeRetailStore]);
+  }, [isSeller, isPartner, isCentralCashMode, activeRetailStore, userStoreName]);
 
   return (
     <div className="app-safe-area fixed inset-x-0 top-0 bottom-[calc(3.5rem+var(--bottom-nav-pb))] z-40 flex md:hidden flex-col bg-bg text-fg-muted w-full overflow-hidden">
@@ -196,7 +227,7 @@ export const Drawer: React.FC = () => {
               {currentUser?.name || 'Пользователь'}
             </h2>
             <p className="text-xs font-medium text-accent truncate">
-              {isSeller ? (userStoreName || 'Магазин не привязан') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
+              {isStoreScoped ? (userStoreName || 'Магазин не привязан') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
             </p>
           </div>
         </div>
@@ -205,19 +236,24 @@ export const Drawer: React.FC = () => {
           type="button"
           onClick={() => setDrawerOpen(false)}
           aria-label="Закрыть меню"
-          className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-raised text-fg-muted hover:text-fg-muted border border-border transition-colors"
+          className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-raised text-fg-muted hover:text-fg-muted border border-border transition-colors cursor-pointer"
         >
           <X className="w-5 h-5" />
         </button>
       </div>
 
-      {/* Mode Switcher Banner for Admin/Partner */}
-      {!isSeller && (
+      {/* Mode Switcher Banner for Admin only */}
+      {isAdmin && (
         <div className="p-3 border-b border-border bg-surface-raised/40 shrink-0">
           {isCentralCashMode ? (
             <div
               onClick={() => {
                 setDrawerOpen(false);
+                triggerStoreTransition({
+                  storeName: 'Центральная касса (Главный офис)',
+                  storeId: 'all',
+                  isCentral: true,
+                });
                 setSelectedStoreId('all');
                 setActivePage('FINANCE');
                 navigate('/finance');
@@ -277,11 +313,16 @@ export const Drawer: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setDrawerOpen(false);
+                    triggerStoreTransition({
+                      storeName: 'Центральная касса (Главный офис)',
+                      storeId: 'all',
+                      isCentral: true,
+                    });
                     setSelectedStoreId('all');
                     setActivePage('FINANCE');
                     navigate('/finance');
                   }}
-                  className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer"
+                  className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
                   title="Автоматически перейти в Центральную кассу"
                 >
                   <Landmark className="w-3 h-3" />
@@ -309,7 +350,7 @@ export const Drawer: React.FC = () => {
                 {visibleItems.map(item => {
                   const Icon = item.icon;
                   const routePath = PAGE_ROUTES[item.id] || '/sale';
-                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isSeller ? 'SALE' : 'FINANCE'));
+                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
                   const isNotif = item.id === 'NOTIFICATIONS';
 
                   return (

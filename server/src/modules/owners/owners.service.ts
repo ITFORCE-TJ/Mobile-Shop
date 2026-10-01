@@ -7,6 +7,7 @@ import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 import { allocateOwnerProfit } from '../sales/profit';
+import { findAdminOwner } from '../finance/owner-allocations';
 
 export class OwnersService {
   /**
@@ -204,6 +205,68 @@ export class OwnersService {
     }, { maxWait: 10000, timeout: 25000 });
   }
 
+  public static async listStoreShares() {
+    return prisma.storeProfitShare.findMany({ orderBy: [{ storeId: 'asc' }, { ownerId: 'asc' }] });
+  }
+
+  /**
+   * Replaces a store's partner shares (admin only). The admin owner always keeps the rest of
+   * the store's profit, so partner shares must total less than 100%; a share of 0 removes the
+   * partner from the store. Only profit booked after the change uses the new shares — past
+   * sales are refunded with the amounts they actually booked.
+   */
+  public static async setStoreShares(storeId: string, shares: { ownerId: string; sharePercent: unknown }[], userId: string) {
+    const normalized = shares.map((share) => {
+      const sharePercent = D(requireFiniteNumber(share?.sharePercent, 'Доля партнёра')).toDecimalPlaces(4);
+      if (sharePercent.lt(0) || sharePercent.gte(100)) throw new Error('Доля партнёра должна быть от 0 до 100% (не включая 100)');
+      return { ownerId: String(share?.ownerId || ''), sharePercent };
+    }).filter((share) => share.sharePercent.gt(0));
+    if (new Set(normalized.map((s) => s.ownerId)).size !== normalized.length) throw new Error('Партнёр указан дважды');
+    const partnerTotal = normalized.reduce((sum, s) => D(sum).plus(s.sharePercent), D(0));
+    if (partnerTotal.gte(100)) {
+      throw new Error(`Сумма долей партнёров должна быть меньше 100%: администратор всегда получает часть прибыли магазина (сейчас ${partnerTotal}%)`);
+    }
+
+    return prisma.$transaction(async (tx) => {
+      const actor = await resolveActor(tx, userId);
+      const store = await tx.store.findUnique({ where: { id: storeId } });
+      if (!store) throw new Error('Магазин не найден');
+      if (store.isMainWarehouse) throw new Error('Прибыль главного склада целиком принадлежит администратору — доли партнёров для него не задаются');
+      await tx.$queryRaw`SELECT id FROM owners ORDER BY id FOR UPDATE`;
+      const owners = await tx.owner.findMany({ include: { user: { select: { role: true } } } });
+      const admin = findAdminOwner(owners);
+      for (const share of normalized) {
+        const owner = owners.find((o) => o.id === share.ownerId);
+        if (!owner) throw new Error('Партнёр не найден');
+        if (admin && owner.id === admin.id) throw new Error('Доля администратора не задаётся: он получает остаток прибыли магазина');
+      }
+
+      const before = await tx.storeProfitShare.findMany({ where: { storeId } });
+      await tx.storeProfitShare.deleteMany({ where: { storeId } });
+      if (normalized.length) {
+        await tx.storeProfitShare.createMany({
+          data: normalized.map((s) => ({ storeId, ownerId: s.ownerId, sharePercent: s.sharePercent, updatedByUserId: actor.id })),
+        });
+      }
+      const name = (ownerId: string) => owners.find((o) => o.id === ownerId)?.name ?? ownerId;
+      const adminShare = D(100).minus(partnerTotal);
+      await tx.auditLog.create({
+        data: {
+          userId: actor.id, userName: actor.name, userRole: actor.role,
+          action: 'STORE_PROFIT_SHARE_CHANGE',
+          targetId: storeId,
+          details: `Доли прибыли магазина «${store.name}»: ${admin?.name ?? 'Администратор'} ${adminShare}%${normalized.map((s) => `, ${name(s.ownerId)} ${s.sharePercent}%`).join('')}`,
+          financialDetails: moneyJson({
+            before: before.map((b) => ({ ownerId: b.ownerId, sharePercent: b.sharePercent })),
+            after: normalized,
+            adminSharePercent: adminShare,
+          }),
+        },
+      });
+      return tx.storeProfitShare.findMany({ where: { storeId } });
+    }, { maxWait: 10000, timeout: 25000 });
+  }
+
   public static async updateProfitShares(shares: { ownerId: string; sharePercent: number }[], userId: string, rebalanceBalances = false) {
     if (!Array.isArray(shares) || D(shares.length).eq(0)) throw new Error('Укажите доли владельцев');
     // Stored as DECIMAL(7,4): keep 4 places so e.g. 33.3333/33.3333/33.3334 sums to 100
@@ -222,6 +285,11 @@ export class OwnersService {
         throw new Error('Неизвестный владелец в списке долей');
       }
 
+      // With partners per store, shares live on StoreProfitShare (setStoreShares); writing the
+      // owner rows here would only overwrite the admin's share with one store's split.
+      if ((await tx.storeProfitShare.count()) > 0) {
+        throw new Error('Доли прибыли задаются отдельно для каждого магазина (окно «Доли магазина»)');
+      }
       const hasStoreSpecific = owners.some((o: any) => Boolean(o.storeId));
       if (!hasStoreSpecific) {
         if (normalized.length !== owners.length) {

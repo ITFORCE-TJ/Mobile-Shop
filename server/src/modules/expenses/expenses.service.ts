@@ -7,6 +7,7 @@ import { requirePositiveMoney, roundMoney } from '../../common/money';
 import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction, cancelTransaction } from '../finance/financial-transaction.service';
 import { currentOwnerAllocations, readOwnerAllocations, replaceOwnerAllocations } from '../finance/owner-allocations';
+import type { OwnerProfitAllocation } from '../sales/profit';
 
 /** Employee lock serializes advances, salary payouts, payment, edits and cancellation. */
 export async function lockExpenseEmployee(tx: TransactionClient, expenseId: string) {
@@ -185,10 +186,28 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
     const cashStore = centralStore || fallbackStore;
     if (!cashStore) throw new Error('Центральная касса не найдена');
 
-    // The expense was fixed in USD on the day it was registered; paying it later takes exactly
-    // that USD amount out of the register.
-    const rate = existing.exchangeRate || (await requireTodayRate(tx));
-    const paidUsd = existing.amountUsd ?? roundMoney(D(existing.amountTjs).div(rate));
+    // The TJS leave the register today, so they cost today's dollars. The expense is re-stated
+    // at the payment-day rate — its USD amount, the owners' charge and the journal all follow
+    // the cash that actually left. Example: 1050 TJS registered at 10.5 ($100), paid at 11 = $95.45.
+    const rate = await requireTodayRate(tx);
+    const paidUsd = roundMoney(D(existing.amountTjs).div(rate));
+    const registeredUsd = existing.amountUsd ?? paidUsd;
+    let restatedAllocations: OwnerProfitAllocation[] | undefined;
+    if (!D(paidUsd).eq(registeredUsd)) {
+      restatedAllocations = await currentOwnerAllocations(tx, paidUsd, existing.storeId);
+      await replaceOwnerAllocations(tx, readOwnerAllocations(existing.ownerProfitAllocations), restatedAllocations, -1);
+      await tx.ledgerEntry.create({
+        data: {
+          type: existing.category === 'Зарплата' || existing.category === 'SALARY' ? 'SALARY' : 'EXPENSE',
+          description: `Пересчёт расхода по курсу дня оплаты (${rate}): $${registeredUsd} → $${paidUsd}`,
+          amountUsd: D(registeredUsd).minus(paidUsd),
+          exchangeRate: rate,
+          storeId: existing.storeId,
+          userName: actor.name,
+          referenceId: id,
+        },
+      });
+    }
     const cashGuard = await tx.store.updateMany({
       where: { id: cashStore.id, cashBalanceUsd: { gte: paidUsd } },
       data: { cashBalanceUsd: { decrement: paidUsd } },
@@ -231,6 +250,9 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
         paidAt: new Date(),
         paidFromCashRegister: true,
         sourceAccount: cashStore.isMainWarehouse ? 'Центральная касса' : `Касса ${cashStore.name}`,
+        amountUsd: paidUsd,
+        exchangeRate: rate,
+        ...(restatedAllocations ? { ownerProfitAllocations: moneyJson(restatedAllocations) } : {}),
       },
     });
 
@@ -241,7 +263,7 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
         userRole: actor.role,
         action: 'EXPENSE_PAID',
         details: `Оплачен расход [${existing.category}]: ${existing.amountTjs} TJS ($${amountUsd}) из ${cashStore.isMainWarehouse ? 'Центральной кассы' : `кассы ${cashStore.name}`}`,
-        financialDetails: moneyJson({ amountTjs: existing.amountTjs, amountUsd, exchangeRate: rate }),
+        financialDetails: moneyJson({ amountTjs: existing.amountTjs, amountUsd, exchangeRate: rate, registeredUsd }),
         targetId: id,
       },
     });
@@ -328,10 +350,13 @@ export async function updateExpense(
     // an expense decrements owner profit at creation (see createExpense), so an edit that
     // changes the amount must roll that accrual forward too, or owner profit permanently
     // drifts from the actual expense total.
+    // Partners own specific stores, so moving an expense to another store moves its charge to
+    // that store's owners as well, even when the amount stays the same.
     let ownerProfitAllocations;
-    if (existing.amountUsd === null || !D(newAmountUsd).eq(existing.amountUsd)) {
+    const storeChanged = (newStoreId ?? null) !== (existing.storeId ?? null);
+    if (existing.amountUsd === null || !D(newAmountUsd).eq(existing.amountUsd) || storeChanged) {
       const previous = readOwnerAllocations(existing.ownerProfitAllocations);
-      ownerProfitAllocations = await currentOwnerAllocations(tx, newAmountUsd, existing.storeId);
+      ownerProfitAllocations = await currentOwnerAllocations(tx, newAmountUsd, newStoreId);
       await replaceOwnerAllocations(tx, previous, ownerProfitAllocations, -1);
     }
 

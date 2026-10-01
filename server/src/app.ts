@@ -178,11 +178,11 @@ app.post('/api/auth/logout', authenticateJwt, async (req: AuthenticatedRequest, 
 
 app.get('/api/stores', authenticateJwt, async (req: AuthenticatedRequest, res, next) => {
   try {
-    const isSeller = req.user!.role === 'SELLER';
+    const isStoreScoped = req.user!.role === 'SELLER' || req.user!.role === 'PARTNER';
     const storeId = req.user!.storeId;
-    // A SELLER also needs to see the main warehouse (not just their own store) — that's where
+    // A SELLER or PARTNER also needs to see the main warehouse (not just their own store) — that's where
     // they pull transfer requests from when the admin isn't around to move stock themselves.
-    const where = isSeller ? (storeId ? { OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' }) : undefined;
+    const where = isStoreScoped ? (storeId ? { OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' }) : undefined;
     const stores = await prisma.store.findMany({ where, orderBy: { name: 'asc' } });
     res.json(stores);
   } catch (error) {
@@ -205,8 +205,8 @@ app.get('/api/devices', authenticateJwt, async (req: AuthenticatedRequest, res, 
     const purchaseInvoiceId = typeof req.query.purchaseInvoiceId === 'string' ? req.query.purchaseInvoiceId : undefined;
 
     let where: Prisma.DeviceWhereInput | undefined;
-    if (req.user!.role === 'SELLER') {
-      // A SELLER also needs to see devices sitting at the main warehouse — that's what they
+    if (req.user!.role === 'SELLER' || req.user!.role === 'PARTNER') {
+      // A SELLER / PARTNER also needs to see devices sitting at the main warehouse — that's what they
       // pick from when requesting a transfer into their own store — but no other retail store.
       if (!req.user!.storeId) {
         res.status(403).json({ message: 'Пользователь не привязан ни к одному магазину' });
@@ -255,6 +255,11 @@ app.patch('/api/devices/:id', authenticateJwt, requireRoles('ADMIN', 'PARTNER'),
     const existing = await prisma.device.findUnique({ where: { id: req.params.id } });
     if (!existing) {
       res.status(404).json({ message: 'Устройство не найдено' });
+      return;
+    }
+
+    if (req.user!.role === 'PARTNER' && existing.storeId !== req.user!.storeId) {
+      res.status(403).json({ message: 'Нет доступа к товарам другого магазина' });
       return;
     }
 

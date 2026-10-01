@@ -23,12 +23,13 @@ export const TopBar: React.FC = () => {
     'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen } = useUIStore();
+  const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
 
-  const isSeller = currentUser?.role === 'SELLER';
-  const isCentralCashMode = !isSeller && (!selectedStoreId || selectedStoreId === 'all');
-  const activeRetailStore = !isSeller && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
-  const sellerStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
+  const isStoreScoped = currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER';
+  const isAdmin = currentUser?.role === 'ADMIN';
+  const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
+  const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
+  const storeName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
 
   const unreadNotifsCount = notifications.filter(n => !n.read).length;
 
@@ -63,24 +64,24 @@ export const TopBar: React.FC = () => {
           <h1 className="text-sm md:text-base font-bold text-fg truncate tracking-tight">
             {getPageTitle()}
           </h1>
-          {isSeller && (
+          {isStoreScoped && (
             <p className="text-[11px] text-fg-subtle truncate flex items-center">
               <Store className="w-2.5 h-2.5 mr-1 text-accent shrink-0 inline" />
-              <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
+              <span className="truncate">{storeName || 'Магазин не привязан'}</span>
             </p>
           )}
         </div>
       </div>
 
-      {/* Center/Right: Quick Switcher for Admin/Partner */}
+      {/* Center/Right: Quick Switcher for Admin only */}
       <div className="flex items-center gap-2 shrink-0">
-        {!isSeller && (
+        {isAdmin && (
           <div className="flex items-center gap-1.5">
             {isCentralCashMode ? (
               <button
                 type="button"
                 onClick={() => setStoreSwitchModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95"
+                className="inline-flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95 cursor-pointer"
                 title="Перейти в режим розничных продаж"
               >
                 <Store className="w-3.5 h-3.5 text-accent" />
@@ -93,7 +94,7 @@ export const TopBar: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => setStoreSwitchModalOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 text-xs font-bold transition-all shadow-2xs active:scale-95"
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
                   title="Сменить магазин"
                 >
                   <Store className="w-3.5 h-3.5" />
@@ -102,6 +103,11 @@ export const TopBar: React.FC = () => {
                 <button
                   type="button"
                   onClick={() => {
+                    triggerStoreTransition({
+                      storeName: 'Центральная касса (Главный офис)',
+                      storeId: 'all',
+                      isCentral: true,
+                    });
                     setSelectedStoreId('all');
                     setActivePage('FINANCE');
                     navigate('/finance');
@@ -118,31 +124,33 @@ export const TopBar: React.FC = () => {
           </div>
         )}
 
-        {/* Notifications button */}
-        <button
-          onClick={() => {
-            if (activePage === 'NOTIFICATIONS') {
-              setActivePage(isSeller ? 'SALE' : 'FINANCE');
-              navigate(isSeller ? '/sale' : '/finance');
-            } else {
-              setActivePage('NOTIFICATIONS');
-              navigate('/notifications');
-            }
-          }}
-          aria-label={activePage === 'NOTIFICATIONS' ? 'Закрыть уведомления' : 'Уведомления'}
-          className={`relative inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors active:scale-95 border ${
-            activePage === 'NOTIFICATIONS'
-              ? 'bg-accent/15 text-accent border-accent/40'
-              : 'text-fg-muted hover:text-fg hover:bg-surface-raised border-border'
-          }`}
-        >
-          <Bell className="w-4 h-4" />
-          {unreadNotifsCount > 0 && (
-            <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-              {unreadNotifsCount}
-            </span>
-          )}
-        </button>
+        {/* Notifications button (hidden for PARTNER) */}
+        {currentUser?.role !== 'PARTNER' && (
+          <button
+            onClick={() => {
+              if (activePage === 'NOTIFICATIONS') {
+                setActivePage(isStoreScoped ? 'SALE' : 'FINANCE');
+                navigate(isStoreScoped ? '/sale' : '/finance');
+              } else {
+                setActivePage('NOTIFICATIONS');
+                navigate('/notifications');
+              }
+            }}
+            aria-label={activePage === 'NOTIFICATIONS' ? 'Закрыть уведомления' : 'Уведомления'}
+            className={`relative inline-flex items-center justify-center w-9 h-9 rounded-lg transition-colors active:scale-95 border cursor-pointer ${
+              activePage === 'NOTIFICATIONS'
+                ? 'bg-accent/15 text-accent border-accent/40'
+                : 'text-fg-muted hover:text-fg hover:bg-surface-raised border-border'
+            }`}
+          >
+            <Bell className="w-4 h-4" />
+            {unreadNotifsCount > 0 && (
+              <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+                {unreadNotifsCount}
+              </span>
+            )}
+          </button>
+        )}
       </div>
     </header>
   );

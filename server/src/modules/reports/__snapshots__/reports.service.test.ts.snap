@@ -14,7 +14,7 @@ exports[`financial report query optimization preserves all totals > preserves th
   "grossMarginPercent": 40.8,
   "grossProfitTjs": 2258051.1,
   "grossProfitUsd": 225805.11,
-  "mainWarehouseCashTjs": 345.67,
+  "mainWarehouseCashTjs": 345.7,
   "mainWarehouseCashUsd": 34.57,
   "mainWarehouseExpenses": {
     "expensesByCategory": [],
@@ -94,7 +94,8 @@ exports[`financial report query optimization preserves all totals > preserves th
   "salesCount": 1846,
   "storeBreakdown": [
     {
-      "cashTjs": 1001,
+      "cashTjs": 1010,
+      "cashUsd": 101,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -157,7 +158,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1002,
+      "cashTjs": 1020,
+      "cashUsd": 102,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -220,7 +222,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1007,
+      "cashTjs": 1070,
+      "cashUsd": 107,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -283,7 +286,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1008,
+      "cashTjs": 1080,
+      "cashUsd": 108,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -346,7 +350,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1014,
+      "cashTjs": 1140,
+      "cashUsd": 114,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -409,7 +414,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1015,
+      "cashTjs": 1150,
+      "cashUsd": 115,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [
@@ -473,6 +479,7 @@ exports[`financial report query optimization preserves all totals > preserves th
     },
     {
       "cashTjs": 1000,
+      "cashUsd": 100,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -535,7 +542,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1003,
+      "cashTjs": 1030,
+      "cashUsd": 103,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -598,7 +606,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1004,
+      "cashTjs": 1040,
+      "cashUsd": 104,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -661,7 +670,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1005,
+      "cashTjs": 1050,
+      "cashUsd": 105,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -724,7 +734,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1006,
+      "cashTjs": 1060,
+      "cashUsd": 106,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -787,7 +798,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1009,
+      "cashTjs": 1090,
+      "cashUsd": 109,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -850,7 +862,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1010,
+      "cashTjs": 1100,
+      "cashUsd": 110,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -913,7 +926,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1011,
+      "cashTjs": 1110,
+      "cashUsd": 111,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -976,7 +990,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1012,
+      "cashTjs": 1120,
+      "cashUsd": 112,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -1039,7 +1054,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1013,
+      "cashTjs": 1130,
+      "cashUsd": 113,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -1102,7 +1118,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1016,
+      "cashTjs": 1160,
+      "cashUsd": 116,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -1165,7 +1182,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1017,
+      "cashTjs": 1170,
+      "cashUsd": 117,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -1228,7 +1246,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1018,
+      "cashTjs": 1180,
+      "cashUsd": 118,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -1291,7 +1310,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
-      "cashTjs": 1019,
+      "cashTjs": 1190,
+      "cashUsd": 119,
       "cogsTjs": 164008.2,
       "cogsUsd": 16400.82,
       "expensesByCategory": [
@@ -1383,7 +1403,7 @@ exports[`financial report query optimization preserves all totals > preserves th
   "grossMarginPercent": 41.3,
   "grossProfitTjs": 114102.3,
   "grossProfitUsd": 11410.23,
-  "mainWarehouseCashTjs": 345.67,
+  "mainWarehouseCashTjs": 345.7,
   "mainWarehouseCashUsd": 34.57,
   "mainWarehouseExpenses": {
     "expensesByCategory": [],
@@ -1464,6 +1484,7 @@ exports[`financial report query optimization preserves all totals > preserves th
   "storeBreakdown": [
     {
       "cashTjs": 1000,
+      "cashUsd": 100,
       "cogsTjs": 162008.1,
       "cogsUsd": 16200.81,
       "expensesByCategory": [
@@ -1555,7 +1576,7 @@ exports[`financial report query optimization preserves all totals > preserves th
   "grossMarginPercent": 40.5,
   "grossProfitTjs": 113103.3,
   "grossProfitUsd": 11310.33,
-  "mainWarehouseCashTjs": 345.67,
+  "mainWarehouseCashTjs": 345.7,
   "mainWarehouseCashUsd": 34.57,
   "mainWarehouseExpenses": {
     "expensesByCategory": [],
@@ -1635,7 +1656,8 @@ exports[`financial report query optimization preserves all totals > preserves th
   "salesCount": 93,
   "storeBreakdown": [
     {
-      "cashTjs": 1001,
+      "cashTjs": 1010,
+      "cashUsd": 101,
       "cogsTjs": 166008.3,
       "cogsUsd": 16600.83,
       "expensesByCategory": [

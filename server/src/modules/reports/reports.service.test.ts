@@ -13,7 +13,7 @@ vi.mock('../exchange-rate/exchange-rate.service', () => ({ getRateForDate: async
 import { computeReportsSummary } from './reports.service';
 
 const date = new Date('2026-09-15T09:00:00Z');
-const stores = Array.from({ length: 20 }, (_, i) => ({ id: `store-${i}`, name: `Store ${i}`, cashBalanceTjs: 1000 + i }));
+const stores = Array.from({ length: 20 }, (_, i) => ({ id: `store-${i}`, name: `Store ${i}`, cashBalanceUsd: 100 + i }));
 const sales = Array.from({ length: 2000 }, (_, i) => ({
   id: `sale-${i}`, storeId: stores[i % 20].id, totalTjs: 3001.2, totalUsd: 300.12, exchangeRate: 10,
   createdAt: date, refundedAt: date, status: i % 13 === 0 ? 'REFUNDED' : 'COMPLETED', penaltyFeeUsd: 1.23, penaltyFeeTjs: 12.3,
@@ -50,7 +50,7 @@ beforeEach(() => {
   db.supplierBonus.findMany.mockResolvedValue([{ bonusType: 'CASH_DISCOUNT', amountUsd: 25.5, exchangeRate: 10, dateReceived: date }, { bonusType: 'FREE_DEVICES', dateReceived: date, status: 'IN_STOCK' }]);
   db.supplier.aggregate.mockResolvedValue({ _sum: { totalDebtUsd: 123.45 } });
   db.supplier.findMany.mockResolvedValue([{ id: 'supplier', name: 'Supplier', totalPurchasedUsd: 200, totalPaidUsd: 76.55, totalDebtUsd: 123.45 }]);
-  db.store.findFirst.mockResolvedValue({ id: 'warehouse', cashBalanceTjs: 345.67 });
+  db.store.findFirst.mockResolvedValue({ id: 'warehouse', cashBalanceUsd: 34.57 });
   db.store.findMany.mockImplementation(async ({ where }) => stores.filter((store) => !where.id || store.id === where.id));
   db.device.findMany.mockImplementation(async ({ where }) => where.storeId === 'warehouse'
     ? [{ costBasisUsd: 0, purchasePriceUsd: 200 }, { costBasisUsd: 100.01, purchasePriceUsd: 90 }]

@@ -11,6 +11,7 @@ import { Drawer } from '../components/layout/Drawer';
 import { MobileBottomNav } from '../components/layout/MobileBottomNav';
 import { DailyRateModal } from '../components/common/DailyRateModal';
 import { StoreSwitchModal } from '../components/common/StoreSwitchModal';
+import { StoreTransitionOverlay } from '../components/common/StoreTransitionOverlay';
 import { PWAInstallPrompt } from '../components/pwa/PWAInstallPrompt';
 import { PWAUpdateNotifier } from '../components/pwa/PWAUpdateNotifier';
 import { useUIStore } from '../stores/useUIStore';
@@ -108,27 +109,27 @@ export function MainLayout() {
         <main className="flex-1 flex flex-col min-w-0 max-w-full min-h-0 overflow-y-auto overflow-x-hidden relative bg-bg">
           <Suspense fallback={<LoadingFallback />}>
             <Routes>
-              <Route path="/" element={<Navigate to={currentUser?.role === 'SELLER' ? "/sale" : "/finance"} replace />} />
+              <Route path="/" element={<Navigate to={currentUser?.role === 'ADMIN' ? "/finance" : "/sale"} replace />} />
               <Route path="/sale" element={<SalePage />} />
               <Route path="/sales-history" element={<SalesHistoryPage />} />
               <Route path="/inventory" element={<InventoryPage />} />
-              <Route path="/purchase" element={<PurchasePage />} />
+              <Route path="/purchase" element={currentUser?.role === 'ADMIN' ? <PurchasePage /> : <Navigate to="/sale" replace />} />
               <Route path="/transfer" element={<TransferPage />} />
               <Route path="/exchange" element={<ExchangePage />} />
               <Route path="/repair" element={<RepairPage />} />
-              <Route path="/suppliers" element={<SuppliersPage />} />
+              <Route path="/suppliers" element={currentUser?.role === 'ADMIN' ? <SuppliersPage /> : <Navigate to="/sale" replace />} />
               <Route path="/customers" element={<Navigate to="/sale" replace />} />
-              <Route path="/bonuses" element={<BonusesPage />} />
+              <Route path="/bonuses" element={currentUser?.role === 'ADMIN' ? <BonusesPage /> : <Navigate to="/sale" replace />} />
               <Route path="/expenses" element={<ExpensesPage />} />
-              <Route path="/owners" element={<OwnersPage />} />
-              <Route path="/employees" element={<EmployeesPage />} />
+              <Route path="/owners" element={currentUser?.role === 'ADMIN' ? <OwnersPage /> : <Navigate to="/sale" replace />} />
+              <Route path="/employees" element={currentUser?.role === 'ADMIN' ? <EmployeesPage /> : <Navigate to="/sale" replace />} />
               {/* «Финансовые отчёты» merged into Финансы (opens on the «Отчёт» tab) */}
-              <Route path="/reports" element={<Navigate to="/finance" replace />} />
-              <Route path="/finance" element={<FinancePage />} />
-              <Route path="/audit-log" element={<AuditLogPage />} />
+              <Route path="/reports" element={<Navigate to={currentUser?.role === 'ADMIN' ? "/finance" : "/sale"} replace />} />
+              <Route path="/finance" element={currentUser?.role === 'ADMIN' ? <FinancePage /> : <Navigate to="/sale" replace />} />
+              <Route path="/audit-log" element={currentUser?.role === 'ADMIN' ? <AuditLogPage /> : <Navigate to="/sale" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
-              <Route path="/notifications" element={<NotificationsPage />} />
-              <Route path="*" element={<Navigate to={currentUser?.role === 'SELLER' ? "/sale" : "/finance"} replace />} />
+              <Route path="/notifications" element={currentUser?.role === 'ADMIN' ? <NotificationsPage /> : <Navigate to="/sale" replace />} />
+              <Route path="*" element={<Navigate to={currentUser?.role === 'ADMIN' ? "/finance" : "/sale"} replace />} />
             </Routes>
           </Suspense>
         </main>
@@ -161,10 +162,13 @@ export function MainLayout() {
           closeDailyRateModal();
         }}
       />
-      <StoreSwitchModal
-        isOpen={isStoreSwitchModalOpen}
-        onClose={() => setStoreSwitchModalOpen(false)}
-      />
+      {currentUser?.role === 'ADMIN' && (
+        <StoreSwitchModal
+          isOpen={isStoreSwitchModalOpen}
+          onClose={() => setStoreSwitchModalOpen(false)}
+        />
+      )}
+      <StoreTransitionOverlay />
       {!native && isScannerOpen && (
         <Suspense fallback={null}>
           <ScannerModal />

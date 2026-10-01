@@ -1,6 +1,14 @@
 import { create } from 'zustand';
 import { ThemeMode } from '../types';
 
+export interface StoreTransitionState {
+  active: boolean;
+  storeName: string;
+  storeId?: string;
+  isCentral?: boolean;
+  durationMs?: number;
+}
+
 interface UIState {
   theme: ThemeMode;
   drawerOpen: boolean;
@@ -9,6 +17,7 @@ interface UIState {
   isScannerOpen: boolean;
   scannerCallback: ((code: string) => void) | null;
   isStoreSwitchModalOpen: boolean;
+  storeTransition: StoreTransitionState | null;
 
   setTheme: (theme: ThemeMode) => void;
   toggleTheme: () => void;
@@ -18,6 +27,8 @@ interface UIState {
   openScanner: (callback: (code: string) => void) => void;
   closeScanner: () => void;
   setStoreSwitchModalOpen: (open: boolean) => void;
+  triggerStoreTransition: (opts: { storeName: string; storeId?: string; isCentral?: boolean; durationMs?: number }) => void;
+  clearStoreTransition: () => void;
 }
 
 export const useUIStore = create<UIState>((set) => ({
@@ -28,6 +39,7 @@ export const useUIStore = create<UIState>((set) => ({
   isScannerOpen: false,
   scannerCallback: null,
   isStoreSwitchModalOpen: false,
+  storeTransition: null,
 
   setTheme: (theme) => {
     if (typeof localStorage !== 'undefined') {
@@ -58,4 +70,19 @@ export const useUIStore = create<UIState>((set) => ({
   openScanner: (scannerCallback) => set({ isScannerOpen: true, scannerCallback }),
   closeScanner: () => set({ isScannerOpen: false, scannerCallback: null }),
   setStoreSwitchModalOpen: (isStoreSwitchModalOpen) => set({ isStoreSwitchModalOpen }),
+  triggerStoreTransition: (opts) =>
+    set({
+      storeTransition: {
+        active: true,
+        storeName: opts.storeName,
+        storeId: opts.storeId,
+        isCentral: opts.isCentral,
+        durationMs: opts.durationMs,
+      },
+    }),
+  clearStoreTransition: () => set({ storeTransition: null }),
 }));
+
+if (typeof window !== 'undefined') {
+  (window as any).__uiStore = useUIStore;
+}

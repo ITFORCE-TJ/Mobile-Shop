@@ -5,7 +5,8 @@ import { Prisma, PrismaClient } from '@prisma/client';
  * Wipes all business data while keeping the company's setup:
  * - employees (users) and their login sessions;
  * - stores, incl. the main warehouse (sellers are assigned to them) — cash reset to 0;
- * - partners (owners) with their profit shares and user links — every balance reset to 0;
+ * - partners (owners) with their user links — every balance reset to 0;
+ * - partner profit shares per store (StoreProfitShare) — configuration, not operations;
  * - each store's cash ledger account — balances reset to 0.
  * Everything else — devices, sales, suppliers, invoices, transfers, repairs, expenses,
  * customers, exchange rates, notifications, audit/ledger history, document counters — is
@@ -14,7 +15,7 @@ import { Prisma, PrismaClient } from '@prisma/client';
  * The table list comes from the Prisma schema, so a newly added model is cleared too
  * unless it is added to KEEP.
  */
-const KEEP = new Set(['User', 'AuthSession', 'Store', 'Owner', 'FinancialAccount']);
+const KEEP = new Set(['User', 'AuthSession', 'Store', 'Owner', 'FinancialAccount', 'StoreProfitShare']);
 
 const prisma = new PrismaClient();
 

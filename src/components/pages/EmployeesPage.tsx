@@ -1,6 +1,7 @@
 import { ActionMenu } from '../ui/ActionMenu';
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
-import { decimal, moneyNumber } from '../../utils/money';
+import { decimal, moneyNumber, sumMoney } from '../../utils/money';
+import { apiClient } from '../../api/client';
 import { getBusinessDateKey } from '../../utils/businessDate';
 import React, { useState, useEffect, useMemo } from 'react';
 import { useAppFields } from '../../context/AppContext';
@@ -49,8 +50,9 @@ export const EmployeesPage: React.FC = () => {
     createUser,
     updateUser,
     deleteUser,
-    createExpense
-  } = useAppFields('currentUser', 'users', 'stores', 'expenses', 'fetchExpensesRange', 'sales', 'fetchSalesRange', 'createUser', 'updateUser', 'deleteUser', 'createExpense');
+    createExpense,
+    paySalary
+  } = useAppFields('currentUser', 'users', 'stores', 'expenses', 'fetchExpensesRange', 'sales', 'fetchSalesRange', 'createUser', 'updateUser', 'deleteUser', 'createExpense', 'paySalary');
 
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
@@ -59,7 +61,12 @@ export const EmployeesPage: React.FC = () => {
   // Salary payout and advance dialog states
   const [salaryPayoutUser, setSalaryPayoutUser] = useState<User | null>(null);
   const [grossSalaryInput, setGrossSalaryInput] = useState<string>('');
-  const [deductAdvancesChecked, setDeductAdvancesChecked] = useState<boolean>(true);
+  // Payroll month being paid and the server's tally of what was already paid for it —
+  // the server is the single source of truth for salary already paid and advances given
+  // for that month (an advance can be handed out in a different month than it belongs to).
+  const [payoutMonth, setPayoutMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
+  const [payrollSummary, setPayrollSummary] = useState<{ paidSalaryTjs: number; paidAdvancesTjs: number } | null>(null);
+  const [payrollSummaryError, setPayrollSummaryError] = useState<string | null>(null);
   const [payoutNote, setPayoutNote] = useState<string>('');
 
   const [advanceIssueUser, setAdvanceIssueUser] = useState<User | null>(null);
@@ -376,6 +383,19 @@ export const EmployeesPage: React.FC = () => {
     }
   };
 
+  useEffect(() => {
+    if (!salaryPayoutUser) return;
+    let cancelled = false;
+    setPayrollSummary(null);
+    setPayrollSummaryError(null);
+    apiClient<{ paidSalaryTjs: number; paidAdvancesTjs: number }>(`/payroll/${salaryPayoutUser.id}?month=${payoutMonth}`)
+      .then((summary) => {
+        if (!cancelled) setPayrollSummary({ paidSalaryTjs: Number(summary.paidSalaryTjs) || 0, paidAdvancesTjs: Number(summary.paidAdvancesTjs) || 0 });
+      })
+      .catch((err) => { if (!cancelled) setPayrollSummaryError((err as Error).message || 'Не удалось загрузить выплаты за месяц'); });
+    return () => { cancelled = true; };
+  }, [salaryPayoutUser, payoutMonth]);
+
   const handleExecuteSalaryPayout = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!salaryPayoutUser || isSubmitting) return;
@@ -385,22 +405,17 @@ export const EmployeesPage: React.FC = () => {
       return;
     }
 
-    // Calculate advances to deduct — scoped to the current month only, since advances
-    // already deducted in a past payout must not be subtracted again every month.
-    const currentMonth = getBusinessDateKey().substring(0, 7);
-    const empExpenses = expenses.filter(e =>
-      (e.employeeId === salaryPayoutUser.id || (e.isEmployeeAdvance && e.employeeName === salaryPayoutUser.name)) &&
-      (e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance) &&
-      payrollMonthOf(e) === currentMonth
-    );
-    const totalAdvances = empExpenses.reduce((sum, e) => sum + (e.amountTjs || 0), 0);
-    const advanceDeduction = deductAdvancesChecked ? Math.min(totalAdvances, grossVal) : 0;
-    const netPayout = Math.max(0, grossVal - advanceDeduction);
-
+    if (!payrollSummary) {
+      setStatusMessage({ type: 'error', text: payrollSummaryError || 'Дождитесь загрузки выплат за месяц' });
+      return;
+    }
+    // Same formula the server applies: the gross entered is the whole month's entitlement,
+    // minus salary already paid and advances given for that payroll month.
+    const netPayout = moneyNumber(decimal(grossVal).minus(payrollSummary.paidSalaryTjs).minus(payrollSummary.paidAdvancesTjs));
     if (netPayout <= 0) {
       setStatusMessage({
         type: 'success',
-        text: `Начисленная зарплата ${salaryPayoutUser.name} (${grossVal} TJS) полностью покрыта ранее выданными авансами за этот месяц — доплата не требуется.`
+        text: `Начисленная зарплата ${salaryPayoutUser.name} за ${payoutMonth} (${grossVal} TJS) уже полностью выплачена с учётом авансов — доплата не требуется.`
       });
       setSalaryPayoutUser(null);
       setGrossSalaryInput('');
@@ -410,20 +425,12 @@ export const EmployeesPage: React.FC = () => {
 
     setIsSubmitting(true);
     try {
-      const res = await createExpense({
-        category: 'SALARY',
-        amountTjs: netPayout,
-        storeId: salaryPayoutUser.storeId || stores[0]?.id,
-        description: `Выплата зарплаты сотруднику ${salaryPayoutUser.name} (Начислено: ${grossVal} TJS, Удержано авансов: ${advanceDeduction} TJS, Выдано на руки: ${netPayout} TJS). ${payoutNote.trim()}`,
-        paidFromCashRegister: true,
-        employeeId: salaryPayoutUser.id,
-        employeeName: salaryPayoutUser.name
-      });
+      const res = await paySalary({ employeeId: salaryPayoutUser.id, month: payoutMonth, grossTjs: grossVal, note: payoutNote.trim() || undefined });
 
       if (res.success) {
         setStatusMessage({
           type: 'success',
-          text: `Зарплата сотруднику ${salaryPayoutUser.name} успешно выплачена: ${netPayout} TJS ${advanceDeduction > 0 ? `(Удержано авансов: ${advanceDeduction} TJS)` : ''}`
+          text: `Зарплата ${salaryPayoutUser.name} за ${payoutMonth} выплачена: ${res.amountTjs ?? netPayout} TJS${payrollSummary.paidAdvancesTjs > 0 ? ` (удержано авансов: ${payrollSummary.paidAdvancesTjs} TJS)` : ''}`
         });
         setSalaryPayoutUser(null);
         setGrossSalaryInput('');
@@ -637,7 +644,7 @@ export const EmployeesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => {
-                      const thisMonth = getBusinessDateKey().substring(0, 7);
+                      const thisMonth = selectedPayrollMonth;
                       const empSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
                       const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
                       const baseSal = u.baseSalaryTjs || 0;
@@ -648,7 +655,7 @@ export const EmployeesPage: React.FC = () => {
                       setSalaryPayoutUser(u);
                       setGrossSalaryInput(autoGross > 0 ? autoGross.toString() : '');
                       setPayoutNote('');
-                      setDeductAdvancesChecked(true);
+                      setPayoutMonth(selectedPayrollMonth);
                     }}
                     className="min-h-11 py-2 px-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent border border-accent/20 text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
                   >
@@ -1059,27 +1066,33 @@ export const EmployeesPage: React.FC = () => {
             </div>
 
             {(() => {
-              const thisMonth = getBusinessDateKey().substring(0, 7);
-              const empExpenses = expenses.filter(e =>
-                (e.employeeId === salaryPayoutUser.id || (e.isEmployeeAdvance && e.employeeName === salaryPayoutUser.name)) &&
-                (e.category === 'EMPLOYEE_ADVANCE' || e.isEmployeeAdvance) &&
-                payrollMonthOf(e) === thisMonth
-              );
-              const totalAdvances = empExpenses.reduce((sum, e) => sum + (e.amountTjs || 0), 0);
+              const thisMonth = payoutMonth;
+              const totalAdvances = payrollSummary?.paidAdvancesTjs ?? 0;
+              const paidSalary = payrollSummary?.paidSalaryTjs ?? 0;
 
               const empSales = sales.filter(s => s.sellerId === salaryPayoutUser.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
-              const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
+              const salesRevTjs = sumMoney(empSales.map((s) => s.totalTjs));
               const baseSal = salaryPayoutUser.baseSalaryTjs || 0;
               const commPct = salaryPayoutUser.salesCommissionPercent || 0;
               const commAmount = moneyNumber(decimal(salesRevTjs).mul(commPct).div(100));
               const autoGross = baseSal + commAmount;
 
               const grossVal = parseFloat(grossSalaryInput) || 0;
-              const advanceDeduction = deductAdvancesChecked ? Math.min(totalAdvances, grossVal) : 0;
-              const netPayout = Math.max(0, grossVal - advanceDeduction);
+              const netPayout = Math.max(0, moneyNumber(decimal(grossVal).minus(paidSalary).minus(totalAdvances)));
 
               return (
                 <div className="text-xs space-y-3">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-fg-subtle text-[10px] uppercase font-bold">Зарплата за месяц</span>
+                    <MonthPicker
+                      value={payoutMonth}
+                      onChange={setPayoutMonth}
+                      className="h-9 px-3 rounded-lg bg-bg border border-accent/40 text-accent text-xs font-semibold"
+                    />
+                  </div>
+                  {payrollSummaryError && (
+                    <p className="p-2 rounded-lg bg-danger/10 border border-danger/30 text-danger">{payrollSummaryError}</p>
+                  )}
                   <div className="p-3 rounded-lg bg-bg border border-border space-y-2">
                     <div className="flex items-center justify-between">
                       <div>
@@ -1087,8 +1100,8 @@ export const EmployeesPage: React.FC = () => {
                         <span className="text-[10px] text-fg-subtle">{salaryPayoutUser.storeName || (salaryPayoutUser.storeId ? stores.find(s => s.id === salaryPayoutUser.storeId)?.name : undefined) || 'Магазин'}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-fg-subtle block uppercase">Авансы за этот месяц:</span>
-                        <strong className="text-warning">{totalAdvances.toLocaleString()} TJS</strong>
+                        <span className="text-[10px] text-fg-subtle block uppercase">Авансы за {thisMonth}:</span>
+                        <strong className="text-warning">{payrollSummary ? `${totalAdvances.toLocaleString()} TJS` : '…'}</strong>
                       </div>
                     </div>
 
@@ -1134,29 +1147,21 @@ export const EmployeesPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {totalAdvances > 0 && (
-                    <div className="p-2.5 rounded-lg bg-warning/10 border border-warning/20 space-y-1">
-                      <label className="flex items-center space-x-2 cursor-pointer text-fg-muted">
-                        <input
-                          type="checkbox"
-                          checked={deductAdvancesChecked}
-                          onChange={(e) => setDeductAdvancesChecked(e.target.checked)}
-                          className="rounded bg-bg border-border text-warning focus:ring-0"
-                        />
-                        <span className="font-bold">Удержать авансы за этот месяц ({totalAdvances.toLocaleString()} TJS)</span>
-                      </label>
-                    </div>
-                  )}
-
                   {/* Summary Box */}
                   <div className="p-3 rounded-lg bg-bg border border-border space-y-1.5">
                     <div className="flex justify-between text-fg-subtle">
                       <span>Начислено всего:</span>
                       <span>{grossVal.toLocaleString()} TJS</span>
                     </div>
+                    {paidSalary > 0 && (
+                      <div className="flex justify-between text-fg-subtle">
+                        <span>Уже выплачено зарплаты за месяц:</span>
+                        <span>-{paidSalary.toLocaleString()} TJS</span>
+                      </div>
+                    )}
                     <div className="flex justify-between text-warning">
-                      <span>Удержано авансов:</span>
-                      <span>-{advanceDeduction.toLocaleString()} TJS</span>
+                      <span>Удержано авансов за месяц:</span>
+                      <span>-{totalAdvances.toLocaleString()} TJS</span>
                     </div>
                     <div className="flex justify-between pt-1 border-t border-border text-sm font-bold text-accent">
                       <span>К выгрузке / на руки:</span>
@@ -1186,7 +1191,7 @@ export const EmployeesPage: React.FC = () => {
                     </button>
                     <button
                       type="submit"
-                      disabled={isSubmitting}
+                      disabled={isSubmitting || !payrollSummary}
                       className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold uppercase text-accent-fg shadow-xs disabled:opacity-60 flex items-center justify-center gap-1.5"
                     >
                       {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}

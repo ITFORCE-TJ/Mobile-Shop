@@ -364,6 +364,14 @@ export interface Owner {
   storeId?: string | null;
 }
 
+/** A partner's share of one store's profit; the admin owner receives the rest of that store's profit. */
+export interface StoreProfitShare {
+  id: string;
+  storeId: string;
+  ownerId: string;
+  sharePercent: number;
+}
+
 export interface OwnerTransaction {
   id: string;
   ownerId: string;

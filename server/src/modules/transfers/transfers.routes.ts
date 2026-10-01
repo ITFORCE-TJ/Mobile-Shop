@@ -8,10 +8,11 @@ export function registerTransferRoutes(app: Express) {
     try {
       // SELLERs only see transfers touching their own store — cross-store transfer
       // history is not something a store employee should be able to read.
-      const storeScope =
-        req.user!.role === 'SELLER' && req.user!.storeId
-          ? { OR: [{ fromStoreId: req.user!.storeId }, { toStoreId: req.user!.storeId }] }
-          : undefined;
+      const userStoreId = req.user!.storeId;
+      const isStoreScoped = (req.user!.role === 'SELLER' || req.user!.role === 'PARTNER') && typeof userStoreId === 'string' && userStoreId.length > 0;
+      const storeScope = isStoreScoped
+        ? { OR: [{ fromStoreId: userStoreId }, { toStoreId: userStoreId }] }
+        : undefined;
 
       // Explicit opt-in cap — existing callers that don't pass it keep today's full-history
       // behavior. Pending approvals still surface via Notifications regardless of this cap.
@@ -60,6 +61,16 @@ export function registerTransferRoutes(app: Express) {
         return;
       }
 
+      if (req.user!.role === 'PARTNER') {
+        const ownStoreId = req.user!.storeId;
+        const mainWarehouse = await prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true } });
+        const validStoreIds = [ownStoreId, mainWarehouse?.id].filter(Boolean);
+        if (!validStoreIds.includes(fromStoreId) || !validStoreIds.includes(toStoreId)) {
+          res.status(403).json({ message: 'Вы можете перемещать товары только между своим магазином и главным складом' });
+          return;
+        }
+      }
+
       // An ADMIN/PARTNER doing the transfer themselves needs no separate approval step —
       // they're already the ones who'd approve it, so it just moves immediately.
       const transfer = await TransfersService.createDirect({ fromStoreId, toStoreId, deviceIds, requestedByUserId: req.user!.userId });
@@ -71,6 +82,13 @@ export function registerTransferRoutes(app: Express) {
 
   app.post('/api/transfers/:id/approve', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const tr = await prisma.transferRequest.findUnique({ where: { id: req.params.id }, select: { fromStoreId: true, toStoreId: true } });
+        if (!tr || (tr.fromStoreId !== req.user!.storeId && tr.toStoreId !== req.user!.storeId)) {
+          res.status(403).json({ message: 'Нет доступа к перемещениям другого магазина' });
+          return;
+        }
+      }
       const transfer = await TransfersService.approve(req.params.id, req.user!.userId);
       res.json(transfer);
     } catch (error) {
@@ -80,6 +98,13 @@ export function registerTransferRoutes(app: Express) {
 
   app.post('/api/transfers/:id/reject', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
+      if (req.user!.role === 'PARTNER') {
+        const tr = await prisma.transferRequest.findUnique({ where: { id: req.params.id }, select: { fromStoreId: true, toStoreId: true } });
+        if (!tr || (tr.fromStoreId !== req.user!.storeId && tr.toStoreId !== req.user!.storeId)) {
+          res.status(403).json({ message: 'Нет доступа к перемещениям другого магазина' });
+          return;
+        }
+      }
       const reason = typeof req.body?.reason === 'string' ? req.body.reason : 'Не указана';
       const transfer = await TransfersService.reject(req.params.id, req.user!.userId, reason);
       res.json(transfer);
