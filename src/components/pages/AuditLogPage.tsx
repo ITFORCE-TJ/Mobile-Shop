@@ -10,8 +10,6 @@ import {
   ArrowDown,
   ArrowUp,
   Download,
-  Filter,
-  User as UserIcon,
   Store as StoreIcon,
   RotateCcw
 } from 'lucide-react';

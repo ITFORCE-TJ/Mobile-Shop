@@ -17,16 +17,26 @@ export function registerCashCollectionRoutes(app: Express) {
     }
   });
 
+  // Every register in TJS and USD (Central Cash included) — ADMIN only.
+  app.get('/api/cash-collections/balances', authenticateJwt, requireRoles('ADMIN'), async (_req, res, next) => {
+    try {
+      res.json(await CashCollectionService.balances());
+    } catch (error) {
+      next(error);
+    }
+  });
+
   app.post('/api/cash-collections', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
     try {
-      const { storeId, amountUsd, comment } = req.body ?? {};
-      if (!storeId || amountUsd === undefined || amountUsd === null) {
-        res.status(400).json({ message: 'Укажите магазин и сумму инкассации в долларах (amountUsd)' });
+      // The whole register is collected; the client confirms the balance it showed the admin.
+      const { storeId, expectedCashUsd, comment } = req.body ?? {};
+      if (!storeId || expectedCashUsd === undefined || expectedCashUsd === null || expectedCashUsd === '') {
+        res.status(400).json({ message: 'Укажите магазин и подтверждённый остаток кассы (expectedCashUsd)' });
         return;
       }
       const result = await CashCollectionService.collect({
         storeId,
-        amountUsd,
+        expectedCashUsd,
         comment: typeof comment === 'string' ? comment.trim() : undefined,
         actorUserId: req.user!.userId,
       });

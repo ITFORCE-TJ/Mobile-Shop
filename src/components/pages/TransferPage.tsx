@@ -36,8 +36,9 @@ export const TransferPage: React.FC = () => {
   const isStoreScoped = isSeller || isPartner;
   const sellerStoreName = currentUser?.storeName || (currentUser?.storeId ? stores.find(s => s.id === currentUser.storeId)?.name : undefined) || 'Мой магазин';
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
-  // Store-scoped users default to pulling stock IN from the main warehouse into their own store
-  const defaultFromId = isStoreScoped ? (mainWarehouse?.id || currentUser?.storeId || stores[0]?.id || '') : stores[0]?.id || '';
+  // Store staff send only their own store's stock; phones from the main warehouse arrive through
+  // «Приход товара» (IMEI scan), the main warehouse itself is ADMIN-only.
+  const defaultFromId = isStoreScoped ? (currentUser?.storeId || '') : stores[0]?.id || '';
 
   const [fromLocationId, setFromLocationId] = useState<string>(defaultFromId);
   const [toLocationId, setToLocationId] = useState<string>('');
@@ -103,13 +104,6 @@ export const TransferPage: React.FC = () => {
       return true;
     });
   }, [devices, fromLocationId, searchQuery]);
-
-  // When changing the source, always reset destination to empty so user explicitly picks where to send
-  const handleSellerFromChange = (id: string) => {
-    setFromLocationId(id);
-    setSelectedDeviceIds([]);
-    setToLocationId('');
-  };
 
   const handleToggleSelectDevice = (id: string) => {
     setSelectedDeviceIds(prev =>
@@ -193,7 +187,7 @@ export const TransferPage: React.FC = () => {
         setConfirmTransferModal(false);
         setStatusBanner({
           tone: 'success',
-          text: isSeller
+          text: isStoreScoped
             ? `Заявка на перемещение (${selectedDeviceIds.length} шт.) отправлена и ожидает подтверждения администратора.`
             : `Перемещение (${selectedDeviceIds.length} шт.) выполнено.`
         });
@@ -299,21 +293,13 @@ export const TransferPage: React.FC = () => {
                 <div>
                   <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Откуда (Отправитель):</label>
                   {isStoreScoped ? (
-                    mainWarehouse && mainWarehouse.id !== currentUser?.storeId ? (
-                      <select
-                        value={fromLocationId ?? ''}
-                        onChange={(e) => handleSellerFromChange(e.target.value)}
-                        className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                      >
-                        <option value={mainWarehouse.id}>{mainWarehouse.name} (Центр)</option>
-                        <option value={currentUser?.storeId || ''}>{sellerStoreName}</option>
-                      </select>
-                    ) : (
+                    <>
                       <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
                         <StoreIcon className="w-4 h-4 text-accent" />
                         <span>{sellerStoreName}</span>
                       </div>
-                    )
+                      <p className="text-[11px] text-fg-subtle mt-1">Телефоны с главного склада принимаются в разделе «Приход товара».</p>
+                    </>
                   ) : (
                     <select
                       value={fromLocationId ?? ''}

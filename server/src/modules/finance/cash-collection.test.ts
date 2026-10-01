@@ -2,29 +2,29 @@ import { describe, it, expect } from 'vitest';
 import { CashCollectionService } from './cash-collection.service';
 
 describe('CashCollectionService validation and safety', () => {
-  it('rejects non-positive cash collection amounts', async () => {
+  it('rejects a negative or missing confirmed register balance before touching the database', async () => {
     await expect(
       CashCollectionService.collect({
         storeId: 'store-siyoma',
-        amountUsd: 0,
+        expectedCashUsd: -50,
         actorUserId: 'user-admin',
       })
-    ).rejects.toThrow('Сумма инкассации должна быть больше нуля');
+    ).rejects.toThrow('Подтверждённый остаток кассы не может быть отрицательной');
 
     await expect(
       CashCollectionService.collect({
         storeId: 'store-siyoma',
-        amountUsd: -50,
+        expectedCashUsd: 'abc',
         actorUserId: 'user-admin',
       })
-    ).rejects.toThrow('Сумма инкассации должна быть больше нуля');
+    ).rejects.toThrow();
   });
 
   it('rejects collection from non-existent store', async () => {
     await expect(
       CashCollectionService.collect({
         storeId: 'non-existent-store-id',
-        amountUsd: 100,
+        expectedCashUsd: 100,
         actorUserId: 'user-admin',
       })
     ).rejects.toThrow();

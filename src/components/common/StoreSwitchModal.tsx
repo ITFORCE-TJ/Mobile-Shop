@@ -23,20 +23,16 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
   const navigate = useNavigate();
   const { triggerStoreTransition } = useUIStore();
   const {
-    currentUser,
     stores,
     devices,
     selectedStoreId,
     setSelectedStoreId,
-    activePage,
     setActivePage,
   } = useAppFields(
-    'currentUser',
     'stores',
     'devices',
     'selectedStoreId',
     'setSelectedStoreId',
-    'activePage',
     'setActivePage'
   );
 

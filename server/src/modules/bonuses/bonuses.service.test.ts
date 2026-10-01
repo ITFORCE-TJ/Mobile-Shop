@@ -1,5 +1,4 @@
 import '../../common/decimal-test-setup';
-import { D } from '../../common/decimal';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const db = vi.hoisted(() => {

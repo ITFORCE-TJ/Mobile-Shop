@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useCollapsedNavGroups } from '../../hooks/useCollapsedNavGroups';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
@@ -25,32 +25,12 @@ import {
   LogOut,
   Landmark,
   Store,
-  Sparkles,
-  ArrowRight,
   ChevronDown,
   PanelLeftClose,
   PanelLeftOpen,
+  PackagePlus,
 } from 'lucide-react';
-
-const PAGE_ROUTES: Record<string, string> = {
-  SALE: '/sale',
-  SALES_HISTORY: '/sales-history',
-  INVENTORY: '/inventory',
-  PURCHASE: '/purchase',
-  TRANSFER: '/transfer',
-  EXCHANGE: '/exchange',
-  REPAIR: '/repair',
-  SUPPLIERS: '/suppliers',
-  BONUSES: '/bonuses',
-  EXPENSES: '/expenses',
-  OWNERS: '/owners',
-  EMPLOYEES: '/employees',
-  REPORTS: '/finance',
-  FINANCE: '/finance',
-  AUDIT_LOG: '/audit-log',
-  SETTINGS: '/settings',
-  NOTIFICATIONS: '/notifications',
-};
+import { NAV_PAGE_ROUTES } from '../../router/navRoutes';
 
 interface NavGroup {
   title: string;
@@ -112,6 +92,7 @@ export const Sidebar: React.FC = () => {
           title: 'Склад',
           items: [
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
+            { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['SELLER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
           ],
         },
@@ -135,6 +116,7 @@ export const Sidebar: React.FC = () => {
           title: 'Склад',
           items: [
             { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['PARTNER'] },
+            { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['PARTNER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['PARTNER'] },
           ],
         },
@@ -168,6 +150,7 @@ export const Sidebar: React.FC = () => {
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN'] },
             { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
+            { id: 'RECEIPTS', label: 'Приходы магазинов', icon: PackagePlus, roles: ['ADMIN'] },
             { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
             { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN'] },
           ],
@@ -283,7 +266,7 @@ export const Sidebar: React.FC = () => {
                 <div className="space-y-0.5">
                   {visibleItems.map(item => {
                     const Icon = item.icon;
-                    const routePath = PAGE_ROUTES[item.id] || '/sale';
+                    const routePath = NAV_PAGE_ROUTES[item.id] || '/sale';
                     const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
                     const isNotif = item.id === 'NOTIFICATIONS';
 

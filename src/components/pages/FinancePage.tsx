@@ -7,11 +7,13 @@ import { RestrictedAccess } from '../ui/RestrictedAccess';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { ProfitReport } from '../finance/ProfitReport';
 import { BonusesFinancePanel } from '../finance/BonusesFinancePanel';
+import { CashCollectionPanel } from '../finance/CashCollectionPanel';
 
-type Tab = 'REPORT' | 'STORES' | 'BONUSES';
+type Tab = 'REPORT' | 'STORES' | 'CASH' | 'BONUSES';
 const TABS: { value: Tab; label: string }[] = [
   { value: 'REPORT', label: 'Отчёт' },
   { value: 'STORES', label: 'По магазинам' },
+  { value: 'CASH', label: 'Инкассация' },
   { value: 'BONUSES', label: 'Бонусы' },
 ];
 
@@ -56,6 +58,8 @@ export const FinancePage: React.FC = () => {
       <div className="flex-1 overflow-y-auto">
         {tab === 'BONUSES' ? (
           <BonusesFinancePanel month={reportMonth} onMonthChange={setReportMonth} />
+        ) : tab === 'CASH' ? (
+          <CashCollectionPanel month={reportMonth} />
         ) : (
           <ProfitReport key={tab} view={tab === 'REPORT' ? 'summary' : 'stores'} month={reportMonth} onMonthChange={setReportMonth} />
         )}

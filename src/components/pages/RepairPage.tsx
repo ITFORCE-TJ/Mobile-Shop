@@ -9,10 +9,6 @@ import {
   Wrench,
   Plus,
   Search,
-  AlertCircle,
-  PackageCheck,
-  X,
-  FileText,
   Loader2,
   Scan
 } from 'lucide-react';
@@ -92,8 +88,6 @@ export const RepairPage: React.FC = () => {
   // or an older month reaches further back, so fetch that exact range from the server and
   // merge it in. Guarded against a stale response overwriting a newer one on fast clicks.
   useEffect(() => {
-    const thisMonth = getBusinessDateKey().substring(0, 7);
-
     let cancelled = false;
     setListLoad('loading');
     fetchRepairsRange({
@@ -111,7 +105,6 @@ export const RepairPage: React.FC = () => {
 
   const isSeller = currentUser?.role === 'SELLER';
   const isPartner = currentUser?.role === 'PARTNER';
-  const isAdmin = currentUser?.role === 'ADMIN';
   const isStoreScoped = isSeller || isPartner;
 
   // Defaults to whichever store is currently active on the POS Terminal page —
@@ -696,7 +689,6 @@ export const RepairPage: React.FC = () => {
               <div className="space-y-2.5">
                 {filteredRepairs.map((ticket: RepairTicket) => {
                   const conf = getStatusBadge(ticket.status);
-                  const isReady = ticket.status === 'READY';
 
                   return (
                     <div

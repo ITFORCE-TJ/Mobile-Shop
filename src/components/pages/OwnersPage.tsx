@@ -25,11 +25,6 @@ import {
   AlertCircle,
   Store,
   Warehouse,
-  ChevronDown,
-  ChevronUp,
-  RefreshCw,
-  ArrowRightLeft,
-  Calendar,
   FileText
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
@@ -43,20 +38,6 @@ function ownerCountLabel(count: number): string {
   return 'учредителей';
 }
 
-function storeCountLabel(count: number): string {
-  const mod10 = count % 10;
-  const mod100 = count % 100;
-  if (mod10 === 1 && mod100 !== 11) return 'объект';
-  if (mod10 >= 2 && mod10 <= 4 && (mod100 < 10 || mod100 >= 20)) return 'объекта';
-  return 'объектов';
-}
-
-const TX_TYPE_LABELS: Record<'INVESTMENT' | 'WITHDRAWAL' | 'PROFIT_PAYOUT' | 'REINVEST', string> = {
-  INVESTMENT: 'Внесение капитала',
-  REINVEST: 'Реинвестирование из прибыли',
-  PROFIT_PAYOUT: 'Выплата чистой прибыли',
-  WITHDRAWAL: 'Изъятие / Вывод капитала',
-};
 
 export const OwnersPage: React.FC = () => {
   const {
@@ -67,11 +48,9 @@ export const OwnersPage: React.FC = () => {
     stores,
     devices,
     ownerTransactions,
-    suppliers,
     todayRate,
     createOwnerTransaction,
     setStoreProfitShares,
-    linkOwnerToUser,
     closeQuarterPeriod,
     initializeOwners
   } = useAppFields(
@@ -82,28 +61,14 @@ export const OwnersPage: React.FC = () => {
     'stores',
     'devices',
     'ownerTransactions',
-    'suppliers',
     'todayRate',
     'createOwnerTransaction',
     'setStoreProfitShares',
-    'linkOwnerToUser',
     'closeQuarterPeriod',
     'initializeOwners'
   );
 
   const [isInitializing, setIsInitializing] = useState(false);
-  const [linkingOwnerId, setLinkingOwnerId] = useState<string | null>(null);
-
-  const handleChangeLinkedUser = async (ownerId: string, newUserId: string) => {
-    if (linkingOwnerId) return;
-    setLinkingOwnerId(ownerId);
-    const res = await linkOwnerToUser(ownerId, newUserId || null);
-    setLinkingOwnerId(null);
-    if (!res.success) {
-      setStatusBanner({ tone: 'error', text: res.message || 'Не удалось привязать аккаунт' });
-    }
-  };
-
   const handleInitializeOwners = async () => {
     setIsInitializing(true);
     const res = await initializeOwners();
@@ -149,7 +114,6 @@ export const OwnersPage: React.FC = () => {
   const [selectedSharesStoreId, setSelectedSharesStoreId] = useState<string>('');
   const [adminShareVal, setAdminShareVal] = useState<string>('60');
   const [partnerShareVal, setPartnerShareVal] = useState<string>('40');
-  const [rebalanceOnSave, setRebalanceOnSave] = useState(false);
 
   // Tx state
   const [selectedOwnerId, setSelectedOwnerId] = useState(owners[0]?.id || '');
@@ -182,12 +146,6 @@ export const OwnersPage: React.FC = () => {
     const pair = sharePairOf(storeId);
     return (pair && owners.find(o => o.id === pair.ownerId))
       || owners.find(o => o.storeId === storeId && o.id !== adminOwner?.id);
-  };
-  const storeSplitLabel = (storeId: string) => {
-    const pair = sharePairOf(storeId);
-    const partner = pair ? owners.find(o => o.id === pair.ownerId) : undefined;
-    const adminShare = 100 - (pair?.sharePercent ?? 0);
-    return `${formatUserName(adminOwner?.name || 'Администратор')} ${adminShare}%${partner && pair ? ` / ${formatUserName(partner.name)} ${pair.sharePercent}%` : ''}`;
   };
   const ownerShareLabel = (ownerId: string) => {
     if (ownerId === adminOwner?.id) return 'остаток прибыли магазинов';
@@ -282,7 +240,6 @@ export const OwnersPage: React.FC = () => {
   }, [filteredTransactions, transactionsPage]);
 
   const totalCapitalInvested = useMemo(() => owners.reduce((acc, o) => acc + (o.capitalBalanceUsd ?? 0), 0), [owners]);
-  const totalSpentOnGoodsUsd = useMemo(() => (suppliers || []).reduce((acc, s) => acc + (s.totalPaidUsd ?? 0), 0), [suppliers]);
   const totalAvailableProfit = useMemo(() => owners.reduce((acc, o) => acc + (o.availableProfitUsd ?? 0), 0), [owners]);
 
   // Devices currently in stock across warehouses and stores

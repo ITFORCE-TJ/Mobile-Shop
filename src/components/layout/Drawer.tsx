@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useMemo } from 'react';
 import { useCollapsedNavGroups } from '../../hooks/useCollapsedNavGroups';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
@@ -29,27 +29,9 @@ import {
   Landmark,
   Store,
   ArrowRight,
+  PackagePlus,
 } from 'lucide-react';
-
-const PAGE_ROUTES: Record<string, string> = {
-  SALE: '/sale',
-  SALES_HISTORY: '/sales-history',
-  INVENTORY: '/inventory',
-  PURCHASE: '/purchase',
-  TRANSFER: '/transfer',
-  EXCHANGE: '/exchange',
-  REPAIR: '/repair',
-  SUPPLIERS: '/suppliers',
-  BONUSES: '/bonuses',
-  EXPENSES: '/expenses',
-  OWNERS: '/owners',
-  EMPLOYEES: '/employees',
-  REPORTS: '/finance',
-  FINANCE: '/finance',
-  AUDIT_LOG: '/audit-log',
-  SETTINGS: '/settings',
-  NOTIFICATIONS: '/notifications',
-};
+import { NAV_PAGE_ROUTES } from '../../router/navRoutes';
 
 interface NavGroup {
   title: string;
@@ -116,6 +98,7 @@ export const Drawer: React.FC = () => {
           title: 'Склад и касса',
           items: [
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
+            { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['SELLER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
             { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['SELLER'] },
           ],
@@ -138,6 +121,7 @@ export const Drawer: React.FC = () => {
           title: 'Склад',
           items: [
             { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['PARTNER'] },
+            { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['PARTNER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['PARTNER'] },
           ],
         },
@@ -169,6 +153,7 @@ export const Drawer: React.FC = () => {
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['ADMIN'] },
             { id: 'PURCHASE', label: 'Приходы (партии)', icon: PlusCircle, roles: ['ADMIN'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
+            { id: 'RECEIPTS', label: 'Приходы магазинов', icon: PackagePlus, roles: ['ADMIN'] },
             { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
             { id: 'SUPPLIERS', label: 'Поставщики', icon: Truck, roles: ['ADMIN'] },
           ],
@@ -385,7 +370,7 @@ export const Drawer: React.FC = () => {
                   <div className="space-y-1.5 pt-0.5 animate-in fade-in-50 duration-150">
                     {visibleItems.map(item => {
                       const Icon = item.icon;
-                      const routePath = PAGE_ROUTES[item.id] || '/sale';
+                      const routePath = NAV_PAGE_ROUTES[item.id] || '/sale';
                       const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
                       const isNotif = item.id === 'NOTIFICATIONS';
 

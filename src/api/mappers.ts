@@ -1,4 +1,4 @@
-import type { Device, DeviceTimelineEvent, Sale, SaleItem, ExchangeEvent, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, TransferRequest, RepairTicket, User, Store, NotificationItem, AuditLogEntry, DailyRate } from '../types';
+import type { Device, DeviceTimelineEvent, Sale, SaleItem, ExchangeEvent, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, TransferRequest, RepairTicket, User, Store, NotificationItem, AuditLogEntry, DailyRate, StoreReceipt } from '../types';
 
 type NameLookup = Map<string, string>;
 
@@ -366,6 +366,29 @@ export function mapNotification(n: any): NotificationItem {
     resolved: n.resolved,
     readAt: n.readAt ?? undefined,
     resolvedAt: n.resolvedAt ?? undefined,
+    actionType: n.actionType ?? undefined,
+    storeId: n.storeId ?? undefined,
+    storeName: n.storeName ?? undefined,
+    actorName: n.actorName ?? undefined,
+    amountTjs: n.amountTjs ?? undefined,
+    amountUsd: n.amountUsd ?? undefined,
+    documentRef: n.documentRef ?? undefined,
+    details: n.details ?? undefined,
+  };
+}
+
+export function mapStoreReceipt(r: any): StoreReceipt {
+  return {
+    id: r.id,
+    receiptNumber: r.receiptNumber,
+    storeId: r.storeId,
+    storeName: r.storeName ?? r.store?.name ?? undefined,
+    createdByName: r.createdByName,
+    itemCount: r.itemCount,
+    createdAt: r.createdAt,
+    acknowledgedAt: r.acknowledgedAt ?? null,
+    acknowledgedByName: r.acknowledgedByName ?? null,
+    items: (r.items ?? []).map((i: any) => ({ id: i.id, deviceId: i.deviceId, imei: i.imei, brand: i.brand, model: i.model, ram: i.ram, storage: i.storage, color: i.color })),
   };
 }
 

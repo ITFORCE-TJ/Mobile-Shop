@@ -45,6 +45,7 @@ const FinancePage = lazy(() => import('../components/pages/FinancePage').then(m 
 const AuditLogPage = lazy(() => import('../components/pages/AuditLogPage').then(m => ({ default: m.AuditLogPage })));
 const SettingsPage = lazy(() => import('../components/pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
 const NotificationsPage = lazy(() => import('../components/pages/NotificationsPage').then(m => ({ default: m.NotificationsPage })));
+const ReceiptsPage = lazy(() => import('../components/pages/ReceiptsPage').then(m => ({ default: m.ReceiptsPage })));
 
 const PAGE_ROUTES: Record<string, string> = {
   SALE: '/sale',
@@ -64,6 +65,7 @@ const PAGE_ROUTES: Record<string, string> = {
   AUDIT_LOG: '/audit-log',
   SETTINGS: '/settings',
   NOTIFICATIONS: '/notifications',
+  RECEIPTS: '/receipts',
 };
 
 function LoadingFallback() {
@@ -132,6 +134,7 @@ export function MainLayout() {
               <Route path="/audit-log" element={currentUser?.role === 'ADMIN' ? <AuditLogPage /> : <Navigate to="/sale" replace />} />
               <Route path="/settings" element={<SettingsPage />} />
               <Route path="/notifications" element={currentUser?.role === 'ADMIN' ? <NotificationsPage /> : <Navigate to="/sale" replace />} />
+              <Route path="/receipts" element={<ReceiptsPage />} />
               <Route path="*" element={<Navigate to={currentUser?.role === 'ADMIN' ? "/finance" : "/sale"} replace />} />
             </Routes>
           </Suspense>

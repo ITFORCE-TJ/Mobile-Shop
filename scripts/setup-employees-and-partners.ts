@@ -1,6 +1,5 @@
 import { prisma } from '../server/src/prisma/prisma.service';
 import { AuthService } from '../server/src/auth/auth.service';
-import { D } from '../server/src/common/decimal';
 
 async function main() {
   console.log('🚀 Setting up Stores, Partners, and Sellers...');

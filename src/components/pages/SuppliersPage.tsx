@@ -554,7 +554,7 @@ export const SuppliersPage: React.FC = () => {
 
       {/* MOBILE FULL-SCREEN MODAL FOR SELECTED SUPPLIER */}
       {selectedSupplier && (
-        <div className="lg:hidden fixed inset-0 z-40 bg-bg flex flex-col">
+        <div className="app-safe-area lg:hidden fixed inset-0 z-40 bg-bg flex flex-col pb-[var(--sa-bottom)]">
           {/* Header with Title and prominent Close "X" Button */}
           <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
             <div className="flex items-center space-x-2">

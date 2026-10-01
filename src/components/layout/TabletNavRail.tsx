@@ -23,27 +23,9 @@ import {
   LogOut,
   Landmark,
   Store,
+  PackagePlus,
 } from 'lucide-react';
-
-const PAGE_ROUTES: Record<string, string> = {
-  SALE: '/sale',
-  SALES_HISTORY: '/sales-history',
-  INVENTORY: '/inventory',
-  PURCHASE: '/purchase',
-  TRANSFER: '/transfer',
-  EXCHANGE: '/exchange',
-  REPAIR: '/repair',
-  SUPPLIERS: '/suppliers',
-  BONUSES: '/bonuses',
-  EXPENSES: '/expenses',
-  OWNERS: '/owners',
-  EMPLOYEES: '/employees',
-  REPORTS: '/finance',
-  FINANCE: '/finance',
-  AUDIT_LOG: '/audit-log',
-  SETTINGS: '/settings',
-  NOTIFICATIONS: '/notifications',
-};
+import { NAV_PAGE_ROUTES } from '../../router/navRoutes';
 
 export const TabletNavRail: React.FC = () => {
   const navigate = useNavigate();
@@ -84,6 +66,7 @@ export const TabletNavRail: React.FC = () => {
         { id: 'EXCHANGE' as PageId, label: 'Обмен', icon: RefreshCw },
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
+        { id: 'RECEIPTS' as PageId, label: 'Приход', icon: PackagePlus },
         { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
       ];
     }
@@ -95,6 +78,7 @@ export const TabletNavRail: React.FC = () => {
         { id: 'EXCHANGE' as PageId, label: 'Обмен', icon: RefreshCw },
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
+        { id: 'RECEIPTS' as PageId, label: 'Приход', icon: PackagePlus },
         { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
         { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
         { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
@@ -110,6 +94,7 @@ export const TabletNavRail: React.FC = () => {
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
         { id: 'PURCHASE' as PageId, label: 'Приход', icon: PlusCircle },
         { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+        { id: 'RECEIPTS' as PageId, label: 'Приёмки', icon: PackagePlus },
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'SUPPLIERS' as PageId, label: 'Поставщ.', icon: Truck },
         { id: 'OWNERS' as PageId, label: 'Партнеры', icon: Users },
@@ -189,7 +174,7 @@ export const TabletNavRail: React.FC = () => {
       <nav className="flex-1 overflow-y-auto scrollbar-none py-3 space-y-1.5 w-full px-2 flex flex-col items-center">
         {visibleItems.map((item) => {
           const Icon = item.icon;
-          const routePath = PAGE_ROUTES[item.id] || '/sale';
+          const routePath = NAV_PAGE_ROUTES[item.id] || '/sale';
           const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
 
           return (

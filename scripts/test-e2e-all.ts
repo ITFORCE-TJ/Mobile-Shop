@@ -203,28 +203,22 @@ async function runE2ETests() {
     // 5. TRANSFERS BETWEEN STORES
     console.log('\n--- 5. TRANSFERS & WAREHOUSE MOVEMENTS ---');
     if (createdDeviceId) {
-      // A SELLER pulling stock from the main warehouse into their own store can only ever
-      // request it — an ADMIN/PARTNER must approve before it actually moves.
-      const transferRes = await fetch(`${API_BASE}/transfers`, {
+      // Main warehouse stock is ADMIN-only: a SELLER can no longer pull it with a transfer
+      // request. Phones the admin delivers are taken in by scanning them into a store receipt.
+      const pullRes = await fetch(`${API_BASE}/transfers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sellerToken}` },
-        body: JSON.stringify({
-          fromStoreId: 'main-warehouse',
-          toStoreId: 'store-siyoma',
-          deviceIds: [createdDeviceId]
-        })
+        body: JSON.stringify({ fromStoreId: 'main-warehouse', toStoreId: 'store-siyoma', deviceIds: [createdDeviceId] })
       });
-      const transferData = await transferRes.json();
-      assert(transferRes.status === 201 && transferData.status === 'PENDING_APPROVAL', 'SELLER transfer request from main warehouse to Siyoma store stays pending');
+      assert(pullRes.status === 403, 'SELLER cannot pull main warehouse stock with a transfer request');
 
-      if (transferData.id) {
-        const approveRes = await fetch(`${API_BASE}/transfers/${transferData.id}/approve`, {
-          method: 'POST',
-          headers: { Authorization: `Bearer ${adminToken}` }
-        });
-        const approvedData = await approveRes.json();
-        assert(approveRes.ok && approvedData.status === 'APPROVED', 'ADMIN approves the pending transfer (moves device to store stock)');
-      }
+      const receiptRes = await fetch(`${API_BASE}/store-receipts`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${sellerToken}`, 'Idempotency-Key': `e2e-receipt-${Date.now()}` },
+        body: JSON.stringify({ imeis: [testImei] })
+      });
+      const receiptData = await receiptRes.json();
+      assert(receiptRes.status === 201 && receiptData.itemCount === 1 && receiptData.storeId === 'store-siyoma', 'SELLER receives the delivered phone into the store by IMEI (no approval step)');
 
       // An ADMIN doing the transfer themselves needs no separate approval — it moves immediately.
       const secondPurchaseRes = await fetch(`${API_BASE}/purchases`, {
@@ -363,6 +357,8 @@ async function runE2ETests() {
       await prisma.transferRequest.deleteMany({ where: { items: { none: {} } } });
       await prisma.saleItem.deleteMany({ where: { deviceId: createdDeviceId } });
       if (createdSaleId) await prisma.sale.deleteMany({ where: { id: createdSaleId } });
+    // The receipt that brought the test phone into the store keeps it referenced; remove it first.
+    await prisma.storeReceipt.deleteMany({ where: { items: { some: { deviceId: createdDeviceId } } } });
       await prisma.device.deleteMany({ where: { id: createdDeviceId } });
     }
   } finally {

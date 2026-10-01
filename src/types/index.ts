@@ -61,7 +61,8 @@ export type PageId =
   | 'FINANCE'
   | 'AUDIT_LOG'
   | 'SETTINGS'
-  | 'NOTIFICATIONS';
+  | 'NOTIFICATIONS'
+  | 'RECEIPTS';
 
 export interface User {
   id: string;
@@ -404,8 +405,9 @@ export interface NotificationItem {
   timestamp?: string;
   targetType?: 'TRANSFER_REQUEST' | 'LOW_STOCK' | 'SYSTEM' | 'REPAIR' | string;
   targetId?: string;
-  targetRoute?: PageId;
-  linkPage?: PageId;
+  /** A page id (older notifications) or an app path such as '/receipts?receipt=…'. */
+  targetRoute?: PageId | string;
+  linkPage?: PageId | string;
   targetRole?: Role;
   targetUserId?: string;
   read?: boolean;
@@ -413,6 +415,40 @@ export interface NotificationItem {
   resolved?: boolean;
   readAt?: string;
   resolvedAt?: string;
+  /** Facts of the business event behind an admin notification. */
+  actionType?: string;
+  storeId?: string;
+  storeName?: string;
+  actorName?: string;
+  amountTjs?: number;
+  amountUsd?: number;
+  documentRef?: string;
+  details?: { imeis?: string[] } & Record<string, unknown>;
+}
+
+/** A store's receipt of phones delivered from the main warehouse (scanned by IMEI). */
+export interface StoreReceiptItem {
+  id: string;
+  deviceId: string;
+  imei: string;
+  brand: string;
+  model: string;
+  ram?: string | null;
+  storage: string;
+  color: string;
+}
+
+export interface StoreReceipt {
+  id: string;
+  receiptNumber: string;
+  storeId: string;
+  storeName?: string;
+  createdByName: string;
+  itemCount: number;
+  createdAt: string;
+  acknowledgedAt?: string | null;
+  acknowledgedByName?: string | null;
+  items: StoreReceiptItem[];
 }
 
 export interface AuditLogEntry {

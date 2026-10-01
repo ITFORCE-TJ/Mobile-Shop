@@ -1,5 +1,5 @@
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
-import { decimal, moneyNumber, sumMoney } from '../../utils/money';
+import { decimal, moneyNumber } from '../../utils/money';
 import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { SupplierInvoice, Device } from '../../types';

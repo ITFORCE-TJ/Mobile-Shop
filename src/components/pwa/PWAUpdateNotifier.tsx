@@ -72,7 +72,7 @@ export const PWAUpdateNotifier: React.FC = () => {
     <>
       {/* Service Worker Update Toast */}
       {needRefresh && (
-        <div className="fixed top-14 sm:top-16 left-3 right-3 z-50 max-w-md mx-auto bg-surface border border-sky-500/50 p-3 rounded-xl shadow-2xl backdrop-blur-xl text-fg-muted font-mono flex items-center justify-between space-x-3 animate-in slide-in-from-top-4 duration-300">
+        <div className="fixed top-[calc(3.5rem+var(--sa-top))] sm:top-[calc(4rem+var(--sa-top))] left-[calc(0.75rem+var(--sa-left))] right-[calc(0.75rem+var(--sa-right))] z-50 max-w-md mx-auto bg-surface border border-sky-500/50 p-3 rounded-xl shadow-2xl backdrop-blur-xl text-fg-muted font-mono flex items-center justify-between space-x-3 animate-in slide-in-from-top-4 duration-300">
           <div className="flex items-center space-x-2.5 min-w-0">
             <RefreshCw className="w-5 h-5 text-sky-400 animate-spin shrink-0" />
             <div className="min-w-0">

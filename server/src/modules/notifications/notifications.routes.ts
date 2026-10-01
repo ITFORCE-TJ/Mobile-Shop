@@ -18,6 +18,25 @@ export function registerNotificationRoutes(app: Express) {
         return;
       }
       const user = req.user!;
+      // Notification Center history (ADMIN): every notification, filtered and paged by cursor.
+      if (req.query.view === 'history' && user.role === 'ADMIN') {
+        const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 100);
+        const cursor = typeof req.query.cursor === 'string' ? req.query.cursor : undefined;
+        const filters = [
+          notificationScope(user),
+          ...(req.query.unread === '1' ? [{ read: false }] : []),
+          ...(typeof req.query.storeId === 'string' && req.query.storeId ? [{ storeId: req.query.storeId }] : []),
+          ...(typeof req.query.actionType === 'string' && req.query.actionType ? [{ actionType: req.query.actionType }] : []),
+        ];
+        const rows = await prisma.notification.findMany({
+          where: { AND: filters },
+          orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+          take: limit + 1,
+          ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
+        });
+        res.json({ items: rows.slice(0, limit), nextCursor: rows.length > limit ? rows[limit - 1].id : null });
+        return;
+      }
       // Unbounded before: this ran on every login and every realtime resync, so it only got
       // slower as the business operated longer. Anything still unresolved stays visible no
       // matter its age (a pending transfer approval shouldn't silently vanish), but resolved/
@@ -76,7 +95,7 @@ export function registerNotificationRoutes(app: Express) {
       });
       if (result.count !== 1) { res.status(404).json({ message: 'Уведомление не найдено' }); return; }
       const notification = await prisma.notification.findUniqueOrThrow({ where: { id: req.params.id } });
-      RealtimeSyncGateway.broadcast('NOTIFICATION_CREATED', notification);
+      RealtimeSyncGateway.broadcast('NOTIFICATION_CREATED', { id: notification.id }, notification.targetRole ? { roles: [notification.targetRole] } : {});
       res.json(notification);
     } catch (error) {
       next(error);

@@ -11,7 +11,6 @@ import {
   Plus,
   CheckCircle2,
   AlertCircle,
-  Building,
   Sun,
   Moon,
   Check,

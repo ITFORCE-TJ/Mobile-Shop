@@ -43,7 +43,7 @@ export const StatusBanner: React.FC<StatusBannerProps> = ({ message, onDismiss }
   const { icon: Icon, classes } = TONE_CONFIG[tone];
 
   return (
-    <div className="fixed top-3 inset-x-3 z-100 flex justify-center pointer-events-none">
+    <div className="fixed top-[calc(0.75rem+var(--sa-top))] inset-x-[calc(0.75rem+max(var(--sa-left),var(--sa-right)))] z-100 flex justify-center pointer-events-none">
       <div
         role="status"
         className={cn(

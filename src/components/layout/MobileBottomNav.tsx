@@ -2,37 +2,15 @@ import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
-import { PageId } from '../../types';
 import {
   ShoppingBag,
   History,
   Package,
-  PlusCircle,
   Menu,
   RefreshCw,
   Landmark,
-  Wallet,
+  Wallet
 } from 'lucide-react';
-
-const PAGE_ROUTES: Record<string, string> = {
-  SALE: '/sale',
-  SALES_HISTORY: '/sales-history',
-  INVENTORY: '/inventory',
-  PURCHASE: '/purchase',
-  TRANSFER: '/transfer',
-  EXCHANGE: '/exchange',
-  REPAIR: '/repair',
-  SUPPLIERS: '/suppliers',
-  BONUSES: '/bonuses',
-  EXPENSES: '/expenses',
-  OWNERS: '/owners',
-  EMPLOYEES: '/employees',
-  REPORTS: '/finance',
-  FINANCE: '/finance',
-  AUDIT_LOG: '/audit-log',
-  SETTINGS: '/settings',
-  NOTIFICATIONS: '/notifications',
-};
 
 export const MobileBottomNav: React.FC = () => {
   const navigate = useNavigate();
@@ -47,8 +25,6 @@ export const MobileBottomNav: React.FC = () => {
   const { notifications } = useNotifications();
 
   const userRole = currentUser?.role || 'SELLER';
-  const isSeller = userRole === 'SELLER';
-  const isPartner = userRole === 'PARTNER';
   const isAdmin = userRole === 'ADMIN';
   const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
 

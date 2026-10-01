@@ -20,12 +20,10 @@ import {
   Sparkles,
   Briefcase,
   Package,
-  Banknote,
-  ArrowRight,
+  Banknote
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
-import { Badge } from '../ui/Badge';
 import {
   exportComprehensiveReport,
   buildSalesReportTable,
@@ -117,14 +115,6 @@ function monthLabel(month: string): string {
   if (!y || !m) return month;
   return new Date(y, m - 1, 1).toLocaleDateString('ru-RU', { month: 'long', year: 'numeric' });
 }
-
-const Metric: React.FC<{ label: string; value: string; sub?: string; tone?: 'default' | 'success' | 'danger' | 'accent' }> = ({ label, value, sub, tone = 'default' }) => (
-  <div className="min-w-0">
-    <p className="text-[10px] text-fg-subtle uppercase tracking-wide truncate">{label}</p>
-    <p className={`text-sm font-bold truncate ${tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : tone === 'accent' ? 'text-accent' : 'text-fg-muted'}`}>{value}</p>
-    {sub && <p className="text-[11px] text-fg-subtle truncate">{sub}</p>}
-  </div>
-);
 
 const ExpenseCategoryList: React.FC<{ data: ExpenseBreakdown }> = ({ data }) => (
   data.expensesByCategory.length === 0 ? (

@@ -1,8 +1,7 @@
 import React, { useState, useMemo, useEffect } from 'react';
-import { formatMoney } from '../../utils/money';
+import { decimal, formatMoney, formatTjs, formatUsd, moneyNumber, sumMoney } from '../../utils/money';
 import { useAppFields } from '../../context/AppContext';
 import { Device, DeviceStatus, Store as StoreType } from '../../types';
-import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import {
   Smartphone,
   ChevronRight,
@@ -13,7 +12,6 @@ import {
   DollarSign,
   Layers,
   List,
-  Package,
   Boxes,
   Building2,
   ArrowRight,
@@ -29,12 +27,10 @@ import {
   SlidersHorizontal,
   Filter,
   RotateCcw,
-  X,
-  Tag
+  X
 } from 'lucide-react';
 import { useGroupedDevices } from '../../hooks/useGroupedDevices';
 import { SearchBar } from '../ui/SearchBar';
-import { Select } from '../ui/Input';
 import { Button } from '../ui/Button';
 import { Badge, BadgeTone } from '../ui/Badge';
 import { EmptyState } from '../ui/EmptyState';
@@ -43,6 +39,7 @@ import { Dialog } from '../ui/Dialog';
 import { StatCard } from '../ui/StatCard';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { useNavigationLayout } from '../../hooks/useNavigationLayout';
+import { useVirtualRows } from '../../hooks/useVirtualRows';
 import { DEVICE_STATUS_LABELS, findDeviceByCode, looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
 
 const IN_STOCK_STATUSES: DeviceStatus[] = ['STORE_STOCK', 'MAIN_WAREHOUSE', 'IN_STOCK_AFTER_EXCHANGE'];
@@ -73,39 +70,44 @@ function formatTimelineDate(dateStr: string): string {
   }
 }
 
+/** «≈ 1,234.00 TJS» for a USD amount at today's rate, or nothing when today's rate is not set. */
+function approxTjs(usd: number, rate?: number): string | null {
+  return rate ? `≈ ${formatTjs(decimal(usd).mul(rate))}` : null;
+}
+
 function getTimelineBadge(type: string) {
   const upper = (type || '').toUpperCase();
   if (upper === 'BONUS') {
     return {
-      label: 'БОНУС ПОСТАВЩИКА',
+      label: 'Бонус поставщика',
       tone: 'bg-amber-500/15 text-amber-500 border-amber-500/30',
       dot: 'bg-amber-500',
     };
   }
   if (upper === 'PURCHASE') {
     return {
-      label: 'ПОСТУПЛЕНИЕ / ПРИХОД',
+      label: 'Поступление',
       tone: 'bg-accent/15 text-accent border-accent/30',
       dot: 'bg-accent',
     };
   }
   if (upper === 'TRANSFER') {
     return {
-      label: 'ПЕРЕМЕЩЕНИЕ',
+      label: 'Перемещение',
       tone: 'bg-purple-500/15 text-purple-400 border-purple-500/30',
       dot: 'bg-purple-500',
     };
   }
   if (upper === 'SALE') {
     return {
-      label: 'ПРОДАЖА',
+      label: 'Продажа',
       tone: 'bg-success/15 text-success border-success/30',
       dot: 'bg-success',
     };
   }
   if (upper === 'REPAIR') {
     return {
-      label: 'РЕМОНТ',
+      label: 'Ремонт',
       tone: 'bg-orange-500/15 text-orange-400 border-orange-500/30',
       dot: 'bg-orange-500',
     };
@@ -122,12 +124,14 @@ interface DeviceRowProps {
   isAdmin?: boolean;
   storeName?: string;
   isMainWarehouse?: boolean;
-  rate: number;
+  rate?: number;
   onClick: () => void;
 }
 
-const DeviceRow: React.FC<DeviceRowProps> = ({ device, isAdmin, storeName, isMainWarehouse, rate, onClick }) => (
+const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device, isAdmin, storeName, isMainWarehouse, rate, onClick }, ref) => (
   <button
+    ref={ref}
+    type="button"
     onClick={onClick}
     className="w-full text-left px-3.5 sm:px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors hover:bg-surface-raised/50"
   >
@@ -158,22 +162,24 @@ const DeviceRow: React.FC<DeviceRowProps> = ({ device, isAdmin, storeName, isMai
     </div>
 
     <div className="text-right shrink-0 flex items-center gap-2">
-      {(device.purchaseCostUsd === 0 || device.isBonus) ? (
+      {/* Non-admins receive cost 0 from the server (it is hidden), so only the bonus flag counts for them. */}
+      {(device.isBonus || (isAdmin && device.purchaseCostUsd === 0)) ? (
         <Badge tone="accent">Бонус</Badge>
       ) : isAdmin && device.purchaseCostUsd > 0 ? (
         <div className="text-right">
-          <span className="text-xs font-bold text-fg-muted block">${formatMoney(device.purchaseCostUsd)}</span>
-          <span className="text-[10px] text-fg-subtle block">≈ {formatMoney(device.purchaseCostUsd * rate)} TJS</span>
+          <span className="text-xs font-bold text-fg-muted block">{formatUsd(device.purchaseCostUsd)}</span>
+          {approxTjs(device.purchaseCostUsd, rate) && <span className="text-[10px] text-fg-subtle block">{approxTjs(device.purchaseCostUsd, rate)}</span>}
         </div>
       ) : null}
       {!isAdmin && (device.retailPriceTjs ?? 0) > 0 && (
-        <span className="text-xs font-bold tabular-nums text-accent whitespace-nowrap">{formatMoney(device.retailPriceTjs)} TJS</span>
+        <span className="text-xs font-bold tabular-nums text-accent whitespace-nowrap">{formatTjs(device.retailPriceTjs)}</span>
       )}
       <Badge tone={STATUS_TONE[device.status]}>{STATUS_LABELS[device.status] || device.status}</Badge>
       <ChevronRight className="w-4 h-4 text-fg-subtle" />
     </div>
   </button>
-);
+));
+DeviceRow.displayName = 'DeviceRow';
 
 export const InventoryPage: React.FC = () => {
   const {
@@ -198,7 +204,8 @@ export const InventoryPage: React.FC = () => {
     'updateDevice'
   );
 
-  const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
+  // No fallback rate: a TJS equivalent is only shown when today's rate is actually set.
+  const rate = todayRate?.rate || undefined;
   const isSeller = currentUser?.role === 'SELLER';
   const isAdmin = currentUser?.role === 'ADMIN';
   const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
@@ -302,7 +309,7 @@ export const InventoryPage: React.FC = () => {
       const entry = map.get(d.locationId);
       if (!entry) continue;
       entry.unitCount++;
-      entry.valueUsd += d.purchaseCostUsd || 0;
+      entry.valueUsd = moneyNumber(decimal(entry.valueUsd).plus(d.purchaseCostUsd || 0));
     }
     return map;
   }, [devices, stores]);
@@ -336,7 +343,7 @@ export const InventoryPage: React.FC = () => {
   }, [devicesInActiveLocation]);
 
   const stockValueUsd = useMemo(
-    () => devicesInActiveLocation.reduce((acc, d) => acc + (d.purchaseCostUsd || 0), 0),
+    () => sumMoney(devicesInActiveLocation.map(d => d.purchaseCostUsd || 0)),
     [devicesInActiveLocation]
   );
 
@@ -434,7 +441,7 @@ export const InventoryPage: React.FC = () => {
         const isWh = stores.find(s => s.id === d.locationId)?.isMainWarehouse || d.status === 'MAIN_WAREHOUSE';
         if (isWh) return false;
       } else if (selectedStatusFilter === 'BONUS_ONLY') {
-        if (!d.isBonus && d.purchaseCostUsd !== 0) return false;
+        if (!d.isBonus && !(isAdmin && d.purchaseCostUsd === 0)) return false;
       } else if (selectedStatusFilter === 'EXCHANGE_ONLY') {
         if (d.status !== 'IN_STOCK_AFTER_EXCHANGE') return false;
       }
@@ -508,7 +515,7 @@ export const InventoryPage: React.FC = () => {
   }, [filteredDevices]);
 
   const filteredStockValueUsd = useMemo(
-    () => filteredDevices.reduce((acc, d) => acc + (d.purchaseCostUsd || 0), 0),
+    () => sumMoney(filteredDevices.map(d => d.purchaseCostUsd || 0)),
     [filteredDevices]
   );
 
@@ -550,7 +557,7 @@ export const InventoryPage: React.FC = () => {
       }
 
       bGroup.totalCount++;
-      bGroup.totalValueUsd += dev.purchaseCostUsd || 0;
+      bGroup.totalValueUsd = moneyNumber(decimal(bGroup.totalValueUsd).plus(dev.purchaseCostUsd || 0));
       bGroup.devices.push(dev);
 
       // Model group within brand
@@ -569,7 +576,7 @@ export const InventoryPage: React.FC = () => {
         bGroup.modelGroups.push(mGroup);
       }
       mGroup.count++;
-      mGroup.valueUsd += dev.purchaseCostUsd || 0;
+      mGroup.valueUsd = moneyNumber(decimal(mGroup.valueUsd).plus(dev.purchaseCostUsd || 0));
       mGroup.devices.push(dev);
 
       // Storage breakdown
@@ -641,7 +648,8 @@ export const InventoryPage: React.FC = () => {
     }
     if (!found) {
       setSearchQuery(code);
-      setPageStatus({ tone: 'error', text: `Устройство с IMEI ${code} не найдено` });
+      // Store-bound users only receive their own store's phones from the server.
+      setPageStatus({ tone: 'error', text: isStoreScoped ? `Устройство с IMEI ${code} не найдено в вашем магазине` : `Устройство с IMEI ${code} не найдено` });
       return;
     }
     const where = stores.find(s => s.id === found!.locationId)?.name || found.locationName || 'другой точке';
@@ -682,7 +690,7 @@ export const InventoryPage: React.FC = () => {
       const storageStr = (d.storage || '').trim();
       if (existing) {
         existing.count++;
-        existing.valueUsd += d.purchaseCostUsd || 0;
+        existing.valueUsd = moneyNumber(decimal(existing.valueUsd).plus(d.purchaseCostUsd || 0));
         if (storageStr) {
           const sEntry = existing.storages.find(s => s.storage === storageStr);
           if (sEntry) sEntry.count++;
@@ -712,8 +720,8 @@ export const InventoryPage: React.FC = () => {
           {isAdmin && (
             <div className="p-2.5 rounded-xl bg-surface border border-border">
               <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Себестоимость</span>
-              <span className="font-bold text-fg text-sm sm:text-base mt-0.5 block">${formatMoney(stat.valueUsd)}</span>
-              <span className="text-[10px] text-fg-subtle block">≈ {formatMoney(stat.valueUsd * rate)} TJS</span>
+              <span className="font-bold text-fg text-sm sm:text-base mt-0.5 block">{formatUsd(stat.valueUsd)}</span>
+              {approxTjs(stat.valueUsd, rate) && <span className="text-[10px] text-fg-subtle block">{approxTjs(stat.valueUsd, rate)}</span>}
             </div>
           )}
           <div className="p-2.5 rounded-xl bg-surface border border-border">
@@ -723,7 +731,7 @@ export const InventoryPage: React.FC = () => {
           {!targetStore.isMainWarehouse && (
             <div className="p-2.5 rounded-xl bg-surface border border-border">
               <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Касса точки</span>
-              <span className="font-bold text-accent text-sm sm:text-base mt-0.5 block">${formatMoney(targetStore.cashBalanceUsd)}</span>
+              <span className="font-bold text-accent text-sm sm:text-base mt-0.5 block">{formatUsd(targetStore.cashBalanceUsd)}</span>
             </div>
           )}
         </div>
@@ -731,14 +739,14 @@ export const InventoryPage: React.FC = () => {
         {/* Models in stock */}
         <div className="space-y-1.5">
           <div className="flex items-center justify-between text-xs">
-            <span className="text-[10px] uppercase font-bold text-fg-subtle">
-              Товары и остатки точки ({modelsList.length} позиций):
+            <span className="text-xs font-semibold text-fg-subtle">
+              Модели в наличии: {modelsList.length}
             </span>
           </div>
 
           {modelsList.length === 0 ? (
             <div className="p-4 rounded-xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
-              В данной локации сейчас нет товаров в наличии
+              Здесь сейчас нет телефонов в наличии
             </div>
           ) : (
             <div className="rounded-xl border border-border bg-surface overflow-hidden max-h-56 overflow-y-auto divide-y divide-border">
@@ -757,7 +765,7 @@ export const InventoryPage: React.FC = () => {
                   <div className="text-right shrink-0">
                     <span className="font-bold text-fg block text-xs">{m.count} шт.</span>
                     {isAdmin && (
-                      <span className="text-[10px] text-fg-subtle block">${formatMoney(m.valueUsd)}</span>
+                      <span className="text-[10px] text-fg-subtle block">{formatUsd(m.valueUsd)}</span>
                     )}
                   </div>
                 </div>
@@ -767,16 +775,13 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         {/* Action Button */}
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
-          <span className="text-[11px] text-fg-subtle">
-            Просмотр подробного каталога без смены активного магазина
-          </span>
+        <div className="flex justify-end pt-1">
           <button
             type="button"
             onClick={() => handleSelectLocationAndSwitch(targetStore.id)}
             className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg hover:bg-accent-strong font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
           >
-            <span>Открыть в списке товаров ({stat.unitCount} шт.)</span>
+            <span>Показать в списке ({stat.unitCount} шт.)</span>
             <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -784,12 +789,19 @@ export const InventoryPage: React.FC = () => {
     );
   };
 
+  // Windowed rendering for the flat list; heights are re-measured when the rows change meaning.
+  const flatRows = useVirtualRows<HTMLElement>({
+    count: inventoryViewMode === 'FLAT_LIST' && viewTab === 'DEVICES' ? filteredDevices.length : 0,
+    estimateSize: isMobileLayout ? 72 : 61,
+    resetKey: `${isMobileLayout ? 'm' : 'd'}|${filteredDevices.length}|${filteredDevices[0]?.id ?? ''}|${sortBy}`,
+  });
+
   const filterFields = (
     <div className="space-y-3.5">
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
                   {/* Filter 1: Brand */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
                       Бренд
                     </label>
                     <select
@@ -805,8 +817,8 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Filter 2: RAM */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                      Оперативная память (RAM)
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
+                      Оперативная память
                     </label>
                     <select
                       value={selectedRam}
@@ -822,8 +834,8 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Filter 3: Storage */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                      Встроенная память (Накопитель)
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
+                      Встроенная память
                     </label>
                     <select
                       value={selectedStorage}
@@ -839,8 +851,8 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Filter 4: Status / Type */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                      Статус / Тип наличия
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
+                      Наличие
                     </label>
                     <select
                       value={selectedStatusFilter}
@@ -850,12 +862,12 @@ export const InventoryPage: React.FC = () => {
                       <option value="ALL">Все товары {activeStore ? `(в «${activeStore.name}»)` : 'в наличии'}</option>
                       {selectedLocationId === 'ALL' && (
                         <>
-                          <option value="MAIN_WAREHOUSE">🏢 Только на Центральном складе</option>
-                          <option value="STORE_STOCK">🏬 Только в розничных магазинах</option>
+                          <option value="MAIN_WAREHOUSE">Только на центральном складе</option>
+                          <option value="STORE_STOCK">Только в магазинах</option>
                         </>
                       )}
-                      <option value="BONUS_ONLY">🎁 Только бонусы поставщиков ($0)</option>
-                      <option value="EXCHANGE_ONLY">🔄 Только после обмена (Trade-in)</option>
+                      <option value="BONUS_ONLY">Только бонусы поставщиков</option>
+                      <option value="EXCHANGE_ONLY">Только после обмена</option>
                     </select>
                   </div>
                 </div>
@@ -865,8 +877,8 @@ export const InventoryPage: React.FC = () => {
                   {/* Price Range */}
                   {isAdmin && (
                     <div>
-                      <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                        Себестоимость ($ USD)
+                      <label className="block text-xs font-semibold text-fg-subtle mb-1">
+                        Себестоимость, $
                       </label>
                       <div className="flex items-center gap-2">
                         <input
@@ -892,14 +904,14 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Quick price presets */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
-                      Быстрый диапазон цен
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
+                      Диапазон себестоимости
                     </label>
                     <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
                       {[
                         { label: '< $200', min: '', max: '200' },
-                        { label: '$200 - $500', min: '200', max: '500' },
-                        { label: '$500 - $1000', min: '500', max: '1000' },
+                        { label: '$200–500', min: '200', max: '500' },
+                        { label: '$500–1000', min: '500', max: '1000' },
                         { label: '> $1000', min: '1000', max: '' },
                       ].map((preset) => {
                         const isActive = minPriceUsd === preset.min && maxPriceUsd === preset.max;
@@ -931,7 +943,7 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Sorting */}
                   <div>
-                    <label className="block text-[10px] uppercase font-bold text-fg-subtle mb-1">
+                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
                       Сортировка
                     </label>
                     <select
@@ -1054,8 +1066,8 @@ export const InventoryPage: React.FC = () => {
           {isAdmin && (
             <StatCard
               label="Стоимость склада"
-              value={`$${formatMoney(filteredStockValueUsd)}`}
-              subvalue={isFiltered ? `из $${formatMoney(stockValueUsd)} всего` : undefined}
+              value={formatUsd(filteredStockValueUsd)}
+              subvalue={isFiltered ? `из ${formatUsd(stockValueUsd)} всего` : undefined}
               icon={DollarSign}
               tone="accent"
             />
@@ -1220,7 +1232,7 @@ export const InventoryPage: React.FC = () => {
                   )}
                   {isAdmin && filteredDevices.length > 0 && (
                     <span className="opacity-80">
-                      {' '}· ${formatMoney(filteredDevices.reduce((acc, d) => acc + (d.purchaseCostUsd || 0), 0))} USD
+                      {' '}· {formatUsd(filteredStockValueUsd)}
                     </span>
                   )}
                 </span>
@@ -1314,9 +1326,9 @@ export const InventoryPage: React.FC = () => {
           /* LOCATIONS LIST VIEW */
           <div className="p-3 sm:p-4 space-y-4 max-w-5xl mx-auto">
             <div className="flex items-center justify-between pb-2 border-b border-border">
-              <span className="text-xs font-bold text-fg-muted uppercase tracking-wider flex items-center gap-2">
+              <span className="text-sm font-bold text-fg-muted flex items-center gap-2">
                 <Building2 className="w-4 h-4 text-accent" />
-                <span>СПИСОК ЛОКАЦИЙ (ЦЕНТРАЛЬНЫЙ СКЛАД И МАГАЗИНЫ)</span>
+                <span>Склад и магазины</span>
               </span>
               <span className="text-xs text-fg-subtle">
                 Всего в компании: <strong>{devices.filter(d => IN_STOCK_STATUSES.includes(d.status)).length}</strong> шт.
@@ -1343,13 +1355,7 @@ export const InventoryPage: React.FC = () => {
                       <div className="space-y-0.5">
                         <div className="flex items-center gap-2 flex-wrap">
                           <h4 className="text-sm font-bold text-fg-muted">Центральный склад ({mainWarehouse.name})</h4>
-                          <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-500/15 border border-amber-500/30 text-amber-500 font-bold uppercase tracking-wider">
-                            ЕДИНСТВЕННЫЙ СКЛАД
-                          </span>
                         </div>
-                        <p className="text-xs text-fg-subtle">
-                          Центральный склад компании: приемка от поставщиков, хранение и резерв для распределения по магазинам сети.
-                        </p>
                       </div>
                     </div>
 
@@ -1360,7 +1366,7 @@ export const InventoryPage: React.FC = () => {
                         </span>
                         {isAdmin && (
                           <span className="text-[11px] text-fg-subtle block">
-                            ${stat.valueUsd.toLocaleString()} · ≈ {Math.round(stat.valueUsd * rate).toLocaleString()} TJS
+                            {formatUsd(stat.valueUsd)}{approxTjs(stat.valueUsd, rate) ? ` · ${approxTjs(stat.valueUsd, rate)}` : ''}
                           </span>
                         )}
                       </div>
@@ -1400,11 +1406,10 @@ export const InventoryPage: React.FC = () => {
             {/* Retail Stores List */}
             <div className="space-y-2 pt-2">
               <div className="flex items-center justify-between text-xs text-fg-subtle px-1">
-                <span className="font-bold uppercase tracking-wider text-fg-muted flex items-center gap-1.5">
+                <span className="font-bold text-fg-muted flex items-center gap-1.5">
                   <Store className="w-3.5 h-3.5 text-accent" />
-                  <span>Магазины сети ({retailStores.length})</span>
+                  <span>Магазины ({retailStores.length})</span>
                 </span>
-                <span>Розничные точки продаж</span>
               </div>
 
               {retailStores.length === 0 ? (
@@ -1437,12 +1442,9 @@ export const InventoryPage: React.FC = () => {
                                 <h5 className="font-bold text-xs sm:text-sm text-fg-muted truncate">
                                   {store.name}
                                 </h5>
-                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-subtle font-semibold">
-                                  МАГАЗИН
-                                </span>
                               </div>
                               <p className="text-[11px] text-fg-subtle truncate">
-                                Розничная торговая точка · Касса: ${formatMoney(store.cashBalanceUsd)}
+                                Касса: {formatUsd(store.cashBalanceUsd)}
                               </p>
                             </div>
                           </div>
@@ -1454,7 +1456,7 @@ export const InventoryPage: React.FC = () => {
                               </span>
                               {isAdmin && (
                                 <span className="text-[10px] text-fg-subtle block">
-                                  ${formatMoney(stat.valueUsd)} · ≈ {formatMoney(stat.valueUsd * rate)} TJS
+                                  {formatUsd(stat.valueUsd)}{approxTjs(stat.valueUsd, rate) ? ` · ${approxTjs(stat.valueUsd, rate)}` : ''}
                                 </span>
                               )}
                             </div>
@@ -1553,7 +1555,7 @@ export const InventoryPage: React.FC = () => {
                       </div>
                       <div className="min-w-0 text-left">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm sm:text-base font-extrabold text-fg tracking-wide uppercase">
+                          <h3 className="text-sm sm:text-base font-extrabold text-fg">
                             {bGroup.brand}
                           </h3>
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-raised text-fg-subtle border border-border">
@@ -1588,8 +1590,8 @@ export const InventoryPage: React.FC = () => {
                         </div>
                         {isAdmin && (
                           <div className="text-[10px] text-fg-subtle font-mono mt-0.5">
-                            <span className="font-bold text-fg-muted">${formatMoney(bGroup.totalValueUsd)}</span>
-                            <span className="hidden sm:inline"> · ≈ {formatMoney(bGroup.totalValueUsd * rate)} TJS</span>
+                            <span className="font-bold text-fg-muted">{formatUsd(bGroup.totalValueUsd)}</span>
+                            {approxTjs(bGroup.totalValueUsd, rate) && <span className="hidden sm:inline"> · {approxTjs(bGroup.totalValueUsd, rate)}</span>}
                           </div>
                         )}
                       </div>
@@ -1643,7 +1645,7 @@ export const InventoryPage: React.FC = () => {
                                   <Badge tone="accent">{mGroup.count} шт.</Badge>
                                   {isAdmin && (
                                     <span className="block text-[10px] text-fg-subtle font-mono mt-0.5">
-                                      ${formatMoney(mGroup.valueUsd)}
+                                      {formatUsd(mGroup.valueUsd)}
                                     </span>
                                   )}
                                 </div>
@@ -1740,35 +1742,62 @@ export const InventoryPage: React.FC = () => {
             })}
           </div>
         ) : (
-          /* FLAT LIST OF GOODS (DESKTOP TABLE + MOBILE ROWS) */
-          <div>
-            {/* Desktop Table View */}
-            <div className="hidden md:block overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead className="bg-surface text-[10px] text-fg-subtle uppercase border-b border-border sticky top-0 z-10 backdrop-blur-xs">
-                  <tr>
+          /* FLAT LIST: a table from tablet width up, rows on phones. Only one of them is rendered,
+             and only the rows near the viewport (thousands of units stay fast on weak Android). */
+          isMobileLayout ? (
+            <div ref={flatRows.listRef as React.RefObject<HTMLDivElement | null>} className="divide-y divide-border">
+              {flatRows.padTop > 0 && <div aria-hidden="true" style={{ height: flatRows.padTop }} />}
+              {filteredDevices.slice(flatRows.from, flatRows.to).map((dev, i) => {
+                const index = flatRows.from + i;
+                const store = stores.find(s => s.id === dev.locationId);
+                const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
+                const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
+                return (
+                  <DeviceRow
+                    key={dev.id}
+                    ref={flatRows.measure(index)}
+                    device={dev}
+                    isAdmin={isAdmin}
+                    storeName={selectedLocationId === 'ALL' ? storeName : undefined}
+                    isMainWarehouse={isWh}
+                    rate={rate}
+                    onClick={() => setSelectedDevice(dev)}
+                  />
+                );
+              })}
+              {flatRows.padBottom > 0 && <div aria-hidden="true" style={{ height: flatRows.padBottom }} />}
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs" aria-rowcount={filteredDevices.length + 1}>
+                <thead className="bg-surface text-[11px] text-fg-subtle border-b border-border sticky top-0 z-10 backdrop-blur-xs">
+                  <tr aria-rowindex={1}>
                     <th className="p-3 w-12 text-center">#</th>
-                    <th className="p-3">Товар (Бренд / Модель)</th>
-                    <th className="p-3">ОЗУ / Память / Цвет</th>
-                    <th className="p-3">IMEI / Штрихкод</th>
+                    <th className="p-3">Товар</th>
+                    <th className="p-3">Память / цвет</th>
+                    <th className="p-3">IMEI</th>
                     <th className="p-3">Локация</th>
                     {isAdmin && <th className="p-3 text-right">Себестоимость</th>}
                     <th className="p-3">Статус</th>
                     <th className="p-3 text-center">Действие</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-border text-xs">
-                  {filteredDevices.map((dev, idx) => {
+                <tbody ref={flatRows.listRef as React.RefObject<HTMLTableSectionElement | null>} className="divide-y divide-border text-xs">
+                  {flatRows.padTop > 0 && <tr aria-hidden="true"><td colSpan={isAdmin ? 8 : 7} style={{ height: flatRows.padTop, padding: 0 }} /></tr>}
+                  {filteredDevices.slice(flatRows.from, flatRows.to).map((dev, i) => {
+                    const index = flatRows.from + i;
                     const store = stores.find(s => s.id === dev.locationId);
                     const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
                     return (
                       <tr
                         key={dev.id}
+                        ref={flatRows.measure(index)}
+                        aria-rowindex={index + 2}
                         onClick={() => setSelectedDevice(dev)}
                         className="hover:bg-surface-raised/70 active:bg-surface-raised cursor-pointer transition-colors"
                       >
                         <td className="p-3 text-center text-fg-subtle text-[11px] font-mono">
-                          {idx + 1}
+                          {index + 1}
                         </td>
                         <td className="p-3">
                           <div className="flex items-center gap-2.5">
@@ -1781,7 +1810,7 @@ export const InventoryPage: React.FC = () => {
                               </span>
                               {dev.isBonus && (
                                 <span className="text-[10px] text-accent font-semibold inline-flex items-center gap-0.5">
-                                  <Sparkles className="w-3 h-3" /> Подарок / Бонус
+                                  <Sparkles className="w-3 h-3" /> Бонус
                                 </span>
                               )}
                             </div>
@@ -1821,15 +1850,15 @@ export const InventoryPage: React.FC = () => {
                         {isAdmin && (
                           <td className="p-3 text-right">
                             {dev.purchaseCostUsd === 0 || dev.isBonus ? (
-                              <Badge tone="accent">Бонус ($0)</Badge>
+                              <Badge tone="accent">Бонус</Badge>
                             ) : (
                               <div>
                                 <span className="font-bold text-fg-muted block text-xs">
-                                  ${dev.purchaseCostUsd}
+                                  {formatUsd(dev.purchaseCostUsd)}
                                 </span>
-                                <span className="text-[10px] text-fg-subtle block">
-                                  ≈ {Math.round(dev.purchaseCostUsd * rate).toLocaleString()} TJS
-                                </span>
+                                {approxTjs(dev.purchaseCostUsd, rate) && (
+                                  <span className="text-[10px] text-fg-subtle block">{approxTjs(dev.purchaseCostUsd, rate)}</span>
+                                )}
                               </div>
                             )}
                           </td>
@@ -1851,30 +1880,11 @@ export const InventoryPage: React.FC = () => {
                       </tr>
                     );
                   })}
+                  {flatRows.padBottom > 0 && <tr aria-hidden="true"><td colSpan={isAdmin ? 8 : 7} style={{ height: flatRows.padBottom, padding: 0 }} /></tr>}
                 </tbody>
               </table>
             </div>
-
-            {/* Mobile List View */}
-            <div className="md:hidden divide-y divide-border">
-              {filteredDevices.map((dev) => {
-                const store = stores.find(s => s.id === dev.locationId);
-                const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
-                const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
-                return (
-                  <DeviceRow
-                    key={dev.id}
-                    device={dev}
-                    isAdmin={isAdmin}
-                    storeName={selectedLocationId === 'ALL' ? storeName : undefined}
-                    isMainWarehouse={isWh}
-                    rate={rate}
-                    onClick={() => setSelectedDevice(dev)}
-                  />
-                );
-              })}
-            </div>
-          </div>
+          )
         )}
       </div>
 
@@ -2044,9 +2054,10 @@ export const InventoryPage: React.FC = () => {
                       <button
                         type="button"
                         onClick={() => setIsEditingRam(false)}
-                        className="text-fg-subtle hover:text-fg text-xs"
+                        aria-label="Отменить изменение памяти"
+                        className="p-1 rounded-md text-fg-subtle hover:text-fg"
                       >
-                        ✕
+                        <X className="w-3.5 h-3.5" />
                       </button>
                     </div>
 
@@ -2155,10 +2166,10 @@ export const InventoryPage: React.FC = () => {
                       Финансовый аудит
                     </span>
                     {selectedDevice.isBonus ? (
-                      <Badge tone="accent">Бонус ($0)</Badge>
+                      <Badge tone="accent">Бонус</Badge>
                     ) : (
                       <span className="text-[10px] text-fg-subtle font-mono">
-                        Курс: 1$ = {formatMoney(rate)} TJS
+                        {rate ? `Курс: $1 = ${formatMoney(rate)} TJS` : 'Курс на сегодня не задан'}
                       </span>
                     )}
                   </div>
@@ -2179,20 +2190,20 @@ export const InventoryPage: React.FC = () => {
                     <div className="p-2.5 rounded-xl bg-surface border border-border">
                       <span className="text-[10px] text-fg-subtle uppercase block font-bold">Цена закупки</span>
                       <span className="font-extrabold text-accent font-mono block mt-0.5">
-                        ${formatMoney(selectedDevice.purchaseCostUsd)}
+                        {formatUsd(selectedDevice.purchaseCostUsd)}
                       </span>
-                      <span className="text-[10px] text-fg-subtle block font-mono">
-                        ≈ {formatMoney(selectedDevice.purchaseCostUsd * rate)} TJS
-                      </span>
+                      {approxTjs(selectedDevice.purchaseCostUsd, rate) && (
+                        <span className="text-[10px] text-fg-subtle block font-mono">{approxTjs(selectedDevice.purchaseCostUsd, rate)}</span>
+                      )}
                     </div>
                     <div className="p-2.5 rounded-xl bg-surface border border-border">
                       <span className="text-[10px] text-fg-subtle uppercase block font-bold">Себестоимость</span>
                       <span className="font-extrabold text-fg font-mono block mt-0.5">
-                        ${formatMoney(selectedDevice.costBasisUsd)}
+                        {formatUsd(selectedDevice.costBasisUsd)}
                       </span>
-                      <span className="text-[10px] text-fg-subtle block font-mono">
-                        ≈ {formatMoney(selectedDevice.costBasisUsd * rate)} TJS
-                      </span>
+                      {approxTjs(selectedDevice.costBasisUsd, rate) && (
+                        <span className="text-[10px] text-fg-subtle block font-mono">{approxTjs(selectedDevice.costBasisUsd, rate)}</span>
+                      )}
                     </div>
                   </div>
                 </div>

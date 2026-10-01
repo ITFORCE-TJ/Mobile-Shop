@@ -9,11 +9,9 @@ import {
   Gift,
   Smartphone,
   DollarSign,
-  TrendingUp,
   PackageCheck,
   Search,
   Calendar,
-  Building2,
   User,
   Receipt,
   Store as StoreIcon,
@@ -22,22 +20,18 @@ import {
   ChevronRight,
   ChevronDown,
   Layers,
-  ArrowUpRight,
   Info,
   X,
-  RefreshCw,
-  SlidersHorizontal,
-  History,
   AlertTriangle,
   Users,
   Check,
   RotateCcw,
-  Loader2,
+  Loader2
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
 import { Badge } from '../ui/Badge';
-import { useReportsSummary, usd, signedUsd, tjs, monthLabel } from './reportTypes';
+import { useReportsSummary, usd, tjs, monthLabel } from './reportTypes';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
 import { refreshAfterMutation } from '../../utils/refreshAfterMutation';
@@ -82,11 +76,10 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
     currentUser,
     supplierBonuses,
     devices,
-    stores,
     users,
     todayRate,
     owners,
-  } = useAppFields('currentUser', 'supplierBonuses', 'devices', 'stores', 'users', 'todayRate', 'owners');
+  } = useAppFields('currentUser', 'supplierBonuses', 'devices', 'users', 'todayRate', 'owners');
 
   const namesLookup = useMemo(() => buildNameLookup(users), [users]);
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;

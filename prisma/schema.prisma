@@ -156,8 +156,54 @@ model Store {
   financialTransactions FinancialTransaction[]
   cashHandovers         CashHandover[]
   profitShares          StoreProfitShare[]
+  storeReceipts         StoreReceipt[]         @relation("ReceiptStore")
+  receiptsShipped       StoreReceipt[]         @relation("ReceiptSource")
 
   @@map("stores")
+}
+
+// A store's receipt of phones the admin physically delivered from the main warehouse. The
+// store employee scans each IMEI; completing the receipt moves the devices into the store at
+// once (no approval step). The admin's acknowledgement only records that it was reviewed.
+model StoreReceipt {
+  id                   String    @id @default(uuid())
+  receiptNumber        String    @unique
+  storeId              String
+  fromStoreId          String
+  createdByUserId      String
+  createdByName        String
+  itemCount            Int
+  createdAt            DateTime  @default(now())
+  acknowledgedAt       DateTime?
+  acknowledgedByUserId String?
+  acknowledgedByName   String?
+
+  store     Store              @relation("ReceiptStore", fields: [storeId], references: [id])
+  fromStore Store              @relation("ReceiptSource", fields: [fromStoreId], references: [id])
+  items     StoreReceiptItem[]
+
+  @@index([storeId, createdAt])
+  @@index([createdAt])
+  @@map("store_receipts")
+}
+
+model StoreReceiptItem {
+  id        String  @id @default(uuid())
+  receiptId String
+  deviceId  String
+  imei      String
+  brand     String
+  model     String
+  ram       String?
+  storage   String
+  color     String
+
+  receipt StoreReceipt @relation(fields: [receiptId], references: [id], onDelete: Cascade)
+  device  Device       @relation(fields: [deviceId], references: [id])
+
+  @@unique([receiptId, deviceId])
+  @@index([deviceId])
+  @@map("store_receipt_items")
 }
 
 // Daily cash handover: the admin collects a store register's whole balance into the
@@ -257,6 +303,7 @@ model Device {
   transferItems   TransferItem[]
   identifiers     DeviceIdentifier[]
   bonusPoolEntries BonusPoolEntry[]
+  receiptItems    StoreReceiptItem[]
 
   @@index([imei])
   @@index([storeId, status])
@@ -859,6 +906,19 @@ model Notification {
   readAt       DateTime?
   resolvedAt   DateTime?
   createdAt    DateTime  @default(now())
+  // Structured facts of the business event behind an admin notification (all optional, so
+  // older notifications stay valid): what happened, where, who did it, the money and the document.
+  actionType   String?
+  storeId      String?
+  storeName    String?
+  actorUserId  String?
+  actorName    String?
+  amountTjs    Decimal?  @db.Decimal(14, 2)
+  amountUsd    Decimal?  @db.Decimal(14, 2)
+  documentRef  String?
+  details      Json?
+  // One notification per business event: a retried request finds the existing row.
+  dedupeKey    String?   @unique
 
   user User? @relation(fields: [targetUserId], references: [id])
 
@@ -866,6 +926,8 @@ model Notification {
   @@index([targetRole, read])
   @@index([targetUserId, createdAt])
   @@index([targetRole, createdAt])
+  @@index([actionType, createdAt])
+  @@index([storeId, createdAt])
   @@map("notifications")
 }
 

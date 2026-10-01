@@ -12,9 +12,11 @@ interface ConnectedClient {
 }
 
 interface BroadcastOptions {
-  // Restrict delivery to these stores' SELLER users (ADMIN/PARTNER always receive everything).
-  // Omit for a global event delivered to every authenticated client.
+  // Restrict delivery to these stores' users (SELLER and PARTNER are bound to one store; the
+  // ADMIN always receives everything). Omit for a global event delivered to every client.
   storeIds?: string[];
+  // Deliver only to these roles — e.g. admin notifications must never reach store staff.
+  roles?: string[];
 }
 
 // Soft cap — not a hard security boundary, just a guard against one runaway session
@@ -147,7 +149,9 @@ export class RealtimeSyncGateway {
     for (const client of this.clients) {
       if (!client.authenticated || client.ws.readyState !== WebSocket.OPEN) continue;
 
-      const canSeeEverything = client.user.role === 'ADMIN' || client.user.role === 'PARTNER';
+      if (options.roles && !options.roles.includes(client.user.role)) continue;
+      // PARTNER is store-scoped like SELLER: only the ADMIN sees every store's events.
+      const canSeeEverything = client.user.role === 'ADMIN';
       const inScope =
         !options.storeIds ||
         canSeeEverything ||

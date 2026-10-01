@@ -39,40 +39,20 @@ export function registerTransferRoutes(app: Express) {
         res.status(400).json({ message: 'fromStoreId, toStoreId и deviceIds обязательны' });
         return;
       }
-      // SELLERs may request transfers OUT of their own assigned store, or IN from the main
-      // warehouse into their own store (e.g. when the admin is away and stock still needs to
-      // reach the shop floor) — approval still requires an ADMIN/PARTNER, so this never lets a
-      // SELLER move stock on their own authority. Any other combination (another store's stock,
-      // or a destination that isn't their own store) stays blocked.
-      if (req.user!.role === 'SELLER') {
-        const ownStoreId = req.user!.storeId;
-        const isOwnStoreOrigin = fromStoreId === ownStoreId;
-        const isPullFromMainWarehouse =
-          toStoreId === ownStoreId &&
-          !!(await prisma.store.findUnique({ where: { id: fromStoreId }, select: { isMainWarehouse: true } }))?.isMainWarehouse;
-        if (!isOwnStoreOrigin && !isPullFromMainWarehouse) {
-          res.status(403).json({ message: 'Вы можете перемещать товары только из своего магазина или с главного склада в свой магазин' });
+      // Store staff (SELLER and PARTNER) request transfers OUT of their own store only; an
+      // ADMIN approves those that involve the main warehouse. Phones the admin delivers from the
+      // main warehouse are taken in through a store receipt (IMEI scan), not pulled from here.
+      if (req.user!.role === 'SELLER' || req.user!.role === 'PARTNER') {
+        if (fromStoreId !== req.user!.storeId) {
+          res.status(403).json({ message: 'Перемещать можно только товары своего магазина. Телефоны с главного склада принимаются через «Приход товара»' });
           return;
         }
-        // A SELLER can only request — an ADMIN/PARTNER still has to approve before stock
-        // actually moves.
         const transfer = await TransfersService.create({ fromStoreId, toStoreId, deviceIds, requestedByUserId: req.user!.userId });
         res.status(201).json(transfer);
         return;
       }
 
-      if (req.user!.role === 'PARTNER') {
-        const ownStoreId = req.user!.storeId;
-        const mainWarehouse = await prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true } });
-        const validStoreIds = [ownStoreId, mainWarehouse?.id].filter(Boolean);
-        if (!validStoreIds.includes(fromStoreId) || !validStoreIds.includes(toStoreId)) {
-          res.status(403).json({ message: 'Вы можете перемещать товары только между своим магазином и главным складом' });
-          return;
-        }
-      }
-
-      // An ADMIN/PARTNER doing the transfer themselves needs no separate approval step —
-      // they're already the ones who'd approve it, so it just moves immediately.
+      // The ADMIN moves stock directly, without a separate approval step.
       const transfer = await TransfersService.createDirect({ fromStoreId, toStoreId, deviceIds, requestedByUserId: req.user!.userId });
       res.status(201).json(transfer);
     } catch (error) {
@@ -83,9 +63,16 @@ export function registerTransferRoutes(app: Express) {
   app.post('/api/transfers/:id/approve', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
       if (req.user!.role === 'PARTNER') {
-        const tr = await prisma.transferRequest.findUnique({ where: { id: req.params.id }, select: { fromStoreId: true, toStoreId: true } });
+        const tr = await prisma.transferRequest.findUnique({
+          where: { id: req.params.id },
+          select: { fromStoreId: true, toStoreId: true, fromStore: { select: { isMainWarehouse: true } }, toStore: { select: { isMainWarehouse: true } } },
+        });
         if (!tr || (tr.fromStoreId !== req.user!.storeId && tr.toStoreId !== req.user!.storeId)) {
           res.status(403).json({ message: 'Нет доступа к перемещениям другого магазина' });
+          return;
+        }
+        if (tr.fromStore.isMainWarehouse || tr.toStore.isMainWarehouse) {
+          res.status(403).json({ message: 'Перемещения с участием главного склада подтверждает администратор' });
           return;
         }
       }
@@ -99,9 +86,16 @@ export function registerTransferRoutes(app: Express) {
   app.post('/api/transfers/:id/reject', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), async (req: AuthenticatedRequest, res, next) => {
     try {
       if (req.user!.role === 'PARTNER') {
-        const tr = await prisma.transferRequest.findUnique({ where: { id: req.params.id }, select: { fromStoreId: true, toStoreId: true } });
+        const tr = await prisma.transferRequest.findUnique({
+          where: { id: req.params.id },
+          select: { fromStoreId: true, toStoreId: true, fromStore: { select: { isMainWarehouse: true } }, toStore: { select: { isMainWarehouse: true } } },
+        });
         if (!tr || (tr.fromStoreId !== req.user!.storeId && tr.toStoreId !== req.user!.storeId)) {
           res.status(403).json({ message: 'Нет доступа к перемещениям другого магазина' });
+          return;
+        }
+        if (tr.fromStore.isMainWarehouse || tr.toStore.isMainWarehouse) {
+          res.status(403).json({ message: 'Перемещения с участием главного склада подтверждает администратор' });
           return;
         }
       }

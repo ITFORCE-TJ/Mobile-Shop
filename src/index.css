@@ -143,12 +143,20 @@ html.no-dvh .app-viewport {
   height: var(--app-height, 100vh);
 }
 
-/* The shell owns the top inset; its header and pages must not add it again.
-   The fixed drawer is a separate viewport layer and uses the same rule. */
+/* The shell owns the top and side insets; its header, pages and bottom nav must not add
+   them again. The fixed drawer is a separate viewport layer and uses the same rule. */
 .app-safe-area {
   padding-top: var(--sa-top);
   padding-left: var(--sa-left);
   padding-right: var(--sa-right);
+}
+/* From tablet width up there is no bottom nav to carry the bottom inset, so the shell keeps the
+   status footer and the rail/sidebar buttons above the home indicator (iPad PWA, phones in
+   landscape). Below that width the bottom nav owns it (.app-bottom-nav). */
+@media (width >= 48rem) {
+  .app-safe-area {
+    padding-bottom: var(--sa-bottom);
+  }
 }
 
 /* The bottom nav is a normal flex sibling of <main> (not a fixed overlay), so
@@ -159,12 +167,9 @@ html.no-dvh .app-viewport {
   min-height: calc(3.5rem + var(--bottom-nav-pb));
   padding-bottom: var(--bottom-nav-pb);
 }
-@media (width < 48rem) {
-  .app-bottom-nav {
-    padding-left: var(--sa-left);
-    padding-right: var(--sa-right);
-  }
-}
+
+/* The nav sits inside .app-safe-area, which already pads the side insets; padding them here
+   again doubled the gap next to a landscape cutout. */
 
 /* Mobile Safe Area Bottom Padding */
 .safe-area-pb {
@@ -369,6 +374,26 @@ body {
   z-index: 60 !important;
   display: flex !important;
   overflow: hidden !important;
+  /* Layers are portals outside the shell: keep dialogs clear of landscape side cutouts.
+     Top/bottom stay with each dialog (bottom sheet space, the period picker). */
+  padding-left: var(--sa-left);
+  padding-right: var(--sa-right);
+}
+
+/* While the on-screen keyboard covers part of the screen (viewport.ts sets the attribute and
+   the visible-area variables), shared dialogs fit the visible area so the focused field and the
+   action buttons stay above the keyboard. The home-indicator inset is hidden by the keyboard. */
+html[data-keyboard-open] .modal-layer {
+  top: var(--app-viewport-top, 0px) !important;
+  bottom: auto !important;
+  height: var(--app-viewport-height, 100dvh) !important;
+  max-height: var(--app-viewport-height, 100dvh) !important;
+}
+html[data-keyboard-open] .modal-layer .dialog-panel {
+  max-height: calc(var(--app-viewport-height, 100dvh) - 0.5rem);
+}
+html[data-keyboard-open] .modal-layer .dialog-bottom-space {
+  padding-bottom: 1rem;
 }
 
 .dialog-panel {

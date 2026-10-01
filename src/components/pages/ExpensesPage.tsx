@@ -28,14 +28,11 @@ import {
   Landmark,
   AlertCircle,
   ArrowUpDown,
-  CheckCircle2,
   RotateCcw,
   X,
-  User,
-  Filter
+  User
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
-import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { DateRangePicker } from '../ui/DateRangePicker';
 import { Select, ToggleRow } from '../ui/Input';
 import { FormField } from '../ui/FormField';
@@ -98,7 +95,6 @@ export const ExpensesPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [payingExpense, setPayingExpense] = useState<Expense | null>(null);
-  const [payStoreId, setPayStoreId] = useState('');
 
   const [editingExpense, setEditingExpense] = useState<Expense | null>(null);
   const [editCategory, setEditCategory] = useState<ExpenseCategory>('RENT');
@@ -269,7 +265,6 @@ export const ExpensesPage: React.FC = () => {
 
   const handleStartPay = (exp: Expense) => {
     setPayingExpense(exp);
-    setPayStoreId(centralCashStore?.id || '');
   };
 
   const handleConfirmPay = async () => {

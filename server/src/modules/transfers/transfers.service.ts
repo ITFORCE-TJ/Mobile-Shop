@@ -1,4 +1,6 @@
 import { prisma } from '../../prisma/prisma.service';
+import { notifyAdmins } from '../notifications/notification.service';
+import { onCommit } from '../../common/after-commit';
 import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 import { resolveActor } from '../../common/actor';
 import crypto from 'node:crypto';
@@ -92,27 +94,27 @@ export class TransfersService {
         },
       });
 
-      // Both ADMIN and PARTNER can approve (see requireRoles on the /approve route), and
-      // notifications only match a single exact targetRole — so one is created per role,
-      // otherwise a PARTNER-run store would never see pending requests.
-      const notificationMessage = `${actor.name} запрашивает перемещение ${devices.length} устройств(о) из ${fromStore.name} в ${toStore.name}`;
-      const notifications = await Promise.all(
-        (['ADMIN', 'PARTNER'] as const).map((targetRole) =>
-          tx.notification.create({
-            data: {
-              title: 'Новый запрос на перемещение',
-              message: notificationMessage,
-              targetType: 'TRANSFER_REQUEST',
-              targetId: transfer.id,
-              targetRole,
-            },
-          })
-        )
-      );
+      // The admin approves the request (always, when the main warehouse is involved). The
+      // notification is ADMIN-only: a role-wide PARTNER copy showed every store's requests to
+      // every partner. Approving or rejecting resolves it (targetType TRANSFER_REQUEST).
+      await notifyAdmins(tx, {
+        actionType: 'TRANSFER_REQUEST',
+        dedupeKey: `TRANSFER_REQUEST:${transfer.id}`,
+        title: 'Новый запрос на перемещение',
+        message: `${actor.name} запрашивает перемещение ${devices.length} устройств(о) из ${fromStore.name} в ${toStore.name}`,
+        store: { id: fromStore.id, name: fromStore.name },
+        actor,
+        documentRef: transferNumber,
+        targetType: 'TRANSFER_REQUEST',
+        targetId: transfer.id,
+        targetRoute: '/transfer',
+        details: { imeis: devices.map((d) => d.imei) },
+      });
 
-      RealtimeSyncGateway.broadcast('TRANSFER_UPDATED', { transferId: transfer.id }, { storeIds: [input.fromStoreId, input.toStoreId] });
-      RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {}, { storeIds: [input.fromStoreId, input.toStoreId] });
-      notifications.forEach((notification) => RealtimeSyncGateway.broadcast('NOTIFICATION_CREATED', notification));
+      onCommit(() => {
+        RealtimeSyncGateway.broadcast('TRANSFER_UPDATED', { transferId: transfer.id }, { storeIds: [input.fromStoreId, input.toStoreId] });
+        RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {}, { storeIds: [input.fromStoreId, input.toStoreId] });
+      });
 
       return transfer;
     }, { maxWait: 10000, timeout: 25000 });

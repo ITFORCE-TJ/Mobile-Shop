@@ -296,7 +296,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="w-11 h-11 -ml-2 flex items-center justify-center text-fg hover:bg-surface-raised rounded-full transition-colors cursor-pointer"
+                  className="w-[44px] h-[44px] -ml-2 flex items-center justify-center text-fg hover:bg-surface-raised rounded-full transition-colors cursor-pointer"
                   aria-label="Закрыть"
                 >
                   <X className="w-6 h-6" />
@@ -339,7 +339,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 type="button"
                 onClick={() => setViewYear((y) => y - 1)}
                 aria-label="Предыдущий год"
-                className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-surface-raised text-fg-muted cursor-pointer"
+                className="w-[44px] h-[44px] flex items-center justify-center rounded-lg hover:bg-surface-raised text-fg-muted cursor-pointer"
               >
                 <ChevronLeft className="w-4 h-4" />
               </button>
@@ -349,7 +349,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                 onClick={() => setViewYear((y) => Math.min(currentYear, y + 1))}
                 disabled={viewYear >= currentYear}
                 aria-label="Следующий год"
-                className="w-11 h-11 flex items-center justify-center rounded-lg hover:bg-surface-raised text-fg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
+                className="w-[44px] h-[44px] flex items-center justify-center rounded-lg hover:bg-surface-raised text-fg-muted cursor-pointer disabled:opacity-30 disabled:cursor-not-allowed"
               >
                 <ChevronRight className="w-4 h-4" />
               </button>
@@ -383,11 +383,12 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                       </button>
                     </div>
 
-                    {/* Days grid matching Image 2 */}
+                    {/* Days grid. Sizes are in px, not rem: phones under 400px use a 14px root font,
+                        which shrank w-11 (2.75rem) to 38.5px, below the 44px touch target. */}
                     <div className="grid grid-cols-7 text-center gap-y-1 select-none">
                       {/* Empty padding cells before month day 1 */}
                       {Array.from({ length: m.padDaysBefore }).map((_, i) => (
-                        <div key={`pad-${i}`} className="h-11 pointer-events-none" />
+                        <div key={`pad-${i}`} className="h-[44px] pointer-events-none" />
                       ))}
 
                       {/* Day cells */}
@@ -403,7 +404,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                           <div
                             key={dateKey}
                             className={cn(
-                              'h-11 relative flex items-center justify-center',
+                              'h-[44px] relative flex items-center justify-center',
                               inRange && !isSingle && 'bg-accent/15',
                               inRange && isStart && !isSingle && 'rounded-l-full',
                               inRange && isEnd && !isSingle && 'rounded-r-full'
@@ -416,7 +417,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                               disabled={dateKey > todayKey}
                               onClick={() => handleDayClick(dateKey)}
                               className={cn(
-                                'w-11 h-11 flex items-center justify-center text-sm font-medium transition-all cursor-pointer relative z-10 disabled:opacity-30 disabled:cursor-not-allowed',
+                                'w-[44px] h-[44px] flex items-center justify-center text-sm font-medium transition-all cursor-pointer relative z-10 disabled:opacity-30 disabled:cursor-not-allowed',
                                 // Single selected date (clean circular ring outline like user photo)
                                 isSingle && 'rounded-full border-2 border-accent bg-accent/10 text-fg font-bold shadow-xs',
                                 // Range endpoints (solid accent)

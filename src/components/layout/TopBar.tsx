@@ -145,7 +145,7 @@ export const TopBar: React.FC = () => {
               }
             }}
             aria-label={activePage === 'NOTIFICATIONS' ? 'Закрыть уведомления' : 'Уведомления'}
-            className={`relative inline-flex items-center justify-center w-11 h-11 md:w-9 md:h-9 rounded-lg transition-colors active:scale-95 border cursor-pointer ${
+            className={`relative inline-flex items-center justify-center w-[44px] h-[44px] md:w-9 md:h-9 rounded-lg transition-colors active:scale-95 border cursor-pointer ${
               activePage === 'NOTIFICATIONS'
                 ? 'bg-accent/15 text-accent border-accent/40'
                 : 'text-fg-muted hover:text-fg hover:bg-surface-raised border-border'

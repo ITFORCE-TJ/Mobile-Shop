@@ -23,6 +23,9 @@ import { registerStoreRoutes } from './modules/stores/stores.routes';
 import { registerReportRoutes } from './modules/reports/reports.routes';
 import { registerBonusRoutes } from './modules/bonuses/bonuses.routes';
 import { registerCashCollectionRoutes } from './modules/finance/cash-collection.routes';
+import { registerStoreReceiptRoutes } from './modules/store-receipts/store-receipts.routes';
+import { decorateTransactions } from './prisma/prisma.service';
+import { withAuditNotifications } from './modules/notifications/audit-notifications';
 import { requireNonNegativeMoney, requirePositiveMoney } from './common/money';
 import { requireTodayRate } from './modules/exchange-rate/exchange-rate.service';
 import { decimalJsonReplacer } from './common/decimal';
@@ -180,11 +183,13 @@ app.get('/api/stores', authenticateJwt, async (req: AuthenticatedRequest, res, n
   try {
     const isStoreScoped = req.user!.role === 'SELLER' || req.user!.role === 'PARTNER';
     const storeId = req.user!.storeId;
-    // A SELLER or PARTNER also needs to see the main warehouse (not just their own store) — that's where
-    // they pull transfer requests from when the admin isn't around to move stock themselves.
+    // Store staff get their own store, plus the main warehouse by name only (a receipt names it
+    // as the source; a return can be sent to it). Its cash and stock stay ADMIN-only.
     const where = isStoreScoped ? (storeId ? { OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' }) : undefined;
     const stores = await prisma.store.findMany({ where, orderBy: { name: 'asc' } });
-    res.json(stores);
+    res.json(isStoreScoped
+      ? stores.map((s) => (s.isMainWarehouse ? { id: s.id, name: s.name, isMainWarehouse: true, active: s.active } : s))
+      : stores);
   } catch (error) {
     next(error);
   }
@@ -206,15 +211,13 @@ app.get('/api/devices', authenticateJwt, async (req: AuthenticatedRequest, res, 
 
     let where: Prisma.DeviceWhereInput | undefined;
     if (req.user!.role === 'SELLER' || req.user!.role === 'PARTNER') {
-      // A SELLER / PARTNER also needs to see devices sitting at the main warehouse — that's what they
-      // pick from when requesting a transfer into their own store — but no other retail store.
+      // Store staff see their own store only. Main warehouse stock is ADMIN-only: phones the
+      // admin delivers are found one by one through the IMEI scan of a store receipt.
       if (!req.user!.storeId) {
         res.status(403).json({ message: 'Пользователь не привязан ни к одному магазину' });
         return;
       }
-      const mainWarehouse = await prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true } });
-      const scopedStoreIds = mainWarehouse ? [req.user!.storeId, mainWarehouse.id] : [req.user!.storeId];
-      where = { storeId: { in: scopedStoreIds } };
+      where = { storeId: req.user!.storeId };
     } else {
       const storeId = typeof req.query.storeId === 'string' ? req.query.storeId : undefined;
       where = storeId ? { storeId } : undefined;
@@ -465,13 +468,16 @@ registerStoreRoutes(app);
 registerReportRoutes(app);
 registerBonusRoutes(app);
 registerCashCollectionRoutes(app);
+registerStoreReceiptRoutes(app);
+// Every audited business event inside a transaction also notifies the admin (same transaction).
+decorateTransactions(withAuditNotifications);
 
 app.use((error: any, req: Request, res: Response, _next: NextFunction) => {
   // Every error that reaches here gets logged server-side, regardless of what the client
   // ends up seeing — previously nothing was logged at all, so a production failure left no
   // diagnostic trail.
   console.error(`[${req.method} ${req.originalUrl}]`, error);
-  if (error?.statusCode === 409 || error?.statusCode === 403) {
+  if (error?.statusCode === 409 || error?.statusCode === 403 || error?.statusCode === 404) {
     res.status(error.statusCode).json({ message: error.message }); return;
   }
 
