@@ -14,6 +14,7 @@ import {
   RotateCcw
 } from 'lucide-react';
 import { exportAuditLogsReport } from '../../utils/exportReports';
+import { useStoreContext } from '../../utils/storeContext';
 
 type DateFilterMode = 'TODAY' | 'ALL' | 'SPECIFIC';
 type SortOrderMode = 'DESC' | 'ASC';
@@ -60,7 +61,10 @@ export const AuditLogPage: React.FC = () => {
   const [activeCategoryFilter, setActiveCategoryFilter] = useState<string>('ALL');
   const [selectedUserFilter, setSelectedUserFilter] = useState<string>('ALL');
   const [selectedRoleFilter, setSelectedRoleFilter] = useState<string>('ALL');
-  const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('ALL');
+  const [storeFilterChoice, setSelectedStoreFilter] = useState<string>('ALL');
+  // Admin inside a store sees only that store's events; Central Cash shows everything.
+  const storeCtx = useStoreContext();
+  const selectedStoreFilter = storeCtx.mode === 'STORE' ? storeCtx.storeName : storeFilterChoice;
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [sortOrder, setSortOrder] = useState<SortOrderMode>('DESC');
 
@@ -415,7 +419,7 @@ export const AuditLogPage: React.FC = () => {
           </div>
 
           {/* Store / Location Dropdown */}
-          {storeOptions.length > 0 && (
+          {storeOptions.length > 0 && storeCtx.mode === 'CENTRAL' && (
             <div className="flex items-center gap-1.5 min-w-36 flex-1 sm:flex-initial">
               <select
                 value={selectedStoreFilter}

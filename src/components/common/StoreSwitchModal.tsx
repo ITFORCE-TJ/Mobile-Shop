@@ -1,5 +1,6 @@
 import React from 'react';
 import { formatMoney } from '../../utils/money';
+import { formatStoreName } from '../../utils/storeContext';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useUIStore } from '../../stores/useUIStore';
@@ -120,7 +121,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
               ) : (
                 <>
                   <StoreIcon className="w-3.5 h-3.5 text-warning shrink-0" />
-                  <span>Режим продаж: {currentStore?.name || 'Магазин'}</span>
+                  <span>Режим продаж: {formatStoreName(currentStore?.name) || 'Магазин'}</span>
                 </>
               )}
             </div>
@@ -224,7 +225,7 @@ export const StoreSwitchModal: React.FC<StoreSwitchModalProps> = ({ isOpen, onCl
 
                   <div className="space-y-0.5 min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="text-xs font-bold text-fg truncate">{store.name}</span>
+                      <span className="text-xs font-bold text-fg truncate">{formatStoreName(store.name)}</span>
                       {isSelected && (
                         <span className="text-[10px] px-1.5 py-0.2 rounded font-semibold bg-accent/20 text-accent border border-accent/30 animate-pulse">
                           Активен

@@ -67,7 +67,7 @@ export const TabletNavRail: React.FC = () => {
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
         { id: 'RECEIPTS' as PageId, label: 'Приход', icon: PackagePlus },
-        { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+        { id: 'TRANSFER' as PageId, label: 'На склад', icon: ArrowLeftRight },
       ];
     }
 
@@ -79,7 +79,7 @@ export const TabletNavRail: React.FC = () => {
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
         { id: 'RECEIPTS' as PageId, label: 'Приход', icon: PackagePlus },
-        { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+        { id: 'TRANSFER' as PageId, label: 'На склад', icon: ArrowLeftRight },
         { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
         { id: 'SETTINGS' as PageId, label: 'Опции', icon: Settings },
       ];
@@ -114,6 +114,7 @@ export const TabletNavRail: React.FC = () => {
       { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
       { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
       { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
+      { id: 'RECEIPTS' as PageId, label: 'Приходы', icon: PackagePlus },
       { id: 'FINANCE' as PageId, label: 'Финансы', icon: Landmark },
       { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
       { id: 'BONUSES' as PageId, label: 'Бонусы', icon: Gift },

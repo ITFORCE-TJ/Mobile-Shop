@@ -17,6 +17,7 @@ import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { LoadingState } from '../ui/Skeleton';
 import { MonthPicker } from '../ui/MonthPicker';
+import { useStoreContext } from '../../utils/storeContext';
 
 export const RepairPage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
@@ -106,6 +107,8 @@ export const RepairPage: React.FC = () => {
   const isSeller = currentUser?.role === 'SELLER';
   const isPartner = currentUser?.role === 'PARTNER';
   const isStoreScoped = isSeller || isPartner;
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
 
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without
@@ -485,7 +488,7 @@ export const RepairPage: React.FC = () => {
           </div>
 
           <div className="flex items-center gap-2 text-xs overflow-x-auto scrollbar-none">
-            {!isStoreScoped && (
+            {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
               <select
                 value={selectedStoreId}
                 onChange={(e) => setSelectedStoreId(e.target.value)}

@@ -14,6 +14,7 @@ import { EmptyState } from '../ui/EmptyState';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { LoadingState } from '../ui/Skeleton';
 import { StatusBanner, type StatusMessage } from '../ui/StatusBanner';
+import { useStoreContext } from '../../utils/storeContext';
 
 interface ScannedDevice {
   id: string;
@@ -208,7 +209,9 @@ export const ReceiptsPage: React.FC = () => {
   };
 
   // ---------- lists ----------
-  const [storeFilter, setStoreFilter] = useState('all');
+  const [storeFilterChoice, setStoreFilter] = useState('all');
+  const storeCtx = useStoreContext();
+  const storeFilter = storeCtx.mode === 'STORE' && isAdmin ? storeCtx.storeId : storeFilterChoice;
   const { items: receipts, error: listError } = useReceipts(revision, isAdmin ? storeFilter : 'all');
   const retailStores = useMemo(() => stores.filter((s) => !s.isMainWarehouse), [stores]);
 
@@ -233,8 +236,8 @@ export const ReceiptsPage: React.FC = () => {
       <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
         <StatusBanner message={status} onDismiss={() => setStatus(null)} />
         <div className="p-3 border-b border-border shrink-0 flex items-center justify-between gap-2">
-          <h1 className="text-base font-semibold text-fg">Приходы магазинов</h1>
-          <select
+          <h1 className="text-base font-semibold text-fg">{storeCtx.mode === 'STORE' ? `Приходы: ${storeCtx.storeName}` : 'Приходы магазинов'}</h1>
+          {storeCtx.mode === 'CENTRAL' && <select
             value={storeFilter}
             onChange={(e) => setStoreFilter(e.target.value)}
             aria-label="Магазин"
@@ -242,7 +245,7 @@ export const ReceiptsPage: React.FC = () => {
           >
             <option value="all">Все магазины</option>
             {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
+          </select>}
         </div>
         <div className="flex-1 overflow-y-auto p-3 max-w-3xl w-full mx-auto">{list}</div>
         <ReceiptDialog receiptId={openReceiptId} isAdmin onClose={closeReceipt} onChanged={() => setRevision((v) => v + 1)} />

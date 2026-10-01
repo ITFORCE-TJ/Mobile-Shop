@@ -99,7 +99,7 @@ export const Drawer: React.FC = () => {
           items: [
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
             { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['SELLER'] },
-            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
+            { id: 'TRANSFER', label: 'Отправка на склад', icon: ArrowLeftRight, roles: ['SELLER'] },
             { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['SELLER'] },
           ],
         },
@@ -122,7 +122,7 @@ export const Drawer: React.FC = () => {
           items: [
             { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['PARTNER'] },
             { id: 'RECEIPTS', label: 'Приход товара', icon: PackagePlus, roles: ['PARTNER'] },
-            { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['PARTNER'] },
+            { id: 'TRANSFER', label: 'Отправка на склад', icon: ArrowLeftRight, roles: ['PARTNER'] },
           ],
         },
         {
@@ -181,6 +181,7 @@ export const Drawer: React.FC = () => {
           { id: 'REPAIR', label: 'Сервис и ремонт', icon: Wrench, roles: ['ADMIN'] },
           { id: 'INVENTORY', label: 'Склад магазина', icon: Package, roles: ['ADMIN'] },
           { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['ADMIN'] },
+          { id: 'RECEIPTS', label: 'Приходы магазина', icon: PackagePlus, roles: ['ADMIN'] },
         ],
       },
       {

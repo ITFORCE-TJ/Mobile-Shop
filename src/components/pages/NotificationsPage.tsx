@@ -13,6 +13,7 @@ import { Button } from '../ui/Button';
 import { EmptyState } from '../ui/EmptyState';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { LoadingState } from '../ui/Skeleton';
+import { useStoreContext } from '../../utils/storeContext';
 
 /** Names of the business events, for the action filter and the item label. */
 export const ACTION_LABELS: Record<string, string> = {
@@ -68,7 +69,10 @@ export const NotificationsPage: React.FC = () => {
   const { notifications: bellList, fetchNotifications } = useNotifications();
 
   const [view, setView] = useState<'UNREAD' | 'ALL'>('UNREAD');
-  const [storeId, setStoreId] = useState('');
+  const [storeChoice, setStoreId] = useState('');
+  // Admin inside a store sees that store's events; Central Cash shows every store.
+  const storeCtx = useStoreContext();
+  const storeId = storeCtx.mode === 'STORE' ? storeCtx.storeId : storeChoice;
   const [actionType, setActionType] = useState('');
   const [items, setItems] = useState<NotificationItem[] | null>(null);
   const [nextCursor, setNextCursor] = useState<string | null>(null);
@@ -159,10 +163,10 @@ export const NotificationsPage: React.FC = () => {
 
       <div className="p-3 border-b border-border shrink-0 flex flex-wrap items-center gap-2">
         <FilterPillGroup options={[{ value: 'UNREAD', label: 'Непрочитанные' }, { value: 'ALL', label: 'Все' }]} value={view} onChange={setView} />
-        <select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Магазин" className="rounded-lg bg-surface border border-border px-3 text-fg-muted">
+        {storeCtx.mode === 'CENTRAL' && <select value={storeId} onChange={(e) => setStoreId(e.target.value)} aria-label="Магазин" className="rounded-lg bg-surface border border-border px-3 text-fg-muted">
           <option value="">Все магазины</option>
           {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-        </select>
+        </select>}
         <select value={actionType} onChange={(e) => setActionType(e.target.value)} aria-label="Действие" className="rounded-lg bg-surface border border-border px-3 text-fg-muted">
           <option value="">Все действия</option>
           {Object.entries(ACTION_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}

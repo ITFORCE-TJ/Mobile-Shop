@@ -45,6 +45,7 @@ import { Dialog } from '../ui/Dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { RestrictedAccess } from '../ui/RestrictedAccess';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 const STANDARD_CATEGORIES = STANDARD_EXPENSE_CATEGORIES;
 
@@ -143,6 +144,8 @@ export const ExpensesPage: React.FC = () => {
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without
   // re-picking it; they can still switch it locally afterward.
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
   const [selectedStoreFilter, setSelectedStoreFilter] = useState(() => {
     if (isPartner) return currentUser?.storeId || '';
     if (globalSelectedStoreId && globalSelectedStoreId !== 'all') return globalSelectedStoreId;
@@ -687,6 +690,11 @@ export const ExpensesPage: React.FC = () => {
                   setSelectedStartDate(start);
                   setSelectedEndDate(end);
                   setPeriodFilter('MONTH');
+                } else if (start === todayStr && end === todayStr) {
+                  setSelectedMonth('');
+                  setSelectedStartDate(start);
+                  setSelectedEndDate(end);
+                  setPeriodFilter('TODAY');
                 } else {
                   setSelectedMonth('');
                   setSelectedStartDate(start);
@@ -737,7 +745,7 @@ export const ExpensesPage: React.FC = () => {
               {isAdmin && selectedStoreFilter !== 'ALL' && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
                   <StoreIcon className="w-3 h-3 text-accent" />
-                  <span>{stores.find(s => s.id === selectedStoreFilter)?.name || selectedStoreFilter}</span>
+                  <span>{formatStoreName(stores.find(s => s.id === selectedStoreFilter)?.name) || selectedStoreFilter}</span>
                   <button onClick={() => setSelectedStoreFilter('ALL')} className="hover:text-danger ml-0.5">
                     <X className="w-3 h-3" />
                   </button>
@@ -803,7 +811,7 @@ export const ExpensesPage: React.FC = () => {
           <div className="px-3 pb-3 border-t border-border pt-3 bg-surface-raised/40">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
               {/* Store Filter */}
-              {isAdmin && (
+              {isAdmin && storeCtx.mode === 'CENTRAL' && (
                 <div>
                   <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Филиал / Точка:</label>
                   <Select
@@ -814,7 +822,7 @@ export const ExpensesPage: React.FC = () => {
                     <option value="ALL">Все филиалы и склады</option>
                     {stores.map(s => (
                       <option key={s.id} value={s.id}>
-                        {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                        {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
                       </option>
                     ))}
                   </Select>
@@ -1025,7 +1033,7 @@ export const ExpensesPage: React.FC = () => {
                 {/* All stores, not just retail ones: a payroll expense (salary/advance for
                     an ADMIN/PARTNER) can legitimately be attributed to the main warehouse,
                     and the dropdown must include the record's actual current store. */}
-                {stores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {stores.map(s => <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>)}
               </Select>
             </FormField>
           )}
@@ -1098,7 +1106,7 @@ export const ExpensesPage: React.FC = () => {
           {isAdmin && (
             <FormField label="Магазин" required>
               <Select value={storeId} onChange={(e) => setStoreId(e.target.value)} className="w-full">
-                {retailStores.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+                {retailStores.map(s => <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>)}
               </Select>
             </FormField>
           )}

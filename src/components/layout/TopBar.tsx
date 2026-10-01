@@ -9,6 +9,7 @@ import {
   Landmark,
   ArrowRight,
 } from 'lucide-react';
+import { formatStoreName } from '../../utils/storeContext';
 
 export const TopBar: React.FC = () => {
   const navigate = useNavigate();
@@ -47,7 +48,7 @@ export const TopBar: React.FC = () => {
       case 'SALES_HISTORY': return 'История продаж';
       case 'INVENTORY': return 'Склад товаров';
       case 'PURCHASE': return 'Приходы товара';
-      case 'TRANSFER': return 'Перемещение';
+      case 'TRANSFER': return isStoreScoped ? 'Отправка на склад' : 'Перемещение';
       case 'EXCHANGE': return 'Обмен Trade-In';
       case 'REPAIR': return 'Сервис и ремонт';
       case 'SUPPLIERS': return 'Поставщики';
@@ -75,7 +76,7 @@ export const TopBar: React.FC = () => {
           {isStoreScoped && (
             <p className="text-[11px] text-fg-subtle truncate flex items-center">
               <Store className="w-2.5 h-2.5 mr-1 text-accent shrink-0 inline" />
-              <span className="truncate">{storeName || 'Магазин не привязан'}</span>
+              <span className="truncate">{formatStoreName(storeName) || 'Магазин не привязан'}</span>
             </p>
           )}
         </div>
@@ -106,7 +107,7 @@ export const TopBar: React.FC = () => {
                   title="Сменить магазин"
                 >
                   <Store className="w-3.5 h-3.5" />
-                  <span className="max-w-30 sm:max-w-none truncate">{activeRetailStore?.name || 'Магазин'}</span>
+                  <span className="max-w-30 sm:max-w-none truncate">{formatStoreName(activeRetailStore?.name) || 'Магазин'}</span>
                 </button>
                 <button
                   type="button"

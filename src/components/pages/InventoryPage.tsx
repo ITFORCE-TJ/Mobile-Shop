@@ -41,6 +41,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { useNavigationLayout } from '../../hooks/useNavigationLayout';
 import { useVirtualRows } from '../../hooks/useVirtualRows';
 import { DEVICE_STATUS_LABELS, findDeviceByCode, looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
+import { useStoreContext } from '../../utils/storeContext';
 
 const IN_STOCK_STATUSES: DeviceStatus[] = ['STORE_STOCK', 'MAIN_WAREHOUSE', 'IN_STOCK_AFTER_EXCHANGE'];
 
@@ -210,6 +211,8 @@ export const InventoryPage: React.FC = () => {
   const isAdmin = currentUser?.role === 'ADMIN';
   const isAdminOrPartner = currentUser?.role === 'ADMIN' || currentUser?.role === 'PARTNER';
   const isStoreScoped = currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER';
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
   const [isEditingRam, setIsEditingRam] = useState(false);
@@ -254,6 +257,8 @@ export const InventoryPage: React.FC = () => {
 
   // Tab mode: 'DEVICES' (list of goods) or 'LOCATIONS' (list of warehouse and stores)
   const [viewTab, setViewTab] = useState<'DEVICES' | 'LOCATIONS'>('DEVICES');
+  // Inside a store there is only that store's stock — no per-location overview.
+  useEffect(() => { if (storeCtx.mode === 'STORE') setViewTab('DEVICES'); }, [storeCtx.mode]);
   const [expandedLocationId, setExpandedLocationId] = useState<string | null>(null);
 
   // Selected location: 'ALL' (all goods in company), or specific store/warehouse ID
@@ -975,7 +980,7 @@ export const InventoryPage: React.FC = () => {
       <div className="p-2.5 sm:p-3 border-b border-border bg-surface space-y-2.5 shrink-0 shadow-xs">
         {/* Row 1: Mode Switcher (List of Goods vs Locations List) & Location Selector */}
         <div className="flex flex-wrap items-center justify-between gap-2">
-          {!isStoreScoped ? (
+          {!isStoreScoped && storeCtx.mode === 'CENTRAL' ? (
             <div className="flex items-center gap-1.5 p-1 rounded-xl bg-surface-raised border border-border shrink-0">
               <button
                 type="button"
@@ -1017,7 +1022,7 @@ export const InventoryPage: React.FC = () => {
           ) : null}
 
           {/* Quick Location Dropdown Filter */}
-          {!isStoreScoped && (
+          {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
             <div className="flex items-center gap-1.5 shrink-0">
               <span className="text-xs text-fg-subtle font-medium hidden sm:inline">Локация:</span>
               <select

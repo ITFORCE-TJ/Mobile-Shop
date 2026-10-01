@@ -33,7 +33,7 @@ const isZero = (value: string) => Number(value) === 0;
  * «Инкассация» (ADMIN): a store register's whole cash goes to Central Cash in one step. Amounts
  * come from the server: the USD register and its TJS made of each operation's own-day amount.
  */
-export const CashCollectionPanel: React.FC<{ month: string }> = ({ month }) => {
+export const CashCollectionPanel: React.FC<{ month: string; storeId?: string | null }> = ({ month, storeId }) => {
   const [balances, setBalances] = useState<{ stores: RegisterBalance[]; central: RegisterBalance | null } | null>(null);
   const [history, setHistory] = useState<CashCollection[]>([]);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -55,7 +55,7 @@ export const CashCollectionPanel: React.FC<{ month: string }> = ({ month }) => {
     setLoadError(null);
     Promise.all([
       apiClient<{ stores: RegisterBalance[]; central: RegisterBalance | null }>('/cash-collections/balances'),
-      apiClient<CashCollection[]>(`/cash-collections?period=SPECIFIC_MONTH&month=${encodeURIComponent(month)}`),
+      apiClient<CashCollection[]>(`/cash-collections?period=SPECIFIC_MONTH&month=${encodeURIComponent(month)}${storeId ? `&storeId=${encodeURIComponent(storeId)}` : ''}`),
     ])
       .then(([b, h]) => {
         if (cancelled) return;
@@ -66,7 +66,7 @@ export const CashCollectionPanel: React.FC<{ month: string }> = ({ month }) => {
         if (!cancelled) setLoadError(e instanceof Error ? e.message : 'Не удалось загрузить кассы');
       });
     return () => { cancelled = true; };
-  }, [month, revision]);
+  }, [month, revision, storeId]);
 
   const confirmCollect = async () => {
     if (!collecting || busy) return;
@@ -115,7 +115,7 @@ export const CashCollectionPanel: React.FC<{ month: string }> = ({ month }) => {
     <div className="p-3 sm:p-4 space-y-4 max-w-3xl mx-auto">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      {balances.central && (
+      {balances.central && !storeId && (
         <section className="rounded-xl border border-accent/30 bg-accent/5 p-4 flex items-center gap-3">
           <div className="w-10 h-10 rounded-xl bg-accent/15 text-accent flex items-center justify-center shrink-0">
             <Landmark className="w-5 h-5" />
@@ -132,7 +132,7 @@ export const CashCollectionPanel: React.FC<{ month: string }> = ({ month }) => {
         <h2 className="text-sm font-semibold text-fg-muted">Наличные в магазинах</h2>
         {balances.stores.length === 0 ? (
           <p className="text-xs text-fg-subtle">Магазинов нет</p>
-        ) : balances.stores.map((store) => {
+        ) : balances.stores.filter((s) => !storeId || s.storeId === storeId).map((store) => {
           const empty = isZero(store.cashUsd);
           const unreconciled = !isZero(store.unreconciledUsd);
           return (

@@ -12,7 +12,8 @@ import {
   RotateCcw,
   Receipt,
   ArrowLeft,
-  Store
+  Store,
+  X
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { DateRangePicker } from '../ui/DateRangePicker';
@@ -28,6 +29,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { currentBusinessMonth, getBusinessDateKey, monthBounds } from '../../utils/businessDate';
 import { summarizeSales } from '../../utils/salesSummary';
 import { looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 type DialogView = 'details' | 'refund' | 'pick-exchange' | 'pick-repair';
 
@@ -87,6 +89,8 @@ export const SalesHistoryPage: React.FC = () => {
   const isPartner = currentUser?.role === 'PARTNER';
   const isStoreScoped = isSeller || isPartner;
   const isAdmin = currentUser?.role === 'ADMIN';
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
 
   // If store-scoped (seller/partner): bound to their own store.
   // If admin: defaults to whichever retail store is currently selected globally,
@@ -345,6 +349,11 @@ export const SalesHistoryPage: React.FC = () => {
                   setSelectedStartDate(start);
                   setSelectedEndDate(end);
                   setPeriodFilter('MONTH');
+                } else if (start === todayStr && end === todayStr) {
+                  setSelectedMonth('');
+                  setSelectedStartDate(start);
+                  setSelectedEndDate(end);
+                  setPeriodFilter('TODAY');
                 } else {
                   setSelectedMonth('');
                   setSelectedStartDate(start);
@@ -357,28 +366,54 @@ export const SalesHistoryPage: React.FC = () => {
             />
           </div>
 
-          {isAdmin ? (
-            <div className="relative flex-1 sm:flex-initial min-w-35 sm:min-w-44">
-                <div className="h-9 px-2.5 rounded-lg border border-border bg-surface hover:border-accent/40 text-xs font-semibold text-fg-muted flex items-center gap-1.5 transition-colors">
-                  <Store className="w-3.5 h-3.5 text-accent shrink-0" />
-                  <select
-                    value={selectedStoreFilter}
-                    onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                    className="w-full bg-transparent text-xs font-semibold text-fg focus:outline-none appearance-none cursor-pointer pr-4 truncate"
-                  >
-                    <option value="ALL" className="text-fg bg-surface">
-                      Все магазины
-                    </option>
-                    {retailStores.map((s) => (
-                      <option key={s.id} value={s.id} className="text-fg bg-surface">
-                        {s.name}
-                      </option>
-                    ))}
-                  </select>
-                  <ChevronDown className="w-3.5 h-3.5 text-fg-subtle shrink-0 pointer-events-none absolute right-2.5" />
-                </div>
+          {isAdmin && storeCtx.mode === 'CENTRAL' ? (
+            <div className="relative inline-flex items-center shrink-0">
+              <div
+                className={cn(
+                  'h-9 pl-3 pr-8 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-xs',
+                  selectedStoreFilter !== 'ALL'
+                    ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
+                    : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
+                )}
+                title={`Точка продаж: ${selectedStoreFilter === 'ALL' ? 'Все магазины' : formatStoreName(retailStores.find(s => s.id === selectedStoreFilter)?.name) || 'Магазин'}`}
+              >
+                <Store className={cn('w-3.5 h-3.5 shrink-0', selectedStoreFilter !== 'ALL' ? 'text-accent' : 'text-fg-subtle')} />
+                <span className="truncate max-w-36 sm:max-w-48">
+                  {selectedStoreFilter === 'ALL'
+                    ? 'Все магазины'
+                    : formatStoreName(retailStores.find(s => s.id === selectedStoreFilter)?.name) || 'Магазин'}
+                </span>
+                <ChevronDown className="w-3.5 h-3.5 text-fg-subtle shrink-0 pointer-events-none absolute right-2.5" />
               </div>
-            ) : null}
+              <select
+                value={selectedStoreFilter}
+                onChange={(e) => setSelectedStoreFilter(e.target.value)}
+                className="absolute inset-0 w-full h-full opacity-0 cursor-pointer text-xs"
+                title="Фильтр по точке продаж"
+                aria-label="Фильтр по точке продаж"
+              >
+                <option value="ALL" className="text-fg bg-surface">
+                  Все магазины
+                </option>
+                {retailStores.map((s) => (
+                  <option key={s.id} value={s.id} className="text-fg bg-surface font-medium">
+                    {formatStoreName(s.name)}
+                  </option>
+                ))}
+              </select>
+              {selectedStoreFilter !== 'ALL' && (
+                <button
+                  type="button"
+                  onClick={() => setSelectedStoreFilter('ALL')}
+                  className="ml-1 p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-surface-raised transition-colors cursor-pointer"
+                  title="Показать все магазины"
+                  aria-label="Сбросить фильтр магазина"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+          ) : null}
           </div>
         {filteredSales.length > 0 && (
           <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-fg-subtle tabular-nums" aria-label="Итоги за период">
@@ -435,7 +470,7 @@ export const SalesHistoryPage: React.FC = () => {
                     {sale.items.map(i => `${i.brand} ${i.model}`).join(', ')}
                   </p>
                   <div className="flex items-center gap-1.5 text-xs text-fg-subtle mt-0.5">
-                    {!isStoreScoped && <><span>{sale.storeName}</span><span>·</span></>}
+                    {!isStoreScoped && <><span>{formatStoreName(sale.storeName)}</span><span>·</span></>}
                     <span>{sale.sellerName}</span>
                     {sale.customerName && <><span>·</span><span>{sale.customerName}</span></>}
                   </div>
@@ -505,7 +540,7 @@ export const SalesHistoryPage: React.FC = () => {
         {!selectedSale ? null : dialogView === 'details' ? (
           <div className="space-y-3.5">
             <div className="bg-surface p-3 rounded-lg border border-border space-y-1 text-sm">
-              {!isStoreScoped && <div className="text-fg-muted">{selectedSale.storeName}</div>}
+              {!isStoreScoped && <div className="text-fg-muted">{formatStoreName(selectedSale.storeName)}</div>}
               <div className="text-accent font-semibold">Оператор: {selectedSale.sellerName}</div>
               {selectedSale.customerName && (
                 <div className="text-fg-subtle text-xs pt-1 border-t border-border mt-1">Клиент: {selectedSale.customerName}</div>

@@ -26,6 +26,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
+import { useStoreContext } from '../../utils/storeContext';
 
 const ROLE_CONFIG: Record<Role, { label: string; bg: string; color: string; border: string }> = {
   ADMIN: { label: 'Администратор', bg: 'bg-accent/15', color: 'text-accent', border: 'border-accent/30' },
@@ -232,6 +233,9 @@ export const EmployeesPage: React.FC = () => {
       setIsSubmitting(false);
     }
   };
+
+  // Admin inside a store sees only that store's staff; Central Cash shows everyone.
+  const storeCtx = useStoreContext();
 
   if (currentUser?.role !== 'ADMIN' && currentUser?.role !== 'PARTNER') {
     return (
@@ -502,7 +506,8 @@ export const EmployeesPage: React.FC = () => {
   };
 
   // Grouping: One global admin at the top, each store separately with its staff/workers
-  const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('ALL');
+  const [storeFilterChoice, setSelectedStoreFilter] = useState<string>('ALL');
+  const selectedStoreFilter = storeCtx.mode === 'STORE' ? storeCtx.storeId : storeFilterChoice;
 
   const adminUsers = useMemo(() => users.filter(u => u.role === 'ADMIN'), [users]);
   const retailStores = useMemo(() => stores.filter(s => !s.isMainWarehouse), [stores]);
@@ -739,7 +744,8 @@ export const EmployeesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Quick Store Filter Pills */}
+      {/* Quick Store Filter Pills (Central Cash only) */}
+      {storeCtx.mode === 'CENTRAL' && (
       <div className="px-4 md:px-6 py-2.5 border-b border-border bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none">
         <button
           type="button"
@@ -814,6 +820,7 @@ export const EmployeesPage: React.FC = () => {
           </button>
         )}
       </div>
+      )}
 
       {/* Users List: Global Admin at top, then each retail store with its staff */}
       <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg space-y-7">

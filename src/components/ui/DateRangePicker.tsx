@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useLayoutEffect, useRef, useMemo, useCallback } from 'react';
 import { Calendar, X, ChevronDown, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '../../utils/cn';
 import { ModalLayer } from './ModalLayer';
@@ -7,6 +7,11 @@ import { currentBusinessMonth, getBusinessDateKey, monthBounds, wholeMonthOf } f
 const MONTH_NAMES_RU = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
+];
+
+const MONTH_NAMES_GENITIVE_RU = [
+  'января', 'февраля', 'марта', 'апреля', 'мая', 'июня',
+  'июля', 'августа', 'сентября', 'октября', 'ноября', 'декабря',
 ];
 
 const MONTH_NAMES_SHORT_RU = [
@@ -81,6 +86,11 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   // The month the active filter points at — what the picker opens on.
   const activeMonth = (selectedMonth || (startDate ? startDate.slice(0, 7) : '') || fallbackThisMonthStr);
 
+  // Track whether the user has explicitly clicked a date during this modal session.
+  // When opening, today's date is auto-selected by default without selecting the full month.
+  // The first date click should immediately select that single date (not create a range with today).
+  const hasUserInteracted = useRef(false);
+
   // Draft selection inside the modal
   const [draftStart, setDraftStart] = useState<string>(startDate || todayKey);
   const [draftEnd, setDraftEnd] = useState<string>(endDate || startDate || todayKey);
@@ -89,35 +99,56 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   const pendingScrollMonth = useRef<string | null>(null);
 
   // When modal opens, sync draft and the shown year with the active filter.
+  // Instead of selecting the whole month bounds, default to auto-selecting ONLY today's date!
   useEffect(() => {
     if (!open) return;
-    if (selectedMonth) {
+
+    hasUserInteracted.current = false;
+
+    if (startDate && (!endDate || startDate === endDate)) {
+      // User previously had a single day selected
+      setDraftStart(startDate);
+      setDraftEnd(startDate);
+    } else if (startDate && endDate && (!selectedMonth || selectedMonth !== thisMonth)) {
+      // User previously had an explicit custom multi-day range selected
+      setDraftStart(startDate);
+      setDraftEnd(endDate);
+    } else if (selectedMonth && selectedMonth !== thisMonth) {
+      // Explicit past month selected (e.g. 2026-08)
       const { start, end } = monthBounds(selectedMonth);
       setDraftStart(start);
       setDraftEnd(end);
-    } else if (startDate) {
-      setDraftStart(startDate);
-      setDraftEnd(endDate || startDate);
     } else {
-      const { start, end } = monthBounds(fallbackThisMonthStr);
-      setDraftStart(start);
-      setDraftEnd(end);
+      // Current month or default: automatically select ONLY today's date
+      setDraftStart(todayKey);
+      setDraftEnd(todayKey);
     }
+
     setViewYear(Number(activeMonth.slice(0, 4)));
     pendingScrollMonth.current = activeMonth;
-  }, [open, startDate, endDate, selectedMonth, fallbackThisMonthStr, activeMonth]);
+  }, [open, startDate, endDate, selectedMonth, thisMonth, todayKey, activeMonth]);
 
-  // Scroll to the pending month after the year containing it has rendered. It is computed from
-  // the active filter (not a draft left over from a previous opening), so it never goes stale.
-  useEffect(() => {
-    if (!open || !pendingScrollMonth.current) return;
-    const targetMonth = pendingScrollMonth.current;
-    const timer = setTimeout(() => {
-      document.getElementById(`cal-month-${targetMonth}`)?.scrollIntoView({ block: 'start', behavior: 'smooth' });
+  const scrollToMonth = useCallback((targetMonth: string, behavior: 'instant' | 'smooth' = 'instant') => {
+    const container = scrollContainerRef.current;
+    if (!container) return;
+    const targetEl = document.getElementById(`cal-month-${targetMonth}`);
+    if (targetEl) {
+      const top = Math.max(0, targetEl.offsetTop - container.offsetTop);
+      container.scrollTo({ top, behavior });
+    }
+  }, []);
+
+  // Instantly position the active/current month on open without any visible smooth-scrolling animation
+  useLayoutEffect(() => {
+    if (!open) return;
+    const targetMonth = pendingScrollMonth.current || activeMonth;
+    scrollToMonth(targetMonth, 'instant');
+    const raf = requestAnimationFrame(() => {
+      scrollToMonth(targetMonth, 'instant');
       pendingScrollMonth.current = null;
-    }, 60);
-    return () => clearTimeout(timer);
-  }, [open, viewYear]);
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, viewYear, activeMonth, scrollToMonth]);
 
   // Any past year is reachable; future months are never offered.
   const currentYear = Number(thisMonth.slice(0, 4));
@@ -125,9 +156,11 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
   // Day click handler for single day or range selection
   const handleDayClick = useCallback((dateKey: string) => {
-    // If no draft start, or a range was already selected (start !== end):
+    // If this is the first click after opening and today was auto-selected,
+    // or if no draftStart, or if a range was already selected (start !== end):
     // Start fresh with a single date
-    if (!draftStart || (draftStart && draftEnd && draftStart !== draftEnd)) {
+    if (!hasUserInteracted.current || !draftStart || (draftStart && draftEnd && draftStart !== draftEnd)) {
+      hasUserInteracted.current = true;
       setDraftStart(dateKey);
       setDraftEnd(dateKey);
       return;
@@ -148,6 +181,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   }, [draftStart, draftEnd]);
 
   const handleSelectWholeMonth = useCallback((month: string) => {
+    hasUserInteracted.current = true;
     const { start, end } = monthBounds(month);
     setDraftStart(start);
     setDraftEnd(end);
@@ -155,10 +189,13 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
 
   const jumpToMonth = useCallback((month: string) => {
     pendingScrollMonth.current = month;
-    setViewYear(Number(month.slice(0, 4)));
-  }, []);
+    const year = Number(month.slice(0, 4));
+    setViewYear(year);
+    scrollToMonth(month, 'instant');
+  }, [scrollToMonth]);
 
   const handleQuickToday = useCallback(() => {
+    hasUserInteracted.current = true;
     setDraftStart(todayKey);
     setDraftEnd(todayKey);
     jumpToMonth(thisMonth);
@@ -188,13 +225,14 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
       return `Выбран весь месяц: ${MONTH_NAMES_RU[m1 - 1]} ${y1} г.`;
     }
     if (draftStart === end) {
-      return `Выбрана дата: ${d1} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} г.`;
+      const isDraftToday = draftStart === todayKey;
+      return `Выбрана дата: ${d1} ${MONTH_NAMES_GENITIVE_RU[m1 - 1]} ${y1} г.${isDraftToday ? ' (Сегодня)' : ''}`;
     }
     if (y1 === y2 && m1 === m2) {
-      return `Период: ${d1} — ${d2} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} г.`;
+      return `Период: ${d1} — ${d2} ${MONTH_NAMES_GENITIVE_RU[m1 - 1]} ${y1} г.`;
     }
     return `Период: ${d1} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} — ${d2} ${MONTH_NAMES_SHORT_RU[m2 - 1]} ${y2} г.`;
-  }, [draftStart, draftEnd]);
+  }, [draftStart, draftEnd, todayKey]);
 
   // Label displayed on the main trigger button in the search bar
   const displayLabel = useMemo(() => {
@@ -412,25 +450,36 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
                           >
                             <button
                               type="button"
-                              aria-label={`${dayNum} ${MONTH_NAMES_SHORT_RU[m.monthIndex]} ${m.year}`}
+                              aria-label={`${dayNum} ${MONTH_NAMES_SHORT_RU[m.monthIndex]} ${m.year}${isTodayDate ? ' (Сегодня)' : ''}`}
                               aria-pressed={inRange || isSingle}
                               disabled={dateKey > todayKey}
                               onClick={() => handleDayClick(dateKey)}
                               className={cn(
-                                'w-[44px] h-[44px] flex items-center justify-center text-sm font-medium transition-all cursor-pointer relative z-10 disabled:opacity-30 disabled:cursor-not-allowed',
-                                // Single selected date (clean circular ring outline like user photo)
-                                isSingle && 'rounded-full border-2 border-accent bg-accent/10 text-fg font-bold shadow-xs',
+                                'w-[44px] h-[44px] flex flex-col items-center justify-center text-sm font-medium transition-all cursor-pointer relative z-10 disabled:opacity-30 disabled:cursor-not-allowed',
+                                // Single selected date (solid accent circle, highly visible and prominent)
+                                isSingle && 'rounded-full bg-accent text-accent-fg font-bold shadow-md scale-105',
                                 // Range endpoints (solid accent)
-                                (isStart || isEnd) && !isSingle && 'rounded-full bg-accent text-accent-fg font-bold shadow-xs',
+                                (isStart || isEnd) && !isSingle && 'rounded-full bg-accent text-accent-fg font-bold shadow-md',
                                 // Range inner days
                                 inRange && !isStart && !isEnd && 'text-accent font-semibold',
-                                // Unselected days
-                                !inRange && !isSingle && 'rounded-full text-fg hover:bg-surface-raised active:scale-95',
-                                // Today marker
-                                isTodayDate && !inRange && !isSingle && 'text-accent font-bold underline underline-offset-4'
+                                // Today inside range: distinct badge outline so today is instantly visible
+                                isTodayDate && inRange && !isStart && !isEnd && 'rounded-full ring-2 ring-accent bg-accent/25 text-fg font-black shadow-xs',
+                                // Today not in range and not selected: clear accent outline indicating today
+                                isTodayDate && !inRange && !isSingle && 'rounded-full border-2 border-accent/70 bg-accent/10 text-accent font-bold',
+                                // Unselected regular days
+                                !inRange && !isSingle && !isTodayDate && 'rounded-full text-fg hover:bg-surface-raised active:scale-95'
                               )}
                             >
-                              {dayNum}
+                              <span className={cn(isTodayDate && 'leading-none font-bold')}>{dayNum}</span>
+                              {isTodayDate && (
+                                <span
+                                  className={cn(
+                                    'w-1.5 h-1.5 rounded-full absolute bottom-1 left-1/2 -translate-x-1/2 shadow-xs',
+                                    (isSingle || isStart || isEnd) ? 'bg-accent-fg' : 'bg-accent'
+                                  )}
+                                  title="Сегодня"
+                                />
+                              )}
                             </button>
                           </div>
                         );

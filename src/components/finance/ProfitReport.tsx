@@ -32,6 +32,7 @@ import {
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { expenseCategoryLabel } from '../../utils/expenseCategories';
 import { ReportPreviewModal } from '../common/ReportPreviewModal';
+import { useStoreContext } from '../../utils/storeContext';
 
 interface ExpenseBreakdown {
   expensesUsd: number;
@@ -151,6 +152,8 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     storeProfitShares,
     setActivePage,
   } = useAppFields('currentUser', 'stores', 'users', 'todayRate', 'selectedStoreId', 'owners', 'storeProfitShares', 'setActivePage');
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
 
   const period = 'SPECIFIC_MONTH';
   // Summary view defaults to whichever store is active on the POS Terminal page (same
@@ -428,7 +431,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
       {/* Filter bar */}
       <div className="px-3 py-2.5 border-b border-border bg-surface flex flex-wrap items-center gap-2">
         {monthPicker}
-        {view === 'summary' && (
+        {view === 'summary' && storeCtx.mode === 'CENTRAL' && (
           <select
             value={selectedStore}
             onChange={(e) => setSelectedStore(e.target.value)}

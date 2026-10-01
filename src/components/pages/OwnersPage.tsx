@@ -29,6 +29,7 @@ import {
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { MonthPicker } from '../ui/MonthPicker';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 function ownerCountLabel(count: number): string {
   const mod10 = count % 10;
@@ -81,13 +82,21 @@ export const OwnersPage: React.FC = () => {
   };
 
   const ownerRoleRank = (role?: string) => (role === 'ADMIN' ? 0 : role === 'PARTNER' ? 1 : 2);
+  // Admin inside a store sees the admin and that store's partners; Central Cash shows everyone.
+  const storeCtx = useStoreContext();
   const displayOwners = useMemo(() => {
-    return [...owners].sort((a, b) => {
+    const inStore = storeCtx.mode === 'STORE'
+      ? owners.filter((o) => {
+          const role = o.userId ? users.find(u => u.id === o.userId)?.role : undefined;
+          return role === 'ADMIN' || o.storeId === storeCtx.storeId || storeProfitShares.some((sh) => sh.ownerId === o.id && sh.storeId === storeCtx.storeId);
+        })
+      : owners;
+    return [...inStore].sort((a, b) => {
       const roleA = a.userId ? users.find(u => u.id === a.userId)?.role : undefined;
       const roleB = b.userId ? users.find(u => u.id === b.userId)?.role : undefined;
       return ownerRoleRank(roleA) - ownerRoleRank(roleB);
     });
-  }, [owners, users]);
+  }, [owners, users, storeCtx, storeProfitShares]);
 
   const getOwnerDetails = (owner: { id: string; name?: string; userId?: string }) => {
     const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
@@ -171,7 +180,8 @@ export const OwnersPage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [typeFilter, setTypeFilter] = useState<'ALL' | 'PROFIT_PAYOUT' | 'INVESTMENT' | 'WITHDRAWAL' | 'REINVEST'>('ALL');
   const [selectedOwnerFilter, setSelectedOwnerFilter] = useState<string>('ALL');
-  const [selectedStoreFilter, setSelectedStoreFilter] = useState<string>('ALL');
+  const [storeFilterChoice, setSelectedStoreFilter] = useState<string>('ALL');
+  const selectedStoreFilter = storeCtx.mode === 'STORE' ? storeCtx.storeId : storeFilterChoice;
   const [periodFilter, setPeriodFilter] = useState<'ALL' | 'SPECIFIC_MONTH'>('ALL');
   const [selectedMonth, setSelectedMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
   const TRANSACTIONS_PAGE_SIZE = 12;
@@ -1120,7 +1130,8 @@ export const OwnersPage: React.FC = () => {
                 ))}
               </select>
 
-              {/* Store Dropdown */}
+              {/* Store Dropdown (Central Cash only) */}
+              {storeCtx.mode === 'CENTRAL' && (
               <select
                 value={selectedStoreFilter}
                 onChange={(e) => setSelectedStoreFilter(e.target.value)}
@@ -1128,12 +1139,13 @@ export const OwnersPage: React.FC = () => {
               >
                 <option value="ALL">Все объекты</option>
                 {retailStores.map((s) => (
-                  <option key={s.id} value={s.id}>Магазин «{s.name}»</option>
+                  <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>
                 ))}
                 {mainWarehouse && (
                   <option value={mainWarehouse.id}>Центральный склад ({mainWarehouse.name})</option>
                 )}
               </select>
+              )}
 
               {/* Period Filter */}
               <div className="flex items-center gap-1 bg-surface-raised border border-border p-0.5 rounded-xl shrink-0">
@@ -1651,7 +1663,7 @@ export const OwnersPage: React.FC = () => {
                   )}
                   {retailStores.map(store => (
                     <option key={store.id} value={store.id}>
-                      Магазин «{store.name}»
+                      {formatStoreName(store.name)}
                     </option>
                   ))}
                 </select>

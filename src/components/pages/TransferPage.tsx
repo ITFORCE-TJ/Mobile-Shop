@@ -7,6 +7,7 @@ import {
   ArrowLeftRight,
   AlertCircle,
   Store as StoreIcon,
+  Warehouse,
   Send,
   Check,
   Loader2
@@ -16,6 +17,7 @@ import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { SearchBar } from '../ui/SearchBar';
 import { LoadingState } from '../ui/Skeleton';
 import { DEVICE_STATUS_LABELS, findDeviceByCode, looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 export const TransferPage: React.FC = () => {
   const {
@@ -34,16 +36,25 @@ export const TransferPage: React.FC = () => {
   const isSeller = currentUser?.role === 'SELLER';
   const isPartner = currentUser?.role === 'PARTNER';
   const isStoreScoped = isSeller || isPartner;
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
   const sellerStoreName = currentUser?.storeName || (currentUser?.storeId ? stores.find(s => s.id === currentUser.storeId)?.name : undefined) || 'Мой магазин';
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
-  // Store staff send only their own store's stock; phones from the main warehouse arrive through
-  // «Приход товара» (IMEI scan), the main warehouse itself is ADMIN-only.
+  // Store staff send only their own store's stock to the central warehouse.
   const defaultFromId = isStoreScoped ? (currentUser?.storeId || '') : stores[0]?.id || '';
+  const defaultToId = isStoreScoped ? (mainWarehouse?.id || '') : '';
 
   const [fromLocationId, setFromLocationId] = useState<string>(defaultFromId);
-  const [toLocationId, setToLocationId] = useState<string>('');
+  const [toLocationId, setToLocationId] = useState<string>(defaultToId);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+
+  // Automatically ensure destination is set to the central warehouse for store staff
+  useEffect(() => {
+    if (isStoreScoped && mainWarehouse?.id && toLocationId !== mainWarehouse.id) {
+      setToLocationId(mainWarehouse.id);
+    }
+  }, [isStoreScoped, mainWarehouse?.id, toLocationId]);
 
   // A notification click for a transfer request navigates here with { state: { tab: 'list' } }
   // so the admin lands directly on the approve/reject tab instead of "Новое перемещение".
@@ -61,9 +72,10 @@ export const TransferPage: React.FC = () => {
   // Defaults to whichever store is currently active on the POS Terminal page —
   // an admin picking a store there should see that same store here without
   // re-picking it; they can still switch it locally afterward.
-  const [historyFilterStoreId, setHistoryFilterStoreId] = useState<string>(
+  const [historyFilterChoice, setHistoryFilterStoreId] = useState<string>(
     globalSelectedStoreId && globalSelectedStoreId !== 'all' ? globalSelectedStoreId : 'ALL'
   );
+  const historyFilterStoreId = !isStoreScoped && storeCtx.mode === 'STORE' ? storeCtx.storeId : historyFilterChoice;
   const [statusBanner, setStatusBanner] = useState<StatusMessage | null>(null);
   // One message system for the page (the inline second banner is gone).
   const setStatusMessage = (m: { type: 'success' | 'error'; text: string } | null) =>
@@ -77,12 +89,12 @@ export const TransferPage: React.FC = () => {
 
   const fromStore = stores.find(s => s.id === fromLocationId);
   const fromStoreName = fromStore
-    ? (fromStore.isMainWarehouse ? `Центральный склад (${fromStore.name})` : `Магазин «${fromStore.name}»`)
+    ? (fromStore.isMainWarehouse ? `Центральный склад (${formatStoreName(fromStore.name)})` : formatStoreName(fromStore.name))
     : 'Исходный склад';
 
   const toStore = stores.find(s => s.id === toLocationId);
   const toStoreName = toStore
-    ? (toStore.isMainWarehouse ? `Центральный склад (${toStore.name})` : `Магазин «${toStore.name}»`)
+    ? (toStore.isMainWarehouse ? `Центральный склад (${formatStoreName(toStore.name)})` : formatStoreName(toStore.name))
     : 'Не выбран';
 
   const availableDevicesAtFromLocation = useMemo(() => {
@@ -154,7 +166,8 @@ export const TransferPage: React.FC = () => {
   };
 
   const handleOpenConfirmModal = () => {
-    if (!toLocationId) {
+    const effectiveToId = isStoreScoped ? (mainWarehouse?.id || toLocationId) : toLocationId;
+    if (!effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
       return;
     }
@@ -162,7 +175,7 @@ export const TransferPage: React.FC = () => {
       setStatusMessage({ type: 'error', text: 'Выберите хотя бы одно устройство для перемещения' });
       return;
     }
-    if (fromLocationId === toLocationId) {
+    if (fromLocationId === effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Исходный склад и склад назначения не могут совпадать' });
       return;
     }
@@ -170,7 +183,8 @@ export const TransferPage: React.FC = () => {
   };
 
   const handleExecuteTransfer = async () => {
-    if (!toLocationId) {
+    const effectiveToId = isStoreScoped ? (mainWarehouse?.id || toLocationId) : toLocationId;
+    if (!effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
       return;
     }
@@ -179,7 +193,7 @@ export const TransferPage: React.FC = () => {
     try {
       const res = await createTransferRequest({
         fromLocationId,
-        toLocationId,
+        toLocationId: effectiveToId,
         deviceIds: selectedDeviceIds,
       });
 
@@ -192,7 +206,7 @@ export const TransferPage: React.FC = () => {
             : `Перемещение (${selectedDeviceIds.length} шт.) выполнено.`
         });
         setSelectedDeviceIds([]);
-        setToLocationId('');
+        setToLocationId(isStoreScoped ? (mainWarehouse?.id || '') : '');
         setActiveTab('list');
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка создания перемещения' });
@@ -263,7 +277,7 @@ export const TransferPage: React.FC = () => {
               : 'border-transparent text-fg-muted hover:text-fg'
           }`}
         >
-          Новое перемещение
+          {isStoreScoped ? 'Новая отправка' : 'Новое перемещение'}
         </button>
 
         <button
@@ -274,7 +288,7 @@ export const TransferPage: React.FC = () => {
               : 'border-transparent text-fg-muted hover:text-fg'
           }`}
         >
-          <span>История и подтверждения</span>
+          <span>{isStoreScoped ? 'История отправок' : 'История и подтверждения'}</span>
           {pendingCount > 0 && (
             <span className="bg-warning text-black px-1.5 py-0.2 rounded-full font-bold text-[10px]">
               {pendingCount}
@@ -296,9 +310,9 @@ export const TransferPage: React.FC = () => {
                     <>
                       <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
                         <StoreIcon className="w-4 h-4 text-accent" />
-                        <span>{sellerStoreName}</span>
+                        <span>{formatStoreName(sellerStoreName)}</span>
                       </div>
-                      <p className="text-[11px] text-fg-subtle mt-1">Телефоны с главного склада принимаются в разделе «Приход товара».</p>
+                      <p className="text-[11px] text-fg-subtle mt-1">Отправка товаров на центральный склад. Новые поступления принимаются в «Приход товара».</p>
                     </>
                   ) : (
                     <select
@@ -312,7 +326,7 @@ export const TransferPage: React.FC = () => {
                     >
                       {stores.map(s => (
                         <option key={s.id} value={s.id}>
-                          {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                          {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
                         </option>
                       ))}
                     </select>
@@ -321,37 +335,46 @@ export const TransferPage: React.FC = () => {
 
                 <div>
                   <label className="block text-fg-subtle mb-1 text-[11px] font-bold">
-                    Куда (Получатель): <span className="text-warning font-normal">* обязательно</span>
+                    Куда (Получатель):
+                    {!isStoreScoped && <span className="text-warning font-normal ml-1">* обязательно</span>}
                   </label>
-                  <select
-                    value={toLocationId ?? ''}
-                    onChange={(e) => setToLocationId(e.target.value)}
-                    className={`w-full rounded-xl bg-surface-raised border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none transition-colors ${
-                      !toLocationId ? 'border-warning/70 ring-1 ring-warning/30' : 'border-border'
-                    }`}
-                  >
-                    <option value="">-- Выберите получателя (куда) * --</option>
-                    {isStoreScoped ? (
-                      stores
-                        .filter(s => s.id !== fromLocationId && (s.id === currentUser?.storeId || s.id === mainWarehouse?.id))
-                        .map(s => (
+                  {isStoreScoped ? (
+                    <>
+                      <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
+                        <Warehouse className="w-4 h-4 text-accent" />
+                        <span>
+                          {mainWarehouse
+                            ? (mainWarehouse.isMainWarehouse && !mainWarehouse.name.toLowerCase().includes('центральн')
+                                ? `Центральный склад (${formatStoreName(mainWarehouse.name)})`
+                                : formatStoreName(mainWarehouse.name))
+                            : 'Центральный склад'}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-fg-subtle mt-1">Товары поступят на баланс склада после проверки администратором.</p>
+                    </>
+                  ) : (
+                    <>
+                      <select
+                        value={toLocationId ?? ''}
+                        onChange={(e) => setToLocationId(e.target.value)}
+                        className={`w-full rounded-xl bg-surface-raised border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none transition-colors ${
+                          !toLocationId ? 'border-warning/70 ring-1 ring-warning/30' : 'border-border'
+                        }`}
+                      >
+                        <option value="">-- Выберите получателя (куда) * --</option>
+                        {stores.filter(s => s.id !== fromLocationId).map(s => (
                           <option key={s.id} value={s.id}>
-                            {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                            {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
                           </option>
-                        ))
-                    ) : (
-                      stores.filter(s => s.id !== fromLocationId).map(s => (
-                        <option key={s.id} value={s.id}>
-                          {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
-                        </option>
-                      ))
-                    )}
-                  </select>
-                  {!toLocationId && (
-                    <p className="text-[10px] text-warning mt-1 flex items-center gap-1 font-medium">
-                      <AlertCircle className="w-3 h-3 shrink-0" />
-                      Необходимо вручную выбрать куда отправлять
-                    </p>
+                        ))}
+                      </select>
+                      {!toLocationId && (
+                        <p className="text-[10px] text-warning mt-1 flex items-center gap-1 font-medium">
+                          <AlertCircle className="w-3 h-3 shrink-0" />
+                          Необходимо выбрать получателя
+                        </p>
+                      )}
+                    </>
                   )}
                 </div>
               </div>
@@ -460,7 +483,7 @@ export const TransferPage: React.FC = () => {
                         : 'bg-accent hover:bg-accent-strong text-accent-fg'
                     }`}
                   >
-                    <span>{toLocationId ? 'Оформить' : 'Указать куда'}</span>
+                    <span>{toLocationId ? (isStoreScoped ? 'Отправить на склад' : 'Оформить') : 'Указать куда'}</span>
                     <Send className="w-4 h-4" />
                   </button>
                 </div>
@@ -470,7 +493,7 @@ export const TransferPage: React.FC = () => {
         ) : (
           /* HISTORY & APPROVALS TAB */
           <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-bg">
-            {!isStoreScoped && (
+            {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
               <div className="flex items-center justify-between pb-2 border-b border-border text-xs">
                 <span className="text-fg-muted font-medium">Фильтр по локации:</span>
                 <select
@@ -481,7 +504,7 @@ export const TransferPage: React.FC = () => {
                   <option value="ALL">Все (склад и магазины)</option>
                   {stores.map(s => (
                     <option key={s.id} value={s.id}>
-                      {s.isMainWarehouse ? `Центральный склад (${s.name})` : `Магазин «${s.name}»`}
+                      {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
                     </option>
                   ))}
                 </select>
@@ -561,8 +584,8 @@ export const TransferPage: React.FC = () => {
       <ConfirmDialog
         open={confirmTransferModal}
         tone="default"
-        title="Подтверждение перемещения"
-        confirmLabel={isSeller ? 'Отправить заявку' : 'Переместить'}
+        title={isStoreScoped ? 'Подтверждение отправки на склад' : 'Подтверждение перемещения'}
+        confirmLabel={isStoreScoped ? 'Отправить на склад' : 'Переместить'}
         loading={isSubmittingTransfer}
         onConfirm={handleExecuteTransfer}
         onCancel={() => { if (!isSubmittingTransfer) setConfirmTransferModal(false); }}

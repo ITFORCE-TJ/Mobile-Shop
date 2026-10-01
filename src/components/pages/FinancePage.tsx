@@ -8,6 +8,7 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { ProfitReport } from '../finance/ProfitReport';
 import { BonusesFinancePanel } from '../finance/BonusesFinancePanel';
 import { CashCollectionPanel } from '../finance/CashCollectionPanel';
+import { useStoreContext } from '../../utils/storeContext';
 
 type Tab = 'REPORT' | 'STORES' | 'CASH' | 'BONUSES';
 const TABS: { value: Tab; label: string }[] = [
@@ -19,6 +20,8 @@ const TABS: { value: Tab; label: string }[] = [
 
 export const FinancePage: React.FC = () => {
   const { currentUser } = useAppFields('currentUser');
+  // Admin inside a store sees only that store; Central Cash shows every store.
+  const storeCtx = useStoreContext();
 
   const isSeller = currentUser?.role === 'SELLER';
 
@@ -26,7 +29,8 @@ export const FinancePage: React.FC = () => {
   // no tab param means the report, which is what the page opens on.
   const [searchParams, setSearchParams] = useSearchParams();
   const urlTab = searchParams.get('tab') as Tab | null;
-  const tab: Tab = urlTab && TABS.some((t) => t.value === urlTab) ? urlTab : 'REPORT';
+  const tabs = storeCtx.mode === 'STORE' ? TABS.filter((t) => t.value !== 'STORES') : TABS;
+  const tab: Tab = urlTab && tabs.some((t) => t.value === urlTab) ? urlTab : 'REPORT';
   const setTab = (next: Tab) => setSearchParams(next === 'REPORT' ? {} : { tab: next }, { replace: true });
   const [status, setStatus] = useState<StatusMessage | null>(null);
   // Shared by the "Отчёт" and "По складам" tabs so switching between them keeps the month.
@@ -48,7 +52,7 @@ export const FinancePage: React.FC = () => {
 
       <div className="border-b border-border bg-bg shrink-0 px-3 pt-3 pb-3">
         <FilterPillGroup
-          options={TABS}
+          options={tabs}
           value={tab}
           onChange={setTab}
           scrollable
@@ -59,7 +63,7 @@ export const FinancePage: React.FC = () => {
         {tab === 'BONUSES' ? (
           <BonusesFinancePanel month={reportMonth} onMonthChange={setReportMonth} />
         ) : tab === 'CASH' ? (
-          <CashCollectionPanel month={reportMonth} />
+          <CashCollectionPanel month={reportMonth} storeId={storeCtx.storeId} />
         ) : (
           <ProfitReport key={tab} view={tab === 'REPORT' ? 'summary' : 'stores'} month={reportMonth} onMonthChange={setReportMonth} />
         )}
