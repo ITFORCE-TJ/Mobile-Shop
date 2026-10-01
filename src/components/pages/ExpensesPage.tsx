@@ -7,6 +7,7 @@ import { useAppFields } from '../../context/AppContext';
 import { Expense, ExpenseCategory } from '../../types';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { STANDARD_EXPENSE_CATEGORIES, LEGACY_EXPENSE_LABELS } from '../../utils/expenseCategories';
+import { cn } from '../../utils/cn';
 import {
   Receipt,
   Plus,
@@ -35,7 +36,6 @@ import {
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
-import { MonthPicker } from '../ui/MonthPicker';
 import { DateRangePicker } from '../ui/DateRangePicker';
 import { Select, ToggleRow } from '../ui/Input';
 import { FormField } from '../ui/FormField';
@@ -125,10 +125,17 @@ export const ExpensesPage: React.FC = () => {
     if (!storeId && retailStores.length > 0) setStoreId(retailStores[0].id);
   }, [retailStores, storeId, isStoreScoped, currentUser?.storeId]);
 
+  const todayStr = getBusinessDateKey();
+  const thisMonthStr = todayStr.substring(0, 7);
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'YESTERDAY' | 'MONTH' | 'CUSTOM' | 'ALL'>('MONTH');
-  const [selectedStartDate, setSelectedStartDate] = useState<string>('');
-  const [selectedEndDate, setSelectedEndDate] = useState<string>('');
+  const [periodFilter, setPeriodFilter] = useState<'TODAY' | 'CUSTOM' | 'MONTH'>('MONTH');
+  const [selectedMonth, setSelectedMonth] = useState<string>(thisMonthStr);
+  const [selectedStartDate, setSelectedStartDate] = useState<string>(() => `${thisMonthStr}-01`);
+  const [selectedEndDate, setSelectedEndDate] = useState<string>(() => {
+    const [y, m] = thisMonthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    return `${thisMonthStr}-${String(lastDay).padStart(2, '0')}`;
+  });
   const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNPAID' | 'PAID'>('ALL');
   const [selectedEmployeeFilter, setSelectedEmployeeFilter] = useState<string>('ALL');
   const [sortBy, setSortBy] = useState<'DATE_DESC' | 'DATE_ASC' | 'AMOUNT_DESC' | 'AMOUNT_ASC'>('DATE_DESC');
@@ -157,14 +164,6 @@ export const ExpensesPage: React.FC = () => {
     }
   }, [globalSelectedStoreId, isSeller, isPartner, currentUser?.storeId]);
 
-  const todayStr = getBusinessDateKey();
-  const thisMonthStr = todayStr.substring(0, 7);
-  const yesterdayStr = useMemo(() => {
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    return getBusinessDateKey(d);
-  }, []);
-
   useEffect(() => {
     let cancelled = false;
 
@@ -178,17 +177,12 @@ export const ExpensesPage: React.FC = () => {
 
     if (periodFilter === 'TODAY') {
       params.period = 'TODAY';
-    } else if (periodFilter === 'YESTERDAY') {
-      params.startDate = yesterdayStr;
-      params.endDate = yesterdayStr;
-    } else if (periodFilter === 'MONTH') {
+    } else if (periodFilter === 'MONTH' && selectedMonth) {
       params.period = 'SPECIFIC_MONTH';
-      params.month = thisMonthStr;
+      params.month = selectedMonth;
     } else if (periodFilter === 'CUSTOM' && selectedStartDate) {
       params.startDate = selectedStartDate;
       params.endDate = selectedEndDate || selectedStartDate;
-    } else if (periodFilter === 'ALL') {
-      params.period = 'ALL';
     }
 
     if (selectedStoreFilter !== 'ALL') {
@@ -202,7 +196,7 @@ export const ExpensesPage: React.FC = () => {
     return () => {
       cancelled = true;
     };
-  }, [periodFilter, selectedStartDate, selectedEndDate, selectedStoreFilter, thisMonthStr, yesterdayStr, fetchExpensesRange, dataRefreshRevision]);
+  }, [periodFilter, selectedStartDate, selectedEndDate, selectedMonth, selectedStoreFilter, fetchExpensesRange, dataRefreshRevision]);
 
   const [customCategories, setCustomCategories] = useState<CustomCategory[]>(() => {
     try {
@@ -383,8 +377,7 @@ export const ExpensesPage: React.FC = () => {
 
       const expDateStr = getBusinessDateKey(new Date(e.date));
       if (periodFilter === 'TODAY' && expDateStr !== todayStr) return false;
-      if (periodFilter === 'YESTERDAY' && expDateStr !== yesterdayStr) return false;
-      if (periodFilter === 'MONTH' && !expDateStr.startsWith(thisMonthStr)) return false;
+      if (periodFilter === 'MONTH' && selectedMonth && !expDateStr.startsWith(selectedMonth)) return false;
       if (periodFilter === 'CUSTOM') {
         if (selectedStartDate) {
           const start = selectedStartDate;
@@ -443,9 +436,8 @@ export const ExpensesPage: React.FC = () => {
     periodFilter,
     selectedStartDate,
     selectedEndDate,
+    selectedMonth,
     todayStr,
-    yesterdayStr,
-    thisMonthStr,
     statusFilter,
     selectedEmployeeFilter,
     selectedStoreFilter,
@@ -477,7 +469,7 @@ export const ExpensesPage: React.FC = () => {
   const deletingExpense = deletingId ? expenses.find(e => e.id === deletingId) : undefined;
   const allCategoryOptions = [...STANDARD_CATEGORIES, ...customCategories];
 
-  const isPeriodCustomized = periodFilter !== 'MONTH';
+  const isPeriodCustomized = periodFilter !== 'MONTH' || selectedMonth !== thisMonthStr;
   const isStoreFiltered = isAdmin && selectedStoreFilter !== 'ALL';
   const isCategoryFiltered = selectedCategoryTab !== 'ALL';
   const isStatusFiltered = statusFilter !== 'ALL';
@@ -498,8 +490,11 @@ export const ExpensesPage: React.FC = () => {
 
   const handleResetFilters = () => {
     setPeriodFilter('MONTH');
-    setSelectedStartDate('');
-    setSelectedEndDate('');
+    setSelectedMonth(thisMonthStr);
+    const [y, m] = thisMonthStr.split('-').map(Number);
+    const lastDay = new Date(y, m, 0).getDate();
+    setSelectedStartDate(`${thisMonthStr}-01`);
+    setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
     setSelectedStoreFilter(isPartner ? (currentUser?.storeId || '') : 'ALL');
     setSelectedCategoryTab('ALL');
     setStatusFilter('ALL');
@@ -657,85 +652,55 @@ export const ExpensesPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Quick Date Bar: Preset Pills + DateRangePicker */}
+          {/* Quick Date Bar: Сегодня + Календарь (текущий месяц по умолчанию) */}
           <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-            <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartDate('');
-                  setSelectedEndDate('');
-                  setPeriodFilter('TODAY');
-                }}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  periodFilter === 'TODAY'
-                    ? 'bg-surface text-accent shadow-xs border border-border/80'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Сегодня
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartDate('');
-                  setSelectedEndDate('');
-                  setPeriodFilter('YESTERDAY');
-                }}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  periodFilter === 'YESTERDAY'
-                    ? 'bg-surface text-accent shadow-xs border border-border/80'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Вчера
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartDate('');
-                  setSelectedEndDate('');
-                  setPeriodFilter('MONTH');
-                }}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  periodFilter === 'MONTH'
-                    ? 'bg-surface text-accent shadow-xs border border-border/80'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Этот месяц
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  setSelectedStartDate('');
-                  setSelectedEndDate('');
-                  setPeriodFilter('ALL');
-                }}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  periodFilter === 'ALL'
-                    ? 'bg-surface text-accent shadow-xs border border-border/80'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Все время
-              </button>
-            </div>
-
-            {/* Custom Date Range Picker (Single Date or Range) */}
-            <DateRangePicker
-              startDate={selectedStartDate}
-              endDate={selectedEndDate}
-              isToday={periodFilter === 'TODAY'}
-              onChange={(start, end) => {
-                setSelectedStartDate(start);
-                setSelectedEndDate(end);
-                setPeriodFilter('CUSTOM');
-              }}
-              onResetToday={() => {
-                setSelectedStartDate('');
-                setSelectedEndDate('');
+            {/* Сегодня */}
+            <button
+              type="button"
+              onClick={() => {
+                setSelectedStartDate(todayStr);
+                setSelectedEndDate(todayStr);
+                setSelectedMonth('');
                 setPeriodFilter('TODAY');
+              }}
+              className={cn(
+                'h-9 px-3 rounded-xl border text-xs font-semibold shrink-0 transition-all select-none shadow-xs cursor-pointer',
+                periodFilter === 'TODAY'
+                  ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
+                  : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
+              )}
+            >
+              Сегодня
+            </button>
+
+            {/* Календарь: текущий месяц по умолчанию + выбор дня или диапазона */}
+            <DateRangePicker
+              startDate={periodFilter === 'CUSTOM' ? selectedStartDate : ''}
+              endDate={periodFilter === 'CUSTOM' ? selectedEndDate : ''}
+              selectedMonth={periodFilter === 'MONTH' ? selectedMonth : undefined}
+              currentMonthStr={thisMonthStr}
+              isToday={periodFilter === 'TODAY'}
+              isActive={periodFilter === 'MONTH' || periodFilter === 'CUSTOM'}
+              onChange={(start, end, monthStr) => {
+                if (monthStr) {
+                  setSelectedMonth(monthStr);
+                  setSelectedStartDate(start);
+                  setSelectedEndDate(end);
+                  setPeriodFilter('MONTH');
+                } else {
+                  setSelectedMonth('');
+                  setSelectedStartDate(start);
+                  setSelectedEndDate(end);
+                  setPeriodFilter('CUSTOM');
+                }
+              }}
+              onResetMonth={() => {
+                setSelectedMonth(thisMonthStr);
+                const [y, m] = thisMonthStr.split('-').map(Number);
+                const lastDay = new Date(y, m, 0).getDate();
+                setSelectedStartDate(`${thisMonthStr}-01`);
+                setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
+                setPeriodFilter('MONTH');
               }}
               className="shrink-0"
             />
@@ -745,16 +710,14 @@ export const ExpensesPage: React.FC = () => {
           {hasActiveFilters && (
             <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
               <span className="text-[11px] text-fg-subtle font-medium">Активно:</span>
-              {periodFilter !== 'MONTH' && (
+              {isPeriodCustomized && (
                 <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
                   <Calendar className="w-3 h-3 text-accent" />
                   <span>
                     {periodFilter === 'TODAY'
                       ? 'Сегодня'
-                      : periodFilter === 'YESTERDAY'
-                      ? 'Вчера'
-                      : periodFilter === 'ALL'
-                      ? 'Все время'
+                      : periodFilter === 'MONTH' && selectedMonth
+                      ? `Месяц: ${selectedMonth}`
                       : selectedStartDate === selectedEndDate || !selectedEndDate
                       ? `Дата: ${selectedStartDate}`
                       : `${selectedStartDate} — ${selectedEndDate}`}
@@ -762,10 +725,14 @@ export const ExpensesPage: React.FC = () => {
                   <button
                     onClick={() => {
                       setPeriodFilter('MONTH');
-                      setSelectedStartDate('');
-                      setSelectedEndDate('');
+                      setSelectedMonth(thisMonthStr);
+                      const [y, m] = thisMonthStr.split('-').map(Number);
+                      const lastDay = new Date(y, m, 0).getDate();
+                      setSelectedStartDate(`${thisMonthStr}-01`);
+                      setSelectedEndDate(`${thisMonthStr}-${String(lastDay).padStart(2, '0')}`);
                     }}
                     className="hover:text-danger ml-0.5"
+                    title="Сбросить на текущий месяц"
                   >
                     <X className="w-3 h-3" />
                   </button>

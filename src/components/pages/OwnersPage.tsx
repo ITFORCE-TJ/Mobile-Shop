@@ -1,5 +1,6 @@
 import { getBusinessDateKey } from '../../utils/businessDate';
 import { formatMoney } from '../../utils/money';
+import { formatUserName } from '../../utils/formatUser';
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
@@ -125,13 +126,14 @@ export const OwnersPage: React.FC = () => {
 
   const getOwnerDetails = (owner: { id: string; name?: string; userId?: string }) => {
     const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
+    const cleanName = formatUserName(owner.name || linkedUser?.name);
     if (linkedUser?.role === 'ADMIN') {
-      return { name: owner.name || 'Администратор', roleTag: 'Администратор', roleSub: 'Владелец & Управляющий' };
+      return { name: cleanName || 'Администратор', roleTag: 'Администратор', roleSub: 'Владелец & Управляющий' };
     }
     if (linkedUser?.role === 'PARTNER') {
-      return { name: owner.name || 'Партнер', roleTag: 'Партнер', roleSub: 'Соучредитель бизнеса' };
+      return { name: cleanName || 'Партнер', roleTag: 'Партнер', roleSub: 'Соучредитель бизнеса' };
     }
-    return { name: owner.name || 'Владелец', roleTag: 'Владелец', roleSub: 'Совладелец бизнеса' };
+    return { name: cleanName || 'Владелец', roleTag: 'Владелец', roleSub: 'Совладелец бизнеса' };
   };
 
   const [isTxModalOpen, setIsTxModalOpen] = useState(false);
@@ -185,7 +187,7 @@ export const OwnersPage: React.FC = () => {
     const pair = sharePairOf(storeId);
     const partner = pair ? owners.find(o => o.id === pair.ownerId) : undefined;
     const adminShare = 100 - (pair?.sharePercent ?? 0);
-    return `${adminOwner?.name || 'Администратор'} ${adminShare}%${partner && pair ? ` / ${partner.name} ${pair.sharePercent}%` : ''}`;
+    return `${formatUserName(adminOwner?.name || 'Администратор')} ${adminShare}%${partner && pair ? ` / ${formatUserName(partner.name)} ${pair.sharePercent}%` : ''}`;
   };
   const ownerShareLabel = (ownerId: string) => {
     if (ownerId === adminOwner?.id) return 'остаток прибыли магазинов';
@@ -270,7 +272,17 @@ export const OwnersPage: React.FC = () => {
       const storeMap: Record<string, number> = {};
       stores.forEach(s => { storeMap[s.id] = 0; });
 
+      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
+      const ownerStoreId = owner.storeId || linkedUser?.storeId;
+
       if (capital === 0) {
+        result[owner.id] = storeMap;
+        return;
+      }
+
+      // If owner is tied to a specific store (partner), ALL their capital is strictly in their own store!
+      if (ownerStoreId) {
+        storeMap[ownerStoreId] = capital;
         result[owner.id] = storeMap;
         return;
       }
@@ -309,7 +321,7 @@ export const OwnersPage: React.FC = () => {
     });
 
     return result;
-  }, [owners, stores, ownerTransactions, mainWarehouse]);
+  }, [owners, stores, ownerTransactions, mainWarehouse, users]);
 
   // Filtered transactions
   const filteredTransactions = useMemo(() => {
@@ -515,7 +527,13 @@ export const OwnersPage: React.FC = () => {
   ) => {
     setSelectedOwnerId(ownerId);
     setTxType(defaultType);
-    if (targetStoreId) {
+    const targetOwner = owners.find(o => o.id === ownerId);
+    const linkedUser = targetOwner?.userId ? users.find(u => u.id === targetOwner.userId) : undefined;
+    const ownerStoreId = targetOwner?.storeId || linkedUser?.storeId;
+
+    if (ownerStoreId) {
+      setSelectedTxStoreId(ownerStoreId);
+    } else if (targetStoreId) {
       setSelectedTxStoreId(targetStoreId);
     } else if (!selectedTxStoreId && stores.length > 0) {
       setSelectedTxStoreId(stores[0].id);
@@ -574,7 +592,7 @@ export const OwnersPage: React.FC = () => {
         setIsSharesModalOpen(false);
         setStatusBanner({
           tone: 'success',
-          text: `Доли магазина «${currentSharesStore?.name || ''}» сохранены: ${adminOwner.name} ${adminNum}%, ${currentStorePartner.name} ${partnerNum}%. Действуют для прибыли с этого момента.`
+          text: `Доли магазина «${currentSharesStore?.name || ''}» сохранены: ${formatUserName(adminOwner.name)} ${adminNum}%, ${formatUserName(currentStorePartner.name)} ${partnerNum}%. Действуют для прибыли с этого момента.`
         });
       } else {
         setStatusBanner({ tone: 'error', text: res.message || 'Ошибка сохранения долей' });
@@ -608,7 +626,10 @@ export const OwnersPage: React.FC = () => {
       }
     }
 
-    const targetStore = stores.find(s => s.id === selectedTxStoreId) || stores[0];
+    const linkedUser = currentOwner?.userId ? users.find(u => u.id === currentOwner.userId) : undefined;
+    const ownerStoreId = currentOwner?.storeId || linkedUser?.storeId;
+    const storeToUse = ownerStoreId || selectedTxStoreId;
+    const targetStore = stores.find(s => s.id === storeToUse) || stores[0];
 
     setIsSubmitting(true);
     try {
@@ -979,16 +1000,25 @@ export const OwnersPage: React.FC = () => {
                             >
                               {info.roleTag}
                             </span>
-                            {owner.storeId && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning">
-                                {stores.find(s => s.id === owner.storeId)?.name || 'Магазин'}
-                              </span>
-                            )}
-                            {!owner.storeId && info.roleTag === 'Администратор' && (
-                              <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-accent/10 border border-accent/30 text-accent">
-                                Все филиалы
-                              </span>
-                            )}
+                            {(() => {
+                              const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
+                              const ownerStoreId = owner.storeId || linkedUser?.storeId;
+                              if (ownerStoreId) {
+                                return (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning">
+                                    {stores.find(s => s.id === ownerStoreId)?.name || 'Магазин'}
+                                  </span>
+                                );
+                              }
+                              if (info.roleTag === 'Администратор') {
+                                return (
+                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-accent/10 border border-accent/30 text-accent">
+                                    Все филиалы
+                                  </span>
+                                );
+                              }
+                              return null;
+                            })()}
                           </div>
                           <span className="text-[11px] text-fg-subtle block mt-0.5">
                             {info.roleSub}
@@ -1045,7 +1075,8 @@ export const OwnersPage: React.FC = () => {
 
                     {/* Attached store stock & cash assets snapshot */}
                     {(() => {
-                      const targetStoreId = owner.storeId;
+                      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
+                      const targetStoreId = owner.storeId || linkedUser?.storeId;
                       const partnerStore = targetStoreId ? storeAssetsBreakdown.find(s => s.id === targetStoreId) : null;
                       if (!partnerStore) return null;
                       return (
@@ -1092,34 +1123,66 @@ export const OwnersPage: React.FC = () => {
                     </div>
 
                     {/* Stores distribution preview */}
-                    {stores.length > 0 && (
-                      <div className="space-y-1.5 pt-1">
-                        <span className="text-[10px] uppercase font-bold text-fg-subtle block">
-                          Размещение капитала по локациям:
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {stores.map(s => {
-                            const storeAmt = storeInvestmentsByOwner[owner.id]?.[s.id] || 0;
-                            if (storeAmt === 0 && capUsd > 0) return null;
-                            const isWh = s.isMainWarehouse;
-                            return (
+                    {(() => {
+                      const linkedUser = owner.userId ? users.find(u => u.id === owner.userId) : undefined;
+                      const ownerStoreId = owner.storeId || linkedUser?.storeId;
+
+                      // If owner is tied to a specific store (partner of a store), show ONLY their store!
+                      if (ownerStoreId) {
+                        const targetStore = stores.find(s => s.id === ownerStoreId);
+                        if (!targetStore) return null;
+                        const storeAmt = storeInvestmentsByOwner[owner.id]?.[targetStore.id] ?? capUsd;
+                        return (
+                          <div className="space-y-1.5 pt-1">
+                            <span className="text-[10px] uppercase font-bold text-fg-subtle block">
+                              Размещение капитала:
+                            </span>
+                            <div className="flex flex-wrap gap-1.5">
                               <div
-                                key={s.id}
+                                key={targetStore.id}
                                 className="px-2 py-1 rounded-lg bg-surface-raised border border-border text-[11px] flex items-center gap-1.5"
                               >
-                                {isWh ? (
-                                  <Warehouse className="w-3 h-3 text-warning shrink-0" />
-                                ) : (
-                                  <Store className="w-3 h-3 text-accent shrink-0" />
-                                )}
-                                <span className="font-medium text-fg-muted truncate max-w-32">{s.name}:</span>
+                                <Store className="w-3 h-3 text-accent shrink-0" />
+                                <span className="font-medium text-fg-muted truncate max-w-32">{targetStore.name}:</span>
                                 <span className="font-bold text-fg">${formatMoney(storeAmt)}</span>
                               </div>
-                            );
-                          })}
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      // For Admin (all stores)
+                      const activeStores = stores.filter(s => (storeInvestmentsByOwner[owner.id]?.[s.id] || 0) > 0);
+                      if (activeStores.length === 0) return null;
+
+                      return (
+                        <div className="space-y-1.5 pt-1">
+                          <span className="text-[10px] uppercase font-bold text-fg-subtle block">
+                            Размещение капитала по локациям:
+                          </span>
+                          <div className="flex flex-wrap gap-1.5">
+                            {activeStores.map(s => {
+                              const storeAmt = storeInvestmentsByOwner[owner.id]?.[s.id] || 0;
+                              const isWh = s.isMainWarehouse;
+                              return (
+                                <div
+                                  key={s.id}
+                                  className="px-2 py-1 rounded-lg bg-surface-raised border border-border text-[11px] flex items-center gap-1.5"
+                                >
+                                  {isWh ? (
+                                    <Warehouse className="w-3 h-3 text-warning shrink-0" />
+                                  ) : (
+                                    <Store className="w-3 h-3 text-accent shrink-0" />
+                                  )}
+                                  <span className="font-medium text-fg-muted truncate max-w-32">{s.name}:</span>
+                                  <span className="font-bold text-fg">${formatMoney(storeAmt)}</span>
+                                </div>
+                              );
+                            })}
+                          </div>
                         </div>
-                      </div>
-                    )}
+                      );
+                    })()}
                   </div>
 
                   {/* Clean Action Buttons */}
@@ -1306,15 +1369,11 @@ export const OwnersPage: React.FC = () => {
 
                       {displayOwners.map(owner => {
                         const amount = storeInvestmentsByOwner[owner.id]?.[store.id] || 0;
-                        const shareInStore = totalStoreCap > 0 ? Math.round((amount / totalStoreCap) * 100) : 50;
 
                         return (
                           <td key={owner.id} className="p-3 text-right">
                             <span className={`font-bold block ${amount > 0 ? 'text-fg' : 'text-fg-subtle'}`}>
                               ${formatMoney(amount)}
-                            </span>
-                            <span className="text-[10px] text-fg-subtle block">
-                              {shareInStore}% в объекте
                             </span>
                           </td>
                         );
@@ -1660,22 +1719,44 @@ export const OwnersPage: React.FC = () => {
             </div>
 
             {/* Store Selector */}
-            <div className="space-y-1.5">
-              <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider items-center gap-1.5">
-                <Store className="w-3.5 h-3.5 text-accent" />
-                <span>Выберите магазин:</span>
-              </label>
-              <select
-                value={selectedSharesStoreId}
-                onChange={(e) => handleSharesStoreChange(e.target.value)}
-                className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer"
-              >
-                {retailStores.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name} — {storeSplitLabel(s.id)}
-                  </option>
-                ))}
-              </select>
+            <div className="space-y-2">
+              <div>
+                <label className="block text-[11px] font-semibold text-fg-subtle uppercase tracking-wider mb-1 flex items-center gap-1.5">
+                  <Store className="w-3.5 h-3.5 text-accent" />
+                  <span>Магазин:</span>
+                </label>
+                <select
+                  value={selectedSharesStoreId}
+                  onChange={(e) => handleSharesStoreChange(e.target.value)}
+                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer"
+                >
+                  {retailStores.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Partner separate indicator */}
+              {currentStorePartner && (
+                <div className="p-2.5 rounded-xl bg-surface-raised border border-border flex items-center justify-between text-xs">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <div className="w-6 h-6 rounded-lg bg-info/10 text-info font-bold text-[10px] flex items-center justify-center shrink-0">
+                      {formatUserName(currentStorePartner.name).substring(0, 2).toUpperCase()}
+                    </div>
+                    <div className="min-w-0">
+                      <span className="text-[10px] text-fg-subtle block">Партнёр магазина:</span>
+                      <strong className="text-fg font-semibold text-xs truncate block">
+                        {formatUserName(currentStorePartner.name)}
+                      </strong>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md bg-info/15 text-info border border-info/30 uppercase">
+                    Партнёр
+                  </span>
+                </div>
+              )}
             </div>
 
             {/* Form for selected store */}
@@ -1687,7 +1768,7 @@ export const OwnersPage: React.FC = () => {
                   <div className="p-3 rounded-xl bg-surface-raised border border-border space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-fg truncate">
-                        {adminOwner.name || 'Администратор'}
+                        {formatUserName(adminOwner.name || 'Администратор')}
                       </span>
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-accent/15 border border-accent/30 text-accent uppercase">
                         Админ
@@ -1716,7 +1797,7 @@ export const OwnersPage: React.FC = () => {
                   <div className="p-3 rounded-xl bg-surface-raised border border-border space-y-2">
                     <div className="flex items-center justify-between">
                       <span className="text-xs font-bold text-fg truncate">
-                        {currentStorePartner.name || 'Партнёр'}
+                        {formatUserName(currentStorePartner.name || 'Партнёр')}
                       </span>
                       <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-info/15 border border-info/30 text-info uppercase">
                         Партнёр
@@ -1788,8 +1869,8 @@ export const OwnersPage: React.FC = () => {
                         />
                       </div>
                       <div className="flex justify-between text-[10px] text-fg-subtle font-medium">
-                        <span>{adminOwner.name}: <strong className="text-accent">{aVal}%</strong></span>
-                        <span>{currentStorePartner.name}: <strong className="text-info">{pVal}%</strong></span>
+                        <span>{formatUserName(adminOwner.name)}: <strong className="text-accent">{aVal}%</strong></span>
+                        <span>{formatUserName(currentStorePartner.name)}: <strong className="text-info">{pVal}%</strong></span>
                       </div>
                     </div>
                   );
@@ -1886,7 +1967,16 @@ export const OwnersPage: React.FC = () => {
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Учредитель *</label>
                 <select
                   value={selectedOwnerId ?? ''}
-                  onChange={(e) => setSelectedOwnerId(e.target.value)}
+                  onChange={(e) => {
+                    const newOwnerId = e.target.value;
+                    setSelectedOwnerId(newOwnerId);
+                    const newOwner = owners.find(o => o.id === newOwnerId);
+                    const linkedUser = newOwner?.userId ? users.find(u => u.id === newOwner.userId) : undefined;
+                    const newOwnerStoreId = newOwner?.storeId || linkedUser?.storeId;
+                    if (newOwnerStoreId) {
+                      setSelectedTxStoreId(newOwnerStoreId);
+                    }
+                  }}
                   className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
                 >
                   {displayOwners.map((o) => (
@@ -1911,22 +2001,44 @@ export const OwnersPage: React.FC = () => {
 
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Объект (магазин / склад) *</label>
-                <select
-                  value={selectedTxStoreId}
-                  onChange={(e) => setSelectedTxStoreId(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                >
-                  {retailStores.map(store => (
-                    <option key={store.id} value={store.id}>
-                      Магазин «{store.name}»
-                    </option>
-                  ))}
-                  {mainWarehouse && (
-                    <option value={mainWarehouse.id}>
-                      Центральный склад ({mainWarehouse.name})
-                    </option>
-                  )}
-                </select>
+                {(() => {
+                  const currentModalOwner = owners.find(o => o.id === selectedOwnerId);
+                  const linkedUser = currentModalOwner?.userId ? users.find(u => u.id === currentModalOwner.userId) : undefined;
+                  const modalOwnerStoreId = currentModalOwner?.storeId || linkedUser?.storeId;
+
+                  if (modalOwnerStoreId) {
+                    const st = stores.find(s => s.id === modalOwnerStoreId);
+                    const displayName = st?.name ? (st.name.startsWith('Магазин') ? st.name : `Магазин «${st.name}»`) : 'Закреплённый магазин';
+                    return (
+                      <div className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                          <Store className="w-3.5 h-3.5 text-accent shrink-0" />
+                          <span>{displayName}</span>
+                        </div>
+                        <span className="text-[10px] text-fg-subtle">(только свой магазин)</span>
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <select
+                      value={selectedTxStoreId}
+                      onChange={(e) => setSelectedTxStoreId(e.target.value)}
+                      className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
+                    >
+                      {retailStores.map(store => (
+                        <option key={store.id} value={store.id}>
+                          Магазин «{store.name}»
+                        </option>
+                      ))}
+                      {mainWarehouse && (
+                        <option value={mainWarehouse.id}>
+                          Центральный склад ({mainWarehouse.name})
+                        </option>
+                      )}
+                    </select>
+                  );
+                })()}
               </div>
 
               {/* Helper for available profit */}

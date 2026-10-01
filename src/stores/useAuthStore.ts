@@ -65,7 +65,14 @@ const getInitialSession = (): { user: User | null; token: string | null } => {
         localStorage.removeItem('ms_user');
         return { user: null, token: null };
       }
-      return { user: JSON.parse(savedUser), token: savedToken };
+      let parsedUser = JSON.parse(savedUser);
+      if (parsedUser && parsedUser.name) {
+        parsedUser = {
+          ...parsedUser,
+          name: parsedUser.name.replace(/\s*\((Партн[её]р|Продавец|Администратор)[^)]*\)/gi, '').trim(),
+        };
+      }
+      return { user: parsedUser, token: savedToken };
     }
   } catch (e) {
     console.error(e);
@@ -81,10 +88,16 @@ export const useAuthStore = create<AuthState>((set) => ({
   isAuthenticated: !!initialSession.user && !!initialSession.token,
 
   setAuth: (user: User, token: string) => {
+    const cleanUser = user
+      ? {
+          ...user,
+          name: user.name.replace(/\s*\((Партн[её]р|Продавец|Администратор)[^)]*\)/gi, '').trim(),
+        }
+      : user;
     localStorage.setItem('ms_jwt_token', token);
-    localStorage.setItem('ms_user', JSON.stringify(user));
+    localStorage.setItem('ms_user', JSON.stringify(cleanUser));
     scheduleAutoLogout(token);
-    set({ currentUser: user, token, isAuthenticated: true });
+    set({ currentUser: cleanUser, token, isAuthenticated: true });
   },
 
   logout: () => {

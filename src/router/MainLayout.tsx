@@ -2,6 +2,7 @@ import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
 import { PageId } from '../types';
+import { formatUserName } from '../utils/formatUser';
 
 // Layouts & Modals
 import { TopBar } from '../components/layout/TopBar';
@@ -144,7 +145,7 @@ export function MainLayout() {
             <span>·</span>
             <span>Точка: {activeStoreLabel}</span>
             <span>·</span>
-            <span>{currentUser?.name}</span>
+            <span>{formatUserName(currentUser?.name)}</span>
           </div>
 
           <div className="flex items-center gap-3">

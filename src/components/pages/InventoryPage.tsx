@@ -185,7 +185,6 @@ export const InventoryPage: React.FC = () => {
     openScanner,
     isInitialLoading,
     selectedStoreId: globalSelectedStoreId,
-    setSelectedStoreId,
     todayRate,
     updateDevice
   } = useAppFields(
@@ -196,7 +195,6 @@ export const InventoryPage: React.FC = () => {
     'openScanner',
     'isInitialLoading',
     'selectedStoreId',
-    'setSelectedStoreId',
     'todayRate',
     'updateDevice'
   );
@@ -239,6 +237,7 @@ export const InventoryPage: React.FC = () => {
 
   // Tab mode: 'DEVICES' (list of goods) or 'LOCATIONS' (list of warehouse and stores)
   const [viewTab, setViewTab] = useState<'DEVICES' | 'LOCATIONS'>('DEVICES');
+  const [expandedLocationId, setExpandedLocationId] = useState<string | null>(null);
 
   // Selected location: 'ALL' (all goods in company), or specific store/warehouse ID
   const [selectedLocationId, setSelectedLocationId] = useState<string>(() => {
@@ -651,13 +650,127 @@ export const InventoryPage: React.FC = () => {
 
   const handleSelectLocationAndSwitch = (storeId: string) => {
     setSelectedLocationId(storeId);
-    if (!isSeller) {
-      setSelectedStoreId(storeId === 'ALL' ? 'all' : storeId);
-    }
     setViewTab('DEVICES');
     if (selectedStatusFilter === 'MAIN_WAREHOUSE' && storeId !== mainWarehouse?.id) {
       setSelectedStatusFilter('ALL');
     }
+  };
+
+  const renderLocationExpandedDetails = (targetStore: StoreType) => {
+    const locDevices = devices.filter(
+      d => d.locationId === targetStore.id && IN_STOCK_STATUSES.includes(d.status)
+    );
+
+    const stat = storeStats.get(targetStore.id) || { unitCount: locDevices.length, valueUsd: 0 };
+
+    // Group by Brand & Model
+    const modelMap = new Map<string, { brand: string; model: string; count: number; valueUsd: number; storages: { storage: string; count: number }[] }>();
+    locDevices.forEach(d => {
+      const key = `${d.brand} ${d.model}`.trim();
+      const existing = modelMap.get(key);
+      const storageStr = (d.storage || '').trim();
+      if (existing) {
+        existing.count++;
+        existing.valueUsd += d.purchaseCostUsd || 0;
+        if (storageStr) {
+          const sEntry = existing.storages.find(s => s.storage === storageStr);
+          if (sEntry) sEntry.count++;
+          else existing.storages.push({ storage: storageStr, count: 1 });
+        }
+      } else {
+        modelMap.set(key, {
+          brand: d.brand,
+          model: d.model,
+          count: 1,
+          valueUsd: d.purchaseCostUsd || 0,
+          storages: storageStr ? [{ storage: storageStr, count: 1 }] : [],
+        });
+      }
+    });
+
+    const modelsList = Array.from(modelMap.values()).sort((a, b) => b.count - a.count);
+
+    return (
+      <div className="p-3.5 sm:p-4 border-t border-border bg-surface-raised/40 space-y-3 animate-in fade-in-50 duration-200">
+        {/* Metrics Row */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+          <div className="p-2.5 rounded-xl bg-surface border border-border">
+            <span className="text-[10px] text-fg-subtle uppercase font-semibold block">В наличии</span>
+            <span className="font-bold text-fg text-sm sm:text-base mt-0.5 block">{stat.unitCount} шт.</span>
+          </div>
+          {isAdmin && (
+            <div className="p-2.5 rounded-xl bg-surface border border-border">
+              <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Себестоимость</span>
+              <span className="font-bold text-fg text-sm sm:text-base mt-0.5 block">${formatMoney(stat.valueUsd)}</span>
+              <span className="text-[10px] text-fg-subtle block">≈ {formatMoney(stat.valueUsd * rate)} TJS</span>
+            </div>
+          )}
+          <div className="p-2.5 rounded-xl bg-surface border border-border">
+            <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Моделей в наличии</span>
+            <span className="font-bold text-fg text-sm sm:text-base mt-0.5 block">{modelsList.length}</span>
+          </div>
+          {!targetStore.isMainWarehouse && (
+            <div className="p-2.5 rounded-xl bg-surface border border-border">
+              <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Касса точки</span>
+              <span className="font-bold text-accent text-sm sm:text-base mt-0.5 block">${formatMoney(targetStore.cashBalanceUsd)}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Models in stock */}
+        <div className="space-y-1.5">
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-[10px] uppercase font-bold text-fg-subtle">
+              Товары и остатки точки ({modelsList.length} позиций):
+            </span>
+          </div>
+
+          {modelsList.length === 0 ? (
+            <div className="p-4 rounded-xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
+              В данной локации сейчас нет товаров в наличии
+            </div>
+          ) : (
+            <div className="rounded-xl border border-border bg-surface overflow-hidden max-h-56 overflow-y-auto divide-y divide-border">
+              {modelsList.map(m => (
+                <div key={`${m.brand}_${m.model}`} className="px-3 py-2 flex items-center justify-between text-xs gap-2 hover:bg-surface-raised/50 transition-colors">
+                  <div className="min-w-0">
+                    <span className="font-semibold text-fg truncate block">
+                      {m.brand} {m.model}
+                    </span>
+                    {m.storages.length > 0 && (
+                      <span className="text-[10px] text-fg-subtle block">
+                        {m.storages.map(s => `${s.storage} (${s.count} шт.)`).join(', ')}
+                      </span>
+                    )}
+                  </div>
+                  <div className="text-right shrink-0">
+                    <span className="font-bold text-fg block text-xs">{m.count} шт.</span>
+                    {isAdmin && (
+                      <span className="text-[10px] text-fg-subtle block">${formatMoney(m.valueUsd)}</span>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Action Button */}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1">
+          <span className="text-[11px] text-fg-subtle">
+            Просмотр подробного каталога без смены активного магазина
+          </span>
+          <button
+            type="button"
+            onClick={() => handleSelectLocationAndSwitch(targetStore.id)}
+            className="px-3 py-1.5 rounded-lg bg-accent text-accent-fg hover:bg-accent-strong font-bold text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs"
+          >
+            <span>Открыть в списке товаров ({stat.unitCount} шт.)</span>
+            <ArrowRight className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -713,7 +826,10 @@ export const InventoryPage: React.FC = () => {
               <select
                 value={selectedLocationId}
                 onChange={(e) => {
-                  handleSelectLocationAndSwitch(e.target.value);
+                  setSelectedLocationId(e.target.value);
+                  if (selectedStatusFilter === 'MAIN_WAREHOUSE' && e.target.value !== mainWarehouse?.id) {
+                    setSelectedStatusFilter('ALL');
+                  }
                 }}
                 className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
               >
@@ -1191,11 +1307,15 @@ export const InventoryPage: React.FC = () => {
             {mainWarehouse && (() => {
               const stat = storeStats.get(mainWarehouse.id) || { unitCount: 0, valueUsd: 0 };
               const isSelected = selectedLocationId === mainWarehouse.id;
+              const isExpanded = expandedLocationId === mainWarehouse.id;
               return (
-                <div className={`p-4 rounded-xl border transition-all ${
+                <div className={`rounded-xl border overflow-hidden transition-all ${
                   isSelected ? 'bg-amber-500/10 border-amber-500' : 'bg-surface border-amber-500/30 hover:border-amber-500/60'
                 }`}>
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div
+                    onClick={() => setExpandedLocationId(isExpanded ? null : mainWarehouse.id)}
+                    className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
+                  >
                     <div className="flex items-start space-x-3">
                       <div className="p-2.5 rounded-xl bg-amber-500/15 border border-amber-500/30 text-amber-500 shrink-0">
                         <Warehouse className="w-5 h-5" />
@@ -1213,8 +1333,8 @@ export const InventoryPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-                      <div className="text-right">
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <div className="text-right mr-1">
                         <span className="text-sm font-bold text-amber-400 block">
                           {stat.unitCount} шт.
                         </span>
@@ -1227,14 +1347,32 @@ export const InventoryPage: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => handleSelectLocationAndSwitch(mainWarehouse.id)}
-                        className="px-3 py-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs flex items-center gap-1.5 transition-colors shadow-xs"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setExpandedLocationId(isExpanded ? null : mainWarehouse.id);
+                        }}
+                        className="px-3 py-1.5 rounded-xl bg-amber-500/15 hover:bg-amber-500/25 text-amber-400 border border-amber-500/30 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
                       >
-                        <span>Товары склада</span>
+                        <span>{isExpanded ? 'Свернуть' : 'Детали склада'}</span>
+                        <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleSelectLocationAndSwitch(mainWarehouse.id);
+                        }}
+                        className="p-1.5 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                        title="Открыть товары склада в общем списке"
+                      >
                         <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
+
+                  {/* Expanded Detail Panel */}
+                  {isExpanded && renderLocationExpandedDetails(mainWarehouse)}
                 </div>
               );
             })()}
@@ -1254,57 +1392,81 @@ export const InventoryPage: React.FC = () => {
                   Нет добавленных магазинов. Добавьте магазин в настройках.
                 </div>
               ) : (
-                <div className="divide-y divide-border rounded-xl border border-border bg-surface overflow-hidden shadow-xs">
+                <div className="space-y-2">
                   {retailStores.map(store => {
                     const stat = storeStats.get(store.id) || { unitCount: 0, valueUsd: 0 };
                     const isSelected = selectedLocationId === store.id;
+                    const isExpanded = expandedLocationId === store.id;
                     return (
                       <div
                         key={store.id}
-                        className={`p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 transition-colors ${
-                          isSelected ? 'bg-accent/10' : 'hover:bg-surface-raised/60'
+                        className={`rounded-xl border overflow-hidden transition-all ${
+                          isSelected ? 'bg-accent/10 border-accent/40' : 'bg-surface border-border hover:border-fg-subtle/40'
                         }`}
                       >
-                        <div className="flex items-center space-x-3 min-w-0">
-                          <div className="p-2 rounded-xl bg-accent/10 border border-accent/25 text-accent shrink-0">
-                            <Store className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <h5 className="font-bold text-xs sm:text-sm text-fg-muted truncate">
-                                {store.name}
-                              </h5>
-                              <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-subtle font-semibold">
-                                МАГАЗИН
-                              </span>
+                        <div
+                          onClick={() => setExpandedLocationId(isExpanded ? null : store.id)}
+                          className="p-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 cursor-pointer select-none"
+                        >
+                          <div className="flex items-center space-x-3 min-w-0">
+                            <div className="p-2 rounded-xl bg-accent/10 border border-accent/25 text-accent shrink-0">
+                              <Store className="w-4 h-4" />
                             </div>
-                            <p className="text-[11px] text-fg-subtle truncate">
-                              Розничная торговая точка · Касса: ${formatMoney(store.cashBalanceUsd)}
-                            </p>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-2">
+                                <h5 className="font-bold text-xs sm:text-sm text-fg-muted truncate">
+                                  {store.name}
+                                </h5>
+                                <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-subtle font-semibold">
+                                  МАГАЗИН
+                                </span>
+                              </div>
+                              <p className="text-[11px] text-fg-subtle truncate">
+                                Розничная торговая точка · Касса: ${formatMoney(store.cashBalanceUsd)}
+                              </p>
+                            </div>
                           </div>
-                        </div>
 
-                        <div className="flex items-center gap-3 shrink-0 self-end sm:self-center">
-                          <div className="text-right">
-                            <span className="text-xs sm:text-sm font-bold text-fg-muted block">
-                              {stat.unitCount} шт.
-                            </span>
-                            {isAdmin && (
-                              <span className="text-[10px] text-fg-subtle block">
-                                ${formatMoney(stat.valueUsd)} · ≈ {formatMoney(stat.valueUsd * rate)} TJS
+                          <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                            <div className="text-right mr-1">
+                              <span className="text-xs sm:text-sm font-bold text-fg-muted block">
+                                {stat.unitCount} шт.
                               </span>
-                            )}
-                          </div>
+                              {isAdmin && (
+                                <span className="text-[10px] text-fg-subtle block">
+                                  ${formatMoney(stat.valueUsd)} · ≈ {formatMoney(stat.valueUsd * rate)} TJS
+                                </span>
+                              )}
+                            </div>
 
-                          <button
-                            type="button"
-                            onClick={() => handleSelectLocationAndSwitch(store.id)}
-                            className="px-3 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 font-bold text-xs flex items-center gap-1 transition-colors"
-                          >
-                            <span>Товары магазина</span>
-                            <ArrowRight className="w-3.5 h-3.5" />
-                          </button>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setExpandedLocationId(isExpanded ? null : store.id);
+                              }}
+                              className="px-3 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 font-bold text-xs flex items-center gap-1.5 transition-colors cursor-pointer"
+                            >
+                              <span>{isExpanded ? 'Свернуть' : 'Детали товаров'}</span>
+                              <ChevronDown className={`w-3.5 h-3.5 transition-transform duration-200 ${isExpanded ? 'rotate-180' : ''}`} />
+                            </button>
+
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleSelectLocationAndSwitch(store.id);
+                              }}
+                              className="p-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/30 font-bold text-xs transition-colors cursor-pointer"
+                              title="Открыть товары магазина в общем списке"
+                            >
+                              <ArrowRight className="w-3.5 h-3.5" />
+                            </button>
+                          </div>
                         </div>
+
+                        {/* Expanded Detail Panel */}
+                        {isExpanded && renderLocationExpandedDetails(store)}
                       </div>
                     );
                   })}

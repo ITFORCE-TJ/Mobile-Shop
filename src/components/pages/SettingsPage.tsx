@@ -3,6 +3,7 @@ import { formatMoney } from '../../utils/money';
 import { Navigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { Store as StoreType } from '../../types';
+import { formatUserName } from '../../utils/formatUser';
 import {
   Settings as SettingsIcon,
   Store,
@@ -430,12 +431,10 @@ export const SettingsPage: React.FC = () => {
             <div>
               <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">АККАУНТ И СЕССИЯ</h4>
               <p className="text-[11px] text-fg-muted mt-0.5">
-                Вы вошли как <strong className="text-fg-muted">{currentUser?.name}</strong> ({currentUser?.role === 'ADMIN' ? 'Администратор' : currentUser?.role})
+                Вы вошли как <strong className="text-fg-muted">{formatUserName(currentUser?.name)}</strong>
                 {(() => {
                   const sName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
-                  // Store-bound users see their store in the top bar already.
-                  const scoped = currentUser?.role === 'PARTNER';
-                  return sName && !scoped ? <span className="text-accent font-medium"> • Магазин: {sName}</span> : null;
+                  return sName ? <span className="text-accent font-medium"> • Магазин: {sName}</span> : null;
                 })()}
               </p>
             </div>

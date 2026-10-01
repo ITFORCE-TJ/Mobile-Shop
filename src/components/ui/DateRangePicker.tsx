@@ -1,629 +1,431 @@
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { createPortal } from 'react-dom';
-import { Calendar, ChevronLeft, ChevronRight, X, Check, ArrowLeftRight, ChevronDown } from 'lucide-react';
+import { Calendar, X, ChevronDown } from 'lucide-react';
 import { cn } from '../../utils/cn';
-import { getBusinessDateKey, formatBusinessDate, formatDateRange } from '../../utils/businessDate';
+import { getBusinessDateKey } from '../../utils/businessDate';
 
 const MONTH_NAMES_RU = [
   'Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь',
   'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь',
 ];
 
-const WEEKDAY_NAMES_RU = ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс'];
+const MONTH_NAMES_SHORT_RU = [
+  'янв.', 'февр.', 'марта', 'апр.', 'мая', 'июня',
+  'июля', 'авг.', 'сент.', 'окт.', 'нояб.', 'дек.',
+];
+
+const WEEKDAY_NAMES_RU = ['П', 'В', 'С', 'Ч', 'П', 'С', 'В'];
 
 export interface DateRangePickerProps {
   startDate: string; // 'YYYY-MM-DD'
   endDate: string;   // 'YYYY-MM-DD'
   isToday?: boolean;
-  onChange: (start: string, end: string) => void;
+  selectedMonth?: string; // 'YYYY-MM'
+  currentMonthStr?: string; // 'YYYY-MM' default
+  onChange: (start: string, end: string, monthStr?: string) => void;
   onResetToday?: () => void;
+  onResetMonth?: () => void;
   className?: string;
   defaultMode?: 'single' | 'range';
   showModeButtons?: boolean;
   placeholder?: string;
+  isActive?: boolean;
 }
 
 export const DateRangePicker: React.FC<DateRangePickerProps> = ({
   startDate,
   endDate,
   isToday = false,
+  selectedMonth,
+  currentMonthStr,
   onChange,
   onResetToday,
+  onResetMonth,
   className,
-  defaultMode,
-  showModeButtons = false,
   placeholder,
+  isActive,
 }) => {
   const [open, setOpen] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
-  const singleButtonRef = useRef<HTMLButtonElement>(null);
-  const rangeButtonRef = useRef<HTMLButtonElement>(null);
-  const activeAnchorRef = useRef<HTMLElement | null>(null);
-  const popoverRef = useRef<HTMLDivElement>(null);
-  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const todayKey = getBusinessDateKey();
+  const fallbackThisMonthStr = currentMonthStr || todayKey.slice(0, 7);
 
-  // Mode: 'single' (Точная дата) vs 'range' (Период)
-  const isRangeSelected = Boolean(startDate && endDate && startDate !== endDate);
-  const [mode, setMode] = useState<'single' | 'range'>(() => {
-    if (defaultMode) return defaultMode;
-    return isRangeSelected ? 'range' : 'single';
-  });
-
-  // Local draft states inside the popover
+  // Draft selection inside the modal
   const [draftStart, setDraftStart] = useState<string>(startDate || todayKey);
-  const [draftEnd, setDraftEnd] = useState<string>(endDate || '');
-  const [hoverDate, setHoverDate] = useState<string | null>(null);
+  const [draftEnd, setDraftEnd] = useState<string>(endDate || startDate || todayKey);
 
-  // Month/Year view state for the calendar
-  const initialYear = Number((startDate || todayKey).slice(0, 4)) || new Date().getFullYear();
-  const initialMonth = (Number((startDate || todayKey).slice(5, 7)) || (new Date().getMonth() + 1)) - 1;
-
-  const [viewYear, setViewYear] = useState<number>(initialYear);
-  const [viewMonth, setViewMonth] = useState<number>(initialMonth);
-
-  // Synchronize draft state when popover opens or props change
+  // When modal opens, sync draft with active props
   useEffect(() => {
     if (open) {
-      setDraftStart(startDate || todayKey);
-      setDraftEnd(endDate);
-      const isRange = Boolean(startDate && endDate && startDate !== endDate);
-      if (!defaultMode) {
-        setMode(isRange ? 'range' : 'single');
+      if (selectedMonth) {
+        const [y, m] = selectedMonth.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        setDraftStart(`${selectedMonth}-01`);
+        setDraftEnd(`${selectedMonth}-${String(lastDay).padStart(2, '0')}`);
+      } else if (startDate) {
+        setDraftStart(startDate);
+        setDraftEnd(endDate || startDate);
+      } else {
+        const [y, m] = fallbackThisMonthStr.split('-').map(Number);
+        const lastDay = new Date(y, m, 0).getDate();
+        setDraftStart(`${fallbackThisMonthStr}-01`);
+        setDraftEnd(`${fallbackThisMonthStr}-${String(lastDay).padStart(2, '0')}`);
       }
-      const baseDate = startDate || todayKey;
-      const y = Number(baseDate.slice(0, 4)) || new Date().getFullYear();
-      const m = (Number(baseDate.slice(5, 7)) || (new Date().getMonth() + 1)) - 1;
-      setViewYear(y);
-      setViewMonth(m);
     }
-  }, [open, startDate, endDate, todayKey, defaultMode]);
+  }, [open, startDate, endDate, selectedMonth, fallbackThisMonthStr]);
 
-  const updatePosition = useCallback(() => {
-    const anchor = activeAnchorRef.current || buttonRef.current || singleButtonRef.current;
-    if (!anchor) return;
-    const rect = anchor.getBoundingClientRect();
-    const popoverWidth = 330;
-    const popoverHeight = 440;
-
-    let left = rect.left;
-    if (left + popoverWidth > window.innerWidth - 8) {
-      left = Math.max(8, window.innerWidth - popoverWidth - 8);
-    }
-    if (left < 8) left = 8;
-
-    let top = rect.bottom + 6;
-    if (top + popoverHeight > window.innerHeight && rect.top - popoverHeight - 6 > 0) {
-      top = rect.top - popoverHeight - 6;
-    }
-
-    setCoords({ top, left });
-  }, []);
-
-  const handleToggle = () => {
-    if (!open) {
-      activeAnchorRef.current = buttonRef.current;
-      updatePosition();
-      setOpen(true);
-    } else {
-      setOpen(false);
-    }
-  };
-
-  const handleOpenWithMode = (m: 'single' | 'range', ref: React.RefObject<HTMLButtonElement | null>) => {
-    setMode(m);
-    if (m === 'single') {
-      setDraftEnd('');
-    }
-    activeAnchorRef.current = ref.current || buttonRef.current;
-    updatePosition();
-    setOpen(true);
-  };
-
+  // Scroll to selected month when modal opens
   useEffect(() => {
     if (!open) return;
-    const handleScrollOrResize = () => updatePosition();
-    window.addEventListener('resize', handleScrollOrResize, { passive: true });
-    window.addEventListener('scroll', handleScrollOrResize, { passive: true, capture: true });
-    return () => {
-      window.removeEventListener('resize', handleScrollOrResize);
-      window.removeEventListener('scroll', handleScrollOrResize, { capture: true });
-    };
-  }, [open, updatePosition]);
-
-  useEffect(() => {
-    if (!open) return;
-    const handleClickOutside = (e: MouseEvent) => {
-      const target = e.target as Node;
-      if (buttonRef.current && buttonRef.current.contains(target)) return;
-      if (singleButtonRef.current && singleButtonRef.current.contains(target)) return;
-      if (rangeButtonRef.current && rangeButtonRef.current.contains(target)) return;
-      if (popoverRef.current && !popoverRef.current.contains(target)) {
-        setOpen(false);
+    const targetMonth = (draftStart || selectedMonth || fallbackThisMonthStr).slice(0, 7);
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`cal-month-${targetMonth}`);
+      if (el) {
+        el.scrollIntoView({ block: 'start', behavior: 'smooth' });
       }
-    };
-    const handleEscape = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') setOpen(false);
-    };
-    document.addEventListener('mousedown', handleClickOutside);
-    document.addEventListener('keydown', handleEscape);
-    return () => {
-      document.removeEventListener('mousedown', handleClickOutside);
-      document.removeEventListener('keydown', handleEscape);
-    };
+    }, 60);
+    return () => clearTimeout(timer);
   }, [open]);
 
-  // Calendar matrix calculations
-  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const firstDayOfWeek = (new Date(viewYear, viewMonth, 1).getDay() + 6) % 7; // Monday = 0
+  // Handle escape key
+  useEffect(() => {
+    if (!open) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [open]);
 
-  const prevMonthDays = new Date(viewYear, viewMonth, 0).getDate();
-  const padDaysBefore: number[] = [];
-  for (let i = firstDayOfWeek - 1; i >= 0; i--) {
-    padDaysBefore.push(prevMonthDays - i);
-  }
+  // Generate 15 months: from -12 months in the past to +2 months in future
+  const monthsList = useMemo(() => {
+    const list = [];
+    const now = new Date();
+    for (let offset = -12; offset <= 2; offset++) {
+      const d = new Date(now.getFullYear(), now.getMonth() + offset, 1);
+      const year = d.getFullYear();
+      const monthIndex = d.getMonth();
+      const key = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+      const name = MONTH_NAMES_RU[monthIndex];
+      const daysCount = new Date(year, monthIndex + 1, 0).getDate();
+      // Monday = 0, ..., Sunday = 6
+      const firstDayOfWeek = (d.getDay() + 6) % 7;
+      const days = Array.from({ length: daysCount }, (_, i) => i + 1);
 
-  const currentMonthDays: number[] = [];
-  for (let d = 1; d <= daysInMonth; d++) {
-    currentMonthDays.push(d);
-  }
-
-  const nextMonthPadding = (7 - ((padDaysBefore.length + currentMonthDays.length) % 7)) % 7;
-  const padDaysAfter: number[] = [];
-  for (let d = 1; d <= nextMonthPadding; d++) {
-    padDaysAfter.push(d);
-  }
-
-  const handlePrevMonth = () => {
-    if (viewMonth === 0) {
-      setViewMonth(11);
-      setViewYear((y) => y - 1);
-    } else {
-      setViewMonth((m) => m - 1);
+      list.push({
+        key,
+        year,
+        monthIndex,
+        name,
+        padDaysBefore: firstDayOfWeek,
+        days,
+        daysCount,
+      });
     }
-  };
+    return list;
+  }, []);
 
-  const handleNextMonth = () => {
-    if (viewMonth === 11) {
-      setViewMonth(0);
-      setViewYear((y) => y + 1);
-    } else {
-      setViewMonth((m) => m + 1);
-    }
-  };
-
-  const toDateKey = (year: number, monthIndex: number, day: number) => {
-    const mm = String(monthIndex + 1).padStart(2, '0');
-    const dd = String(day).padStart(2, '0');
-    return `${year}-${mm}-${dd}`;
-  };
-
-  // Day click logic:
-  // In 'single' mode (Точная дата): immediately selects that date and closes popover!
-  // In 'range' mode (Период): 1st click = start date, 2nd click = end date and applies immediately!
-  const handleDayClick = (dayKey: string) => {
-    if (mode === 'single') {
-      setDraftStart(dayKey);
-      setDraftEnd(dayKey);
-      onChange(dayKey, dayKey);
-      setOpen(false);
+  // Day click handler for single day or range selection
+  const handleDayClick = useCallback((dateKey: string) => {
+    // If no draft start, or a range was already selected (start !== end):
+    // Start fresh with a single date
+    if (!draftStart || (draftStart && draftEnd && draftStart !== draftEnd)) {
+      setDraftStart(dateKey);
+      setDraftEnd(dateKey);
       return;
     }
 
-    // Range mode:
-    if (!draftStart || (draftStart && draftEnd && draftStart !== draftEnd)) {
-      setDraftStart(dayKey);
-      setDraftEnd('');
-    } else {
-      let start = draftStart;
-      let end = dayKey;
-      if (start > end) {
-        const tmp = start;
-        start = end;
-        end = tmp;
+    // If currently exactly one day is selected:
+    if (draftStart && (!draftEnd || draftStart === draftEnd)) {
+      if (dateKey === draftStart) {
+        // Tapped same day again: keep single day
+        return;
       }
-      setDraftStart(start);
-      setDraftEnd(end);
-      onChange(start, end);
-      setOpen(false);
+      // Expand into range
+      const minD = dateKey < draftStart ? dateKey : draftStart;
+      const maxD = dateKey < draftStart ? draftStart : dateKey;
+      setDraftStart(minD);
+      setDraftEnd(maxD);
     }
-  };
+  }, [draftStart, draftEnd]);
 
-  // Confirm selection manually from bottom button
-  const handleApply = () => {
+  const handleSelectWholeMonth = useCallback((year: number, monthIndex: number) => {
+    const mStr = String(monthIndex + 1).padStart(2, '0');
+    const start = `${year}-${mStr}-01`;
+    const lastDay = new Date(year, monthIndex + 1, 0).getDate();
+    const end = `${year}-${mStr}-${String(lastDay).padStart(2, '0')}`;
+    setDraftStart(start);
+    setDraftEnd(end);
+  }, []);
+
+  const handleQuickToday = useCallback(() => {
+    setDraftStart(todayKey);
+    setDraftEnd(todayKey);
+  }, [todayKey]);
+
+  const handleQuickThisMonth = useCallback(() => {
+    const now = new Date();
+    handleSelectWholeMonth(now.getFullYear(), now.getMonth());
+  }, [handleSelectWholeMonth]);
+
+  const handleApply = useCallback(() => {
     if (!draftStart) return;
-    if (mode === 'single') {
-      onChange(draftStart, draftStart);
-    } else {
-      onChange(draftStart, draftEnd || draftStart);
+    const start = draftStart;
+    const end = draftEnd || draftStart;
+
+    const [y1, m1, d1] = start.split('-').map(Number);
+    const [y2, m2, d2] = end.split('-').map(Number);
+    const lastDayExpected = new Date(y1, m1, 0).getDate();
+
+    const isWholeMonth = y1 === y2 && m1 === m2 && d1 === 1 && d2 === lastDayExpected;
+    const monthStr = isWholeMonth ? `${y1}-${String(m1).padStart(2, '0')}` : undefined;
+
+    onChange(start, end, monthStr);
+    setOpen(false);
+  }, [draftStart, draftEnd, onChange]);
+
+  // Formatted draft summary label for the modal header
+  const draftSummary = useMemo(() => {
+    if (!draftStart) return 'Нажмите на число для выбора дня или диапазона';
+    const end = draftEnd || draftStart;
+    const [y1, m1, d1] = draftStart.split('-').map(Number);
+    const [y2, m2, d2] = end.split('-').map(Number);
+    const lastDay1 = new Date(y1, m1, 0).getDate();
+
+    if (y1 === y2 && m1 === m2 && d1 === 1 && d2 === lastDay1) {
+      return `Выбран весь месяц: ${MONTH_NAMES_RU[m1 - 1]} ${y1} г.`;
     }
-    setOpen(false);
-  };
-
-  // Preset handlers
-  const handlePresetToday = () => {
-    if (onResetToday) {
-      onResetToday();
-    } else {
-      onChange(todayKey, todayKey);
+    if (draftStart === end) {
+      return `Выбрана дата: ${d1} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} г.`;
     }
-    setOpen(false);
-  };
-
-  const handlePresetYesterday = () => {
-    const yest = new Date(Date.now() - 86400000);
-    const key = getBusinessDateKey(yest);
-    onChange(key, key);
-    setOpen(false);
-  };
-
-  const handlePresetLast7Days = () => {
-    const end = todayKey;
-    const startObj = new Date(Date.now() - 6 * 86400000);
-    const start = getBusinessDateKey(startObj);
-    onChange(start, end);
-    setOpen(false);
-  };
-
-  const handlePresetThisMonth = () => {
-    const y = viewYear;
-    const m = String(viewMonth + 1).padStart(2, '0');
-    const start = `${y}-${m}-01`;
-    const lastDay = new Date(viewYear, viewMonth + 1, 0).getDate();
-    const end = `${y}-${m}-${String(lastDay).padStart(2, '0')}`;
-    onChange(start, end);
-    setOpen(false);
-  };
-
-  // Display text & states
-  const hasCustomDate = !isToday && Boolean(startDate);
-  const isSingleActive = hasCustomDate && (!endDate || startDate === endDate);
-  const isRangeActive = hasCustomDate && Boolean(endDate && startDate !== endDate);
-
-  let formattedDateLabel = '';
-  if (hasCustomDate) {
-    if (!endDate || startDate === endDate) {
-      formattedDateLabel = formatBusinessDate(startDate, true);
-    } else {
-      formattedDateLabel = formatDateRange(startDate, endDate);
+    if (y1 === y2 && m1 === m2) {
+      return `Период: ${d1} — ${d2} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} г.`;
     }
-  }
+    return `Период: ${d1} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1} — ${d2} ${MONTH_NAMES_SHORT_RU[m2 - 1]} ${y2} г.`;
+  }, [draftStart, draftEnd]);
 
-  // Active interval calculation for highlighting in calendar
-  const activeMin = mode === 'range' && draftStart && draftEnd
-    ? (draftStart < draftEnd ? draftStart : draftEnd)
-    : (draftStart || '');
-  const activeMax = mode === 'range' && draftStart && draftEnd
-    ? (draftStart < draftEnd ? draftEnd : draftStart)
-    : (mode === 'range' && draftStart && hoverDate ? (draftStart < hoverDate ? hoverDate : draftStart) : '');
-  const effectiveRangeStart = mode === 'range' && activeMin && activeMax ? (activeMin < activeMax ? activeMin : activeMax) : '';
-  const effectiveRangeEnd = mode === 'range' && activeMin && activeMax ? (activeMin < activeMax ? activeMax : activeMin) : '';
+  // Label displayed on the main trigger button in the search bar
+  const displayLabel = useMemo(() => {
+    if (isToday) {
+      return 'Сегодня';
+    }
+
+    if (selectedMonth) {
+      const [y, m] = selectedMonth.split('-').map(Number);
+      if (y && m) {
+        return `${MONTH_NAMES_RU[m - 1]} ${y}`;
+      }
+    }
+
+    if (startDate) {
+      const end = endDate || startDate;
+      const [y1, m1, d1] = startDate.split('-').map(Number);
+      const [y2, m2, d2] = end.split('-').map(Number);
+      const lastDayExpected = new Date(y1, m1, 0).getDate();
+
+      // Check if it's a full calendar month
+      if (y1 === y2 && m1 === m2 && d1 === 1 && d2 === lastDayExpected) {
+        return `${MONTH_NAMES_RU[m1 - 1]} ${y1}`;
+      }
+      if (startDate === end) {
+        return `${d1} ${MONTH_NAMES_SHORT_RU[m1 - 1]} ${y1}`;
+      }
+      if (y1 === y2 && m1 === m2) {
+        return `${d1} — ${d2} ${MONTH_NAMES_SHORT_RU[m1 - 1]}`;
+      }
+      return `${d1}.${String(m1).padStart(2, '0')} — ${d2}.${String(m2).padStart(2, '0')}`;
+    }
+
+    if (placeholder) return placeholder;
+
+    // Default: current month
+    const [y, m] = fallbackThisMonthStr.split('-').map(Number);
+    return `${MONTH_NAMES_RU[(m || 1) - 1]} ${y || new Date().getFullYear()}`;
+  }, [isToday, selectedMonth, startDate, endDate, placeholder, fallbackThisMonthStr]);
+
+  const hasCustomFilter = Boolean(startDate && (startDate !== `${fallbackThisMonthStr}-01` || (endDate && endDate !== `${fallbackThisMonthStr}-${new Date(Number(fallbackThisMonthStr.slice(0, 4)), Number(fallbackThisMonthStr.slice(5, 7)), 0).getDate()}`))) || Boolean(selectedMonth && selectedMonth !== fallbackThisMonthStr);
+
+  const isButtonHighlighted = isActive ?? (Boolean(selectedMonth) || Boolean(startDate) || !isToday);
 
   return (
     <>
-      {showModeButtons ? (
-        /* Segmented buttons: [ 📅 Точная дата ] and [ ⇆ Период ] */
-        <div className={cn('relative inline-flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs', className)}>
-          <button
-            ref={singleButtonRef}
-            type="button"
-            onClick={() => handleOpenWithMode('single', singleButtonRef)}
-            className={cn(
-              'px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all select-none',
-              isSingleActive
-                ? 'bg-surface text-accent font-bold shadow-xs border border-border/80'
-                : 'text-fg-muted hover:text-fg'
-            )}
-            title="Точная дата (один день)"
-          >
-            <Calendar className={cn('w-3.5 h-3.5', isSingleActive ? 'text-accent' : 'text-fg-subtle')} />
-            <span className="truncate max-w-[130px]">
-              {isSingleActive ? formatBusinessDate(startDate, true) : 'Точная дата'}
-            </span>
-          </button>
-
-          <button
-            ref={rangeButtonRef}
-            type="button"
-            onClick={() => handleOpenWithMode('range', rangeButtonRef)}
-            className={cn(
-              'px-2.5 py-1 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all select-none',
-              isRangeActive
-                ? 'bg-surface text-accent font-bold shadow-xs border border-border/80'
-                : 'text-fg-muted hover:text-fg'
-            )}
-            title="Период (диапазон дат)"
-          >
-            <ArrowLeftRight className={cn('w-3.5 h-3.5', isRangeActive ? 'text-accent' : 'text-fg-subtle')} />
-            <span className="truncate max-w-[160px]">
-              {isRangeActive ? formatDateRange(startDate, endDate) : 'Период'}
-            </span>
-          </button>
-
-          {hasCustomDate && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePresetToday();
-              }}
-              className="p-1 rounded-md text-fg-subtle hover:text-accent hover:bg-surface transition-colors ml-0.5"
-              title="Сбросить на Сегодня"
-              aria-label="Сбросить фильтр дат"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
+      <div className={cn('relative inline-flex items-center shrink-0', className)}>
+        <button
+          ref={buttonRef}
+          type="button"
+          onClick={() => setOpen(true)}
+          className={cn(
+            'h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none cursor-pointer focus:outline-none focus:ring-1 focus:ring-accent/40 shadow-xs',
+            isButtonHighlighted
+              ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
+              : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
           )}
-        </div>
-      ) : (
-        /* Unified compact trigger button */
-        <div className={cn('relative inline-flex items-center', className)}>
+          title={`Выбран период: ${displayLabel}`}
+        >
+          <Calendar className={cn('w-3.5 h-3.5 shrink-0', isButtonHighlighted ? 'text-accent' : 'text-fg-subtle')} />
+          <span className="truncate max-w-[160px] sm:max-w-[220px]">
+            {displayLabel}
+          </span>
+          <ChevronDown className={cn('w-3.5 h-3.5 text-fg-subtle shrink-0 transition-transform duration-200 ml-0.5', open && 'rotate-180')} />
+        </button>
+
+        {hasCustomFilter && onResetMonth && (
           <button
-            ref={buttonRef}
             type="button"
-            onClick={handleToggle}
-            className={cn(
-              'h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none focus:outline-none focus:ring-1 focus:ring-accent/40 shadow-xs',
-              hasCustomDate
-                ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
-                : isToday
-                  ? 'border-border/80 bg-surface text-fg font-medium hover:border-accent/40 hover:bg-surface-raised'
-                  : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
-            )}
-            title={hasCustomDate ? `Выбран период: ${formattedDateLabel}` : 'Выбрать дату или период'}
+            onClick={(e) => {
+              e.stopPropagation();
+              onResetMonth();
+            }}
+            className="ml-1 p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-surface-raised transition-colors cursor-pointer"
+            title="Сбросить на текущий месяц"
+            aria-label="Сбросить фильтр дат"
           >
-            {isRangeActive ? (
-              <ArrowLeftRight className="w-3.5 h-3.5 text-accent shrink-0" />
-            ) : (
-              <Calendar className={cn('w-3.5 h-3.5 shrink-0', hasCustomDate ? 'text-accent' : 'text-fg-subtle')} />
-            )}
-            <span className="truncate max-w-[150px] sm:max-w-[220px]">
-              {hasCustomDate ? formattedDateLabel : (placeholder || (isToday ? 'Сегодня' : 'Календарь'))}
-            </span>
-            <ChevronDown className={cn('w-3.5 h-3.5 text-fg-subtle shrink-0 transition-transform duration-200 ml-0.5', open && 'rotate-180')} />
+            <X className="w-3.5 h-3.5" />
           </button>
+        )}
+      </div>
 
-          {hasCustomDate && (
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                handlePresetToday();
-              }}
-              className="ml-1 p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-surface-raised transition-colors"
-              title="Сбросить на Сегодня"
-              aria-label="Сбросить фильтр дат"
-            >
-              <X className="w-3.5 h-3.5" />
-            </button>
-          )}
-        </div>
-      )}
-
-      {open &&
-        createPortal(
-          <div
-            ref={popoverRef}
-            style={{ top: `${coords.top}px`, left: `${coords.left}px` }}
-            className="fixed z-50 w-84 bg-surface border border-border rounded-2xl shadow-2xl p-3.5 flex flex-col gap-2.5 animate-in fade-in zoom-in-95 duration-150"
-          >
-            {/* Mode Switcher Tabs: [ Точная дата ] and [ Период ] */}
-            <div className="flex items-center p-1 bg-surface-raised rounded-xl border border-border">
-              <button
-                type="button"
-                onClick={() => {
-                  setMode('single');
-                  setDraftEnd('');
-                }}
-                className={cn(
-                  'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5',
-                  mode === 'single'
-                    ? 'bg-accent text-accent-contrast shadow-xs'
-                    : 'text-fg-muted hover:text-fg'
-                )}
-              >
-                <Calendar className="w-3.5 h-3.5" />
-                <span>Точная дата</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMode('range')}
-                className={cn(
-                  'flex-1 py-1.5 px-3 rounded-lg text-xs font-bold transition-all flex items-center justify-center gap-1.5',
-                  mode === 'range'
-                    ? 'bg-accent text-accent-contrast shadow-xs'
-                    : 'text-fg-muted hover:text-fg'
-                )}
-              >
-                <ArrowLeftRight className="w-3.5 h-3.5" />
-                <span>Период</span>
-              </button>
-            </div>
-
-            {/* Helper mode description */}
-            <div className="text-[11px] text-fg-subtle px-1">
-              {mode === 'single' ? (
-                <span>Нажмите на нужный день для быстрого выбора</span>
-              ) : (
-                <span>Выберите дату начала и дату окончания периода</span>
-              )}
-            </div>
-
-            {/* Quick presets row */}
-            <div className="grid grid-cols-4 gap-1 text-[11px]">
-              <button
-                type="button"
-                onClick={handlePresetToday}
-                className={cn(
-                  'py-1 px-1.5 rounded-lg border text-center font-medium transition-colors',
-                  isToday
-                    ? 'border-accent bg-accent/20 text-accent font-bold'
-                    : 'border-border/60 hover:bg-surface-raised text-fg-muted'
-                )}
-              >
-                Сегодня
-              </button>
-              <button
-                type="button"
-                onClick={handlePresetYesterday}
-                className="py-1 px-1.5 rounded-lg border border-border/60 hover:bg-surface-raised text-center text-fg-muted font-medium transition-colors"
-              >
-                Вчера
-              </button>
-              <button
-                type="button"
-                onClick={handlePresetLast7Days}
-                className="py-1 px-1.5 rounded-lg border border-border/60 hover:bg-surface-raised text-center text-fg-muted font-medium transition-colors"
-              >
-                7 дней
-              </button>
-              <button
-                type="button"
-                onClick={handlePresetThisMonth}
-                className="py-1 px-1.5 rounded-lg border border-border/60 hover:bg-surface-raised text-center text-fg-muted font-medium transition-colors truncate"
-              >
-                Этот месяц
-              </button>
-            </div>
-
-            {/* Month & Year Navigator */}
-            <div className="flex items-center justify-between px-1">
-              <button
-                type="button"
-                onClick={handlePrevMonth}
-                className="p-1 rounded-lg hover:bg-surface-raised text-fg-muted hover:text-fg transition-colors"
-                aria-label="Предыдущий месяц"
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-
-              <span className="text-xs font-bold text-fg">
-                {MONTH_NAMES_RU[viewMonth]} {viewYear}
-              </span>
-
-              <button
-                type="button"
-                onClick={handleNextMonth}
-                className="p-1 rounded-lg hover:bg-surface-raised text-fg-muted hover:text-fg transition-colors"
-                aria-label="Следующий месяц"
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Calendar Grid */}
-            <div className="w-full">
-              {/* Weekday headers */}
-              <div className="grid grid-cols-7 text-center mb-1">
-                {WEEKDAY_NAMES_RU.map((day) => (
-                  <span key={day} className="text-[10px] font-semibold text-fg-subtle py-0.5">
-                    {day}
-                  </span>
-                ))}
-              </div>
-
-              {/* Day cells */}
-              <div className="grid grid-cols-7 gap-y-1 text-center" onMouseLeave={() => setHoverDate(null)}>
-                {/* Padding previous month */}
-                {padDaysBefore.map((d) => (
-                  <div key={`prev-${d}`} className="h-7 flex items-center justify-center text-[11px] text-fg-subtle/30 pointer-events-none">
-                    {d}
-                  </div>
-                ))}
-
-                {/* Current month days */}
-                {currentMonthDays.map((d) => {
-                  const dayKey = toDateKey(viewYear, viewMonth, d);
-                  const isCurrentToday = dayKey === todayKey;
-                  const isStart = dayKey === draftStart;
-                  const isEnd = dayKey === draftEnd;
-                  const isSelectedSingle = isStart && (mode === 'single' || !draftEnd || draftStart === draftEnd);
-
-                  const inRange =
-                    mode === 'range' &&
-                    effectiveRangeStart &&
-                    effectiveRangeEnd &&
-                    dayKey >= effectiveRangeStart &&
-                    dayKey <= effectiveRangeEnd;
-
-                  return (
-                    <button
-                      key={dayKey}
-                      type="button"
-                      onClick={() => handleDayClick(dayKey)}
-                      onMouseEnter={() => mode === 'range' && draftStart && !draftEnd && setHoverDate(dayKey)}
-                      className={cn(
-                        'h-7 w-full text-[11px] font-medium transition-all flex items-center justify-center relative select-none',
-                        // Range background
-                        inRange && !isStart && !isEnd && 'bg-accent/15 text-accent font-semibold',
-                        inRange && isStart && !isSelectedSingle && 'bg-accent/15 rounded-l-lg',
-                        inRange && isEnd && 'bg-accent/15 rounded-r-lg',
-                        // Selected endpoints
-                        (isStart || isEnd) &&
-                          'bg-accent text-accent-contrast font-bold rounded-lg shadow-xs z-10',
-                        // Unselected standard days
-                        !inRange && !isStart && !isEnd && 'text-fg hover:bg-surface-raised rounded-lg',
-                        // Subtle indicator for today
-                        isCurrentToday && !isStart && !isEnd && 'font-bold text-accent underline underline-offset-2'
-                      )}
-                    >
-                      {d}
-                    </button>
-                  );
-                })}
-
-                {/* Padding next month */}
-                {padDaysAfter.map((d) => (
-                  <div key={`next-${d}`} className="h-7 flex items-center justify-center text-[11px] text-fg-subtle/30 pointer-events-none">
-                    {d}
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Bottom info & actions */}
-            <div className="pt-2 border-t border-border flex items-center justify-between gap-2">
-              <div className="text-[11px] text-fg-muted truncate">
-                {mode === 'single' && draftStart ? (
-                  <span>
-                    Дата: <strong className="text-fg">{formatBusinessDate(draftStart, false)}</strong>
-                  </span>
-                ) : mode === 'range' && draftStart && draftEnd && draftStart !== draftEnd ? (
-                  <span>
-                    Период: <strong className="text-fg">{formatDateRange(draftStart, draftEnd)}</strong>
-                  </span>
-                ) : draftStart ? (
-                  <span>
-                    С: <strong className="text-fg">{formatBusinessDate(draftStart, false)}</strong>
-                  </span>
-                ) : (
-                  <span className="text-fg-subtle">Выберите дату</span>
-                )}
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
+      {open && typeof document !== 'undefined' && createPortal(
+        <div
+          className="fixed inset-0 z-50 bg-black/60 backdrop-blur-xs flex items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setOpen(false);
+          }}
+        >
+          <div className="w-full h-full sm:h-[88vh] sm:max-h-[760px] sm:max-w-md sm:rounded-3xl bg-surface flex flex-col overflow-hidden shadow-2xl border border-border animate-in zoom-in-95 duration-150">
+            {/* Top Header matching user screenshot */}
+            <div className="px-4 pt-4 pb-3 shrink-0 border-b border-border/40 bg-surface">
+              <div className="flex items-center justify-between">
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="px-2.5 py-1 rounded-lg text-xs font-medium text-fg-muted hover:text-fg hover:bg-surface-raised transition-colors"
+                  className="p-2 -ml-2 text-fg hover:bg-surface-raised rounded-full transition-colors cursor-pointer"
+                  aria-label="Закрыть"
                 >
-                  Отмена
+                  <X className="w-6 h-6" />
                 </button>
-                <button
-                  type="button"
-                  disabled={!draftStart}
-                  onClick={handleApply}
-                  className="px-3 py-1 rounded-lg text-xs font-semibold bg-accent text-accent-contrast hover:bg-accent/90 disabled:opacity-50 transition-colors flex items-center gap-1 shadow-xs"
-                >
-                  <Check className="w-3.5 h-3.5" />
-                  <span>Применить</span>
-                </button>
+                <div className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    onClick={handleQuickToday}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-border bg-surface-raised hover:bg-surface text-fg font-medium transition-colors cursor-pointer"
+                  >
+                    Сегодня
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleQuickThisMonth}
+                    className="text-xs px-2.5 py-1 rounded-lg border border-border bg-surface-raised hover:bg-surface text-fg font-medium transition-colors cursor-pointer"
+                  >
+                    Этот месяц
+                  </button>
+                </div>
               </div>
+              <h2 className="text-xl font-bold text-fg mt-2 tracking-tight">Выберите дату</h2>
+              <p className="text-xs text-accent font-semibold mt-0.5 truncate">
+                {draftSummary}
+              </p>
             </div>
-          </div>,
-          document.body
-        )}
+
+            {/* Pinned weekday headers matching user photo (П В С Ч П С В) */}
+            <div className="grid grid-cols-7 text-center py-2.5 px-4 border-b border-border/40 text-xs font-semibold text-fg-subtle shrink-0 bg-surface select-none">
+              {WEEKDAY_NAMES_RU.map((day, idx) => (
+                <span key={`${day}-${idx}`}>{day}</span>
+              ))}
+            </div>
+
+            {/* Scrollable Month List */}
+            <div
+              ref={scrollContainerRef}
+              className="flex-1 overflow-y-auto px-4 py-4 space-y-6 overscroll-contain"
+            >
+              {monthsList.map((m) => {
+                return (
+                  <div key={m.key} id={`cal-month-${m.key}`} className="space-y-3">
+                    <div className="flex items-center justify-between px-1">
+                      <span className="text-sm font-bold text-fg">
+                        {m.name} {m.year} г.
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => handleSelectWholeMonth(m.year, m.monthIndex)}
+                        className="text-xs text-accent hover:underline font-semibold cursor-pointer"
+                      >
+                        Весь месяц
+                      </button>
+                    </div>
+
+                    {/* Days grid matching Image 2 */}
+                    <div className="grid grid-cols-7 text-center gap-y-1 select-none">
+                      {/* Empty padding cells before month day 1 */}
+                      {Array.from({ length: m.padDaysBefore }).map((_, i) => (
+                        <div key={`pad-${i}`} className="h-10 pointer-events-none" />
+                      ))}
+
+                      {/* Day cells */}
+                      {m.days.map((dayNum) => {
+                        const dateKey = `${m.year}-${String(m.monthIndex + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
+                        const isStart = dateKey === draftStart;
+                        const isEnd = dateKey === draftEnd;
+                        const isSingle = isStart && (!draftEnd || draftStart === draftEnd);
+                        const inRange = Boolean(draftStart && draftEnd && dateKey >= draftStart && dateKey <= draftEnd);
+                        const isTodayDate = dateKey === todayKey;
+
+                        return (
+                          <div
+                            key={dateKey}
+                            className={cn(
+                              'h-10 relative flex items-center justify-center',
+                              inRange && !isSingle && 'bg-accent/15',
+                              inRange && isStart && !isSingle && 'rounded-l-full',
+                              inRange && isEnd && !isSingle && 'rounded-r-full'
+                            )}
+                          >
+                            <button
+                              type="button"
+                              onClick={() => handleDayClick(dateKey)}
+                              className={cn(
+                                'w-9 h-9 flex items-center justify-center text-sm font-medium transition-all cursor-pointer relative z-10',
+                                // Single selected date (clean circular ring outline like user photo)
+                                isSingle && 'rounded-full border-2 border-emerald-600 dark:border-emerald-500 bg-emerald-500/10 text-fg font-bold shadow-xs',
+                                // Range endpoints (solid accent)
+                                (isStart || isEnd) && !isSingle && 'rounded-full bg-accent text-white font-bold shadow-xs',
+                                // Range inner days
+                                inRange && !isStart && !isEnd && 'text-accent font-semibold',
+                                // Unselected days
+                                !inRange && !isSingle && 'rounded-full text-fg hover:bg-surface-raised active:scale-95',
+                                // Today marker
+                                isTodayDate && !inRange && !isSingle && 'text-accent font-bold underline underline-offset-4'
+                              )}
+                            >
+                              {dayNum}
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Bottom Bar: Full-width green "Подтвердить" button matching photo */}
+            <div className="p-4 border-t border-border bg-surface shrink-0">
+              <button
+                type="button"
+                onClick={handleApply}
+                disabled={!draftStart}
+                className="w-full h-12 rounded-2xl bg-[#00a862] hover:bg-[#009657] active:scale-[0.98] text-white text-base font-bold transition-all shadow-md flex items-center justify-center cursor-pointer disabled:opacity-50"
+              >
+                Подтвердить
+              </button>
+            </div>
+          </div>
+        </div>,
+        document.body
+      )}
     </>
   );
 };

@@ -4,6 +4,7 @@ import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { useUIStore } from '../../stores/useUIStore';
 import { PageId } from '../../types';
+import { formatUserName } from '../../utils/formatUser';
 import {
   ShoppingBag,
   History,
@@ -98,6 +99,7 @@ export const Drawer: React.FC = () => {
   const isPartner = userRole === 'PARTNER';
   const isAdmin = userRole === 'ADMIN';
   const isStoreScoped = isSeller || isPartner;
+  const cleanDisplayName = formatUserName(currentUser?.name);
   const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
   const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const userStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
@@ -239,15 +241,24 @@ export const Drawer: React.FC = () => {
         <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shrink-0">
-              {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'MS'}
+              {cleanDisplayName.substring(0, 2).toUpperCase()}
             </div>
             <div className="min-w-0">
               <h2 className="text-sm font-bold text-fg truncate">
-                {currentUser?.name || 'Пользователь'}
+                {cleanDisplayName}
               </h2>
-              <p className="text-[11px] font-medium text-accent truncate">
-                {isStoreScoped ? (isPartner ? 'Партнёр' : 'Продавец') : isCentralCashMode ? 'Центральная касса' : `Продажи: ${activeRetailStore?.name || 'Магазин'}`}
-              </p>
+              {isStoreScoped ? (
+                userStoreName ? (
+                  <p className="text-[11px] font-medium text-fg-subtle truncate flex items-center gap-1">
+                    <Store className="w-3 h-3 text-accent shrink-0" />
+                    <span>{userStoreName}</span>
+                  </p>
+                ) : null
+              ) : (
+                <p className="text-[11px] font-medium text-accent truncate">
+                  {isCentralCashMode ? 'Центральная касса' : (activeRetailStore?.name || 'Магазин')}
+                </p>
+              )}
             </div>
           </div>
 

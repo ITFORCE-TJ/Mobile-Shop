@@ -4,6 +4,7 @@ import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
 import { useUIStore } from '../../stores/useUIStore';
 import { PageId } from '../../types';
+import { formatUserName } from '../../utils/formatUser';
 import {
   ShoppingBag,
   History,
@@ -69,17 +70,15 @@ export const Sidebar: React.FC = () => {
     logout,
     stores,
     selectedStoreId,
-    setSelectedStoreId,
   } = useAppFields(
     'currentUser',
     'setActivePage',
     'logout',
     'stores',
-    'selectedStoreId',
-    'setSelectedStoreId'
+    'selectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen, triggerStoreTransition, sidebarCollapsed, toggleSidebar } = useUIStore();
+  const { sidebarCollapsed, toggleSidebar } = useUIStore();
 
   const [collapsedGroups, setCollapsedGroups] = useState<Record<number, boolean>>({});
 
@@ -98,6 +97,7 @@ export const Sidebar: React.FC = () => {
   const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
   const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const sellerStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
+  const cleanDisplayName = formatUserName(currentUser?.name);
 
   const unreadNotifs = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0;
 
@@ -247,9 +247,6 @@ export const Sidebar: React.FC = () => {
             <div className="flex items-center gap-2.5 min-w-0">
               <div className="w-2.5 h-2.5 rounded-sm bg-accent shrink-0" />
               <span className="font-bold text-xs tracking-wider text-fg-muted uppercase truncate">Mobile Shop</span>
-              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-raised border border-border text-fg-subtle font-semibold shrink-0">
-                {isSeller ? 'POS' : isPartner ? 'ПАРТНЕР' : isCentralCashMode ? 'ОФИС' : 'РОЗНИЦА'}
-              </span>
             </div>
             <button
               type="button"
@@ -264,117 +261,6 @@ export const Sidebar: React.FC = () => {
         )}
       </div>
 
-      {/* Admin Mode Switcher Card */}
-      {isAdmin && (
-        <div className={`shrink-0 ${sidebarCollapsed ? 'p-2 flex justify-center' : 'px-2.5 pt-2.5 pb-1'}`}>
-          {sidebarCollapsed ? (
-            <button
-              type="button"
-              onClick={() => {
-                if (isCentralCashMode) {
-                  setStoreSwitchModalOpen(true);
-                } else {
-                  triggerStoreTransition({
-                    storeName: 'Центральная касса (Главный офис)',
-                    storeId: 'all',
-                    isCentral: true,
-                  });
-                  setSelectedStoreId('all');
-                  setActivePage('FINANCE');
-                  navigate('/finance');
-                }
-              }}
-              title={isCentralCashMode ? 'Центральная касса (нажать для выбора магазина)' : `Магазин: ${activeRetailStore?.name || ''} (нажать для возврата в Центр)`}
-              className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${
-                isCentralCashMode
-                  ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
-                  : 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25'
-              }`}
-            >
-              {isCentralCashMode ? <Landmark className="w-4 h-4" /> : <Store className="w-4 h-4" />}
-            </button>
-          ) : isCentralCashMode ? (
-            <div
-              onClick={() => {
-                triggerStoreTransition({
-                  storeName: 'Центральная касса (Главный офис)',
-                  storeId: 'all',
-                  isCentral: true,
-                });
-                setSelectedStoreId('all');
-                setActivePage('FINANCE');
-                navigate('/finance');
-              }}
-              className="p-2.5 rounded-xl bg-accent/5 hover:bg-accent/10 border border-accent/25 space-y-1.5 shadow-2xs cursor-pointer transition-colors group"
-              title="Перейти в Центральную кассу (Финансы)"
-            >
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-accent flex items-center gap-1.5 group-hover:underline">
-                  <Landmark className="w-3.5 h-3.5" />
-                  Центральная касса
-                </span>
-                <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
-              </div>
-              <p className="text-[11px] text-fg-subtle leading-tight group-hover:text-fg transition-colors">
-                Режим главного офиса и финансового учёта
-              </p>
-              <button
-                type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setStoreSwitchModalOpen(true);
-                }}
-                className="w-full mt-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-[11px] font-semibold text-fg flex items-center justify-center gap-1.5 transition-all shadow-xs"
-              >
-                <Store className="w-3.5 h-3.5" />
-                <span>Продавать в магазине</span>
-                <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-70" />
-              </button>
-            </div>
-          ) : (
-            <div className="p-2.5 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5 shadow-2xs">
-              <div className="flex items-center justify-between">
-                <span className="text-[10px] font-bold uppercase tracking-wider text-warning flex items-center gap-1.5">
-                  <Store className="w-3.5 h-3.5" />
-                  Режим продаж
-                </span>
-                <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
-              </div>
-              <p className="text-xs font-bold text-fg truncate">
-                {activeRetailStore?.name || 'Магазин'}
-              </p>
-              <div className="grid grid-cols-2 gap-1.5 pt-0.5">
-                <button
-                  type="button"
-                  onClick={() => setStoreSwitchModalOpen(true)}
-                  className="px-2 py-1 rounded-lg bg-surface-raised hover:bg-surface border border-border text-[10px] font-semibold text-fg flex items-center justify-center gap-1 transition-all"
-                >
-                  <Store className="w-3 h-3 text-fg-subtle" />
-                  <span>Сменить</span>
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    triggerStoreTransition({
-                      storeName: 'Центральная касса (Главный офис)',
-                      storeId: 'all',
-                      isCentral: true,
-                    });
-                    setSelectedStoreId('all');
-                    setActivePage('FINANCE');
-                    navigate('/finance');
-                  }}
-                  className="px-2 py-1 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-[10px] font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
-                  title="Автоматически перейти в Центральную кассу"
-                >
-                  <Landmark className="w-3 h-3" />
-                  <span>В Центр</span>
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-      )}
 
       {/* Nav Groups */}
       <nav className={`flex-1 overflow-y-auto scrollbar-none py-2 space-y-2.5 ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'}`}>
@@ -465,10 +351,10 @@ export const Sidebar: React.FC = () => {
         {sidebarCollapsed ? (
           <>
             <div
-              title={`${currentUser?.name || ''} (${currentUser?.role || ''})`}
+              title={cleanDisplayName}
               className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/25 text-accent font-bold text-xs flex items-center justify-center cursor-default"
             >
-              {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'MS'}
+              {cleanDisplayName.substring(0, 2).toUpperCase()}
             </div>
             <button
               type="button"
@@ -483,14 +369,17 @@ export const Sidebar: React.FC = () => {
           <>
             <div className="flex items-center gap-2.5 px-1 min-w-0">
               <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shrink-0">
-                {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'US'}
+                {cleanDisplayName.substring(0, 2).toUpperCase()}
               </div>
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-fg-muted truncate">{currentUser?.name || 'Пользователь'}</p>
-                {isSeller ? (
-                  <p className="text-[10px] text-fg-subtle truncate">Продавец</p>
-                ) : isPartner ? (
-                  <p className="text-[10px] text-fg-subtle truncate">Партнёр</p>
+                <p className="text-xs font-semibold text-fg-muted truncate">{cleanDisplayName}</p>
+                {isStoreScoped ? (
+                  sellerStoreName ? (
+                    <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
+                      <Store className="w-2.5 h-2.5 text-accent shrink-0" />
+                      <span>{sellerStoreName}</span>
+                    </p>
+                  ) : null
                 ) : (
                   <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
                     {isCentralCashMode ? (
@@ -509,23 +398,14 @@ export const Sidebar: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center gap-1.5 pt-0.5">
+            <div className="pt-0.5">
               <button
                 type="button"
                 onClick={logout}
-                className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 text-xs font-semibold transition-colors cursor-pointer"
+                className="w-full flex items-center justify-center gap-1.5 h-8 rounded-lg bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 text-xs font-semibold transition-colors cursor-pointer"
               >
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Выход</span>
-              </button>
-              <button
-                type="button"
-                onClick={toggleSidebar}
-                title="Свернуть боковое меню"
-                aria-label="Свернуть боковое меню"
-                className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-raised hover:bg-surface text-fg-subtle hover:text-fg border border-border transition-colors cursor-pointer shrink-0"
-              >
-                <PanelLeftClose className="w-3.5 h-3.5" />
               </button>
             </div>
           </>

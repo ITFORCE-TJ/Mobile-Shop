@@ -8,10 +8,6 @@ import {
   Store,
   Landmark,
   ArrowRight,
-  Menu,
-  X,
-  PanelLeftClose,
-  PanelLeftOpen,
 } from 'lucide-react';
 
 export const TopBar: React.FC = () => {
@@ -23,24 +19,18 @@ export const TopBar: React.FC = () => {
     stores,
     selectedStoreId,
     setSelectedStoreId,
-    drawerOpen,
-    setDrawerOpen,
   } = useAppFields(
     'currentUser',
     'activePage',
     'setActivePage',
     'stores',
     'selectedStoreId',
-    'setSelectedStoreId',
-    'drawerOpen',
-    'setDrawerOpen'
+    'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
   const {
     setStoreSwitchModalOpen,
     triggerStoreTransition,
-    sidebarCollapsed,
-    toggleSidebar,
   } = useUIStore();
 
   const isStoreScoped = currentUser?.role === 'SELLER' || currentUser?.role === 'PARTNER';
@@ -76,30 +66,8 @@ export const TopBar: React.FC = () => {
 
   return (
     <header className="sticky top-0 z-30 flex h-14 w-full items-center justify-between border-b border-border bg-surface px-3 md:px-4 select-none shrink-0 gap-2">
-      {/* Left: Menu Toggle + Page Title */}
+      {/* Left: Page Title (on phones the menu opens from the bottom navigation) */}
       <div className="flex items-center gap-2.5 min-w-0">
-        {/* Mobile / Tablet Menu Button (opens / closes drawer) */}
-        <button
-          type="button"
-          onClick={() => setDrawerOpen(!drawerOpen)}
-          aria-label={drawerOpen ? 'Свернуть меню' : 'Развернуть меню'}
-          className="lg:hidden w-9 h-9 flex items-center justify-center rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg transition-all active:scale-95 shrink-0 cursor-pointer shadow-2xs"
-          title={drawerOpen ? 'Свернуть меню' : 'Развернуть меню'}
-        >
-          {drawerOpen ? <X className="w-4 h-4" /> : <Menu className="w-4 h-4" />}
-        </button>
-
-        {/* Desktop Sidebar Toggle Button (collapses / expands sidebar) */}
-        <button
-          type="button"
-          onClick={toggleSidebar}
-          aria-label={sidebarCollapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
-          className="hidden lg:flex w-9 h-9 items-center justify-center rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg transition-all active:scale-95 shrink-0 cursor-pointer shadow-2xs"
-          title={sidebarCollapsed ? 'Развернуть боковое меню' : 'Свернуть боковое меню'}
-        >
-          {sidebarCollapsed ? <PanelLeftOpen className="w-4 h-4" /> : <PanelLeftClose className="w-4 h-4" />}
-        </button>
-
         <div className="min-w-0">
           <h1 className="text-sm md:text-base font-bold text-fg truncate tracking-tight">
             {getPageTitle()}
@@ -125,7 +93,6 @@ export const TopBar: React.FC = () => {
                 title="Перейти в режим розничных продаж"
               >
                 <Store className="w-3.5 h-3.5 text-accent" />
-                <span className="hidden sm:inline">Продавать в магазине</span>
                 <span className="sm:hidden">Магазины</span>
                 <ArrowRight className="w-3 h-3 opacity-60" />
               </button>

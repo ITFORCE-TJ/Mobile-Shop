@@ -963,14 +963,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           </div>
                         )}
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setSalesReportStoreId(store.storeId)}
-                        className="sm:col-span-2 w-full py-2 px-3 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg font-semibold text-xs flex items-center justify-center gap-2 transition-colors"
-                      >
-                        <Download className="w-3.5 h-3.5" />
-                        <span>Продажи и расходы магазина — Excel</span>
-                      </button>
                     </div>
                   )}
                 </div>
