@@ -100,10 +100,14 @@ try {
   token = (await api('POST', '/auth/login', { login: 'ahmad', password: 'seller123' })).data.token;
   assert(token);
   for (const kind of ['investment', 'withdrawal', 'payout', 'reinvest']) assert.equal((await post(kind, 1)).status, 403);
+  // Expenses are not a seller's business either — the server refuses, not just the UI.
+  const sellerExpense = await api('POST', '/expenses', { category: 'Аренда', amountTjs: 100, storeId: 'store-siyoma' });
+  assert.equal(sellerExpense.status, 403, JSON.stringify(sellerExpense));
   token = (await api('POST', '/auth/login', { login: 'partner', password: 'partner123' })).data.token;
-  assert(token); await ok('investment', '0.01');
+  // Owner money moves are run by the admin only (partners included).
+  assert(token); assert.equal((await post('investment', '0.01')).status, 403);
   token = adminToken;
-  pass('seller denied all four endpoints; partner can invest');
+  pass('seller denied owner money moves and expenses; partner denied owner money moves (admin only)');
   const rows = await db.ownerTransaction.findMany();
   for (const row of rows) assert(row.exchangeRate.eq(10));
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 11 })).status, 200);

@@ -60,7 +60,7 @@ export function registerExpenseRoutes(app: Express) {
     }
   });
 
-  app.post('/api/expenses', authenticateJwt, requireRoles('ADMIN', 'PARTNER', 'SELLER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
+  app.post('/api/expenses', authenticateJwt, requireRoles('ADMIN', 'PARTNER'), enforceBodyStoreScope, async (req: AuthenticatedRequest, res, next) => {
     try {
       const { category, amountTjs, targetType, storeId, sourceAccount, comment, description, paidFromCashRegister, employeeId, isEmployeeAdvance, payrollMonth } =
         req.body ?? {};
@@ -69,7 +69,7 @@ export function registerExpenseRoutes(app: Express) {
         return;
       }
 
-      // If non-admin (PARTNER or SELLER): expenses are always recorded as UNPAID (debt)
+      // Partner expenses are always recorded as UNPAID (debt)
       // and cannot directly deduct from cash balances. Admin pays them later.
       const isAdmin = req.user!.role === 'ADMIN';
       const effectivePaidFromCash = isAdmin ? Boolean(paidFromCashRegister) : false;

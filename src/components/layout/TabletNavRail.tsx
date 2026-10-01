@@ -85,7 +85,6 @@ export const TabletNavRail: React.FC = () => {
         { id: 'REPAIR' as PageId, label: 'Ремонт', icon: Wrench },
         { id: 'INVENTORY' as PageId, label: 'Склад', icon: Package },
         { id: 'TRANSFER' as PageId, label: 'Перевод', icon: ArrowLeftRight },
-        { id: 'EXPENSES' as PageId, label: 'Расходы', icon: Wallet },
       ];
     }
 

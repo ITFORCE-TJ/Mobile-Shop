@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useState, useMemo } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { useNotifications } from '../../context/NotificationsContext';
@@ -25,6 +25,9 @@ import {
   Store,
   Sparkles,
   ArrowRight,
+  ChevronDown,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 
 const PAGE_ROUTES: Record<string, string> = {
@@ -76,7 +79,16 @@ export const Sidebar: React.FC = () => {
     'setSelectedStoreId'
   );
   const { notifications } = useNotifications();
-  const { setStoreSwitchModalOpen, triggerStoreTransition } = useUIStore();
+  const { setStoreSwitchModalOpen, triggerStoreTransition, sidebarCollapsed, toggleSidebar } = useUIStore();
+
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<number, boolean>>({});
+
+  const toggleGroup = (index: number) => {
+    setCollapsedGroups(prev => ({
+      ...prev,
+      [index]: !prev[index],
+    }));
+  };
 
   const userRole = currentUser?.role || 'SELLER';
   const isSeller = userRole === 'SELLER';
@@ -87,7 +99,7 @@ export const Sidebar: React.FC = () => {
   const activeRetailStore = isAdmin && !isCentralCashMode ? stores.find(s => s.id === selectedStoreId && !s.isMainWarehouse) : null;
   const sellerStoreName = currentUser?.storeId ? (stores.find(s => s.id === currentUser.storeId)?.name || currentUser.storeName) : currentUser?.storeName;
 
-  const unreadNotifs = notifications.filter(n => !n.read).length;
+  const unreadNotifs = Array.isArray(notifications) ? notifications.filter(n => !n.read).length : 0;
 
   const navGroups = useMemo<NavGroup[]>(() => {
     // 1. Seller always only sees their assigned store's retail operations
@@ -103,11 +115,10 @@ export const Sidebar: React.FC = () => {
           ],
         },
         {
-          title: 'Склад и касса',
+          title: 'Склад',
           items: [
             { id: 'INVENTORY', label: 'Склад товаров', icon: Package, roles: ['SELLER'] },
             { id: 'TRANSFER', label: 'Перемещение', icon: ArrowLeftRight, roles: ['SELLER'] },
-            { id: 'EXPENSES', label: 'Расходы кассы', icon: Wallet, roles: ['SELLER'] },
           ],
         },
       ];
@@ -202,34 +213,87 @@ export const Sidebar: React.FC = () => {
         ],
       },
       {
-        title: 'Управление',
+        title: 'Система и доступ',
         items: [
           { id: 'EMPLOYEES', label: 'Сотрудники', icon: UserCheck, roles: ['ADMIN'] },
           { id: 'AUDIT_LOG', label: 'Журнал аудита', icon: FileText, roles: ['ADMIN'] },
           { id: 'NOTIFICATIONS', label: 'Уведомления', icon: Bell, roles: ['ADMIN'] },
-          { id: 'SETTINGS', label: 'Настройки', icon: Settings, roles: ['ADMIN'] },
+          { id: 'SETTINGS', label: 'Настройки системы', icon: Settings, roles: ['ADMIN'] },
         ],
       },
     ];
   }, [isSeller, isPartner, isCentralCashMode, activeRetailStore, sellerStoreName]);
 
   return (
-    <aside className="hidden lg:flex flex-col w-60 border-r border-border bg-surface text-fg-muted select-none shrink-0 h-full sticky top-0">
+    <aside className={`hidden lg:flex flex-col border-r border-border bg-surface text-fg-muted select-none shrink-0 h-full sticky top-0 transition-all duration-200 ${
+      sidebarCollapsed ? 'w-16' : 'w-60'
+    }`}>
       {/* Brand Header */}
-      <div className="h-14 flex items-center px-4 border-b border-border justify-between shrink-0">
-        <div className="flex items-center gap-2.5">
-          <div className="w-2.5 h-2.5 rounded-sm bg-accent" />
-          <span className="font-bold text-xs tracking-wider text-fg-muted uppercase">Mobile Shop</span>
-        </div>
-        <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-raised border border-border text-fg-subtle font-semibold">
-          {isSeller ? 'POS' : isPartner ? 'ПАРТНЕР' : isCentralCashMode ? 'ОФИС' : 'РОЗНИЦА'}
-        </span>
+      <div className={`h-14 flex items-center border-b border-border shrink-0 ${
+        sidebarCollapsed ? 'justify-center px-2' : 'justify-between px-4'
+      }`}>
+        {sidebarCollapsed ? (
+          <button
+            type="button"
+            onClick={toggleSidebar}
+            title="Развернуть боковое меню"
+            aria-label="Развернуть боковое меню"
+            className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-raised hover:bg-surface border border-border text-accent transition-all active:scale-95 cursor-pointer shadow-2xs"
+          >
+            <PanelLeftOpen className="w-4 h-4 text-fg-muted hover:text-fg" />
+          </button>
+        ) : (
+          <>
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-2.5 h-2.5 rounded-sm bg-accent shrink-0" />
+              <span className="font-bold text-xs tracking-wider text-fg-muted uppercase truncate">Mobile Shop</span>
+              <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-raised border border-border text-fg-subtle font-semibold shrink-0">
+                {isSeller ? 'POS' : isPartner ? 'ПАРТНЕР' : isCentralCashMode ? 'ОФИС' : 'РОЗНИЦА'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={toggleSidebar}
+              title="Свернуть боковое меню"
+              aria-label="Свернуть боковое меню"
+              className="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-surface-raised text-fg-subtle hover:text-fg transition-colors cursor-pointer"
+            >
+              <PanelLeftClose className="w-4 h-4" />
+            </button>
+          </>
+        )}
       </div>
 
       {/* Admin Mode Switcher Card */}
       {isAdmin && (
-        <div className="px-2.5 pt-2.5 pb-1 shrink-0">
-          {isCentralCashMode ? (
+        <div className={`shrink-0 ${sidebarCollapsed ? 'p-2 flex justify-center' : 'px-2.5 pt-2.5 pb-1'}`}>
+          {sidebarCollapsed ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (isCentralCashMode) {
+                  setStoreSwitchModalOpen(true);
+                } else {
+                  triggerStoreTransition({
+                    storeName: 'Центральная касса (Главный офис)',
+                    storeId: 'all',
+                    isCentral: true,
+                  });
+                  setSelectedStoreId('all');
+                  setActivePage('FINANCE');
+                  navigate('/finance');
+                }
+              }}
+              title={isCentralCashMode ? 'Центральная касса (нажать для выбора магазина)' : `Магазин: ${activeRetailStore?.name || ''} (нажать для возврата в Центр)`}
+              className={`w-10 h-10 rounded-xl flex items-center justify-center border transition-all cursor-pointer ${
+                isCentralCashMode
+                  ? 'bg-accent/10 border-accent/30 text-accent hover:bg-accent/20'
+                  : 'bg-warning/15 border-warning/30 text-warning hover:bg-warning/25'
+              }`}
+            >
+              {isCentralCashMode ? <Landmark className="w-4 h-4" /> : <Store className="w-4 h-4" />}
+            </button>
+          ) : isCentralCashMode ? (
             <div
               onClick={() => {
                 triggerStoreTransition({
@@ -264,7 +328,7 @@ export const Sidebar: React.FC = () => {
               >
                 <Store className="w-3.5 h-3.5" />
                 <span>Продавать в магазине</span>
-                <ArrowRight className="w-3 h-3 ml-auto opacity-70" />
+                <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-70" />
               </button>
             </div>
           ) : (
@@ -313,91 +377,160 @@ export const Sidebar: React.FC = () => {
       )}
 
       {/* Nav Groups */}
-      <nav className="flex-1 overflow-y-auto scrollbar-none px-2.5 py-2 space-y-3">
+      <nav className={`flex-1 overflow-y-auto scrollbar-none py-2 space-y-2.5 ${sidebarCollapsed ? 'px-1.5' : 'px-2.5'}`}>
         {navGroups.map((group, gIdx) => {
           const visibleItems = group.items.filter(item => item.roles.includes(userRole));
           if (visibleItems.length === 0) return null;
+          const isCollapsed = Boolean(collapsedGroups[gIdx]);
 
           return (
             <div key={gIdx} className="space-y-0.5">
-              <span className="text-[10px] font-semibold text-fg-subtle tracking-wide px-2 uppercase block mb-1">
-                {group.title}
-              </span>
-              <div className="space-y-0.5">
-                {visibleItems.map(item => {
-                  const Icon = item.icon;
-                  const routePath = PAGE_ROUTES[item.id] || '/sale';
-                  const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
-                  const isNotif = item.id === 'NOTIFICATIONS';
+              {!sidebarCollapsed ? (
+                <button
+                  type="button"
+                  onClick={() => toggleGroup(gIdx)}
+                  className="w-full flex items-center justify-between px-2 py-1 text-[10px] font-bold text-fg-subtle tracking-wider uppercase hover:text-fg transition-colors select-none group"
+                >
+                  <span className="truncate group-hover:text-fg">{group.title}</span>
+                  <ChevronDown className={`w-3 h-3 text-fg-subtle transition-transform duration-200 shrink-0 ${isCollapsed ? '-rotate-90' : 'rotate-0'}`} />
+                </button>
+              ) : (
+                <div className="h-px bg-border/60 my-1 mx-2" />
+              )}
 
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => {
-                        setActivePage(item.id);
-                        navigate(routePath);
-                      }}
-                      className={`w-full flex items-center justify-between h-9 px-2.5 rounded-lg text-xs font-medium transition-colors ${
-                        isActive ? 'bg-accent/10 text-accent font-semibold' : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
-                      }`}
-                    >
-                      <div className="flex items-center gap-2.5 truncate">
-                        <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-accent' : 'text-fg-subtle'}`} />
-                        <span className="truncate">{item.label}</span>
-                      </div>
+              {(!isCollapsed || sidebarCollapsed) && (
+                <div className="space-y-0.5">
+                  {visibleItems.map(item => {
+                    const Icon = item.icon;
+                    const routePath = PAGE_ROUTES[item.id] || '/sale';
+                    const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
+                    const isNotif = item.id === 'NOTIFICATIONS';
 
-                      {isNotif && unreadNotifs > 0 && (
-                        <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-                          {unreadNotifs}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
+                    if (sidebarCollapsed) {
+                      return (
+                        <button
+                          key={item.id}
+                          onClick={() => {
+                            setActivePage(item.id);
+                            navigate(routePath);
+                          }}
+                          title={item.label}
+                          className={`w-10 h-10 mx-auto flex items-center justify-center rounded-xl transition-all relative cursor-pointer ${
+                            isActive
+                              ? 'bg-accent text-accent-fg shadow-xs font-bold'
+                              : 'text-fg-subtle hover:text-fg hover:bg-surface-raised'
+                          }`}
+                        >
+                          <Icon className="w-5 h-5 shrink-0" />
+                          {isNotif && unreadNotifs > 0 && (
+                            <span className="absolute top-1 right-1 w-2 h-2 rounded-full bg-danger ring-2 ring-surface" />
+                          )}
+                        </button>
+                      );
+                    }
+
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => {
+                          setActivePage(item.id);
+                          navigate(routePath);
+                        }}
+                        className={`w-full flex items-center justify-between h-9 px-2.5 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                          isActive ? 'bg-accent/10 text-accent font-semibold' : 'text-fg-muted hover:text-fg hover:bg-surface-raised'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2.5 truncate">
+                          <Icon className={`w-4 h-4 shrink-0 ${isActive ? 'text-accent' : 'text-fg-subtle'}`} />
+                          <span className="truncate">{item.label}</span>
+                        </div>
+
+                        {isNotif && unreadNotifs > 0 && (
+                          <span className="flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
+                            {unreadNotifs}
+                          </span>
+                        )}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           );
         })}
       </nav>
 
       {/* User profile & Store info footer */}
-      <div className="p-2.5 border-t border-border flex items-center gap-2.5 shrink-0">
-        <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shrink-0">
-          {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'US'}
-        </div>
-        <div className="min-w-0 flex-1">
-          <p className="text-xs font-semibold text-fg-muted truncate">{currentUser?.name || 'Пользователь'}</p>
-          {isSeller ? (
-            <p className="text-[10px] text-accent truncate flex items-center gap-1" title={sellerStoreName}>
-              <Store className="w-2.5 h-2.5 shrink-0" />
-              <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
-            </p>
-          ) : (
-            <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
-              {isCentralCashMode ? (
-                <>
-                  <Landmark className="w-2.5 h-2.5 text-accent shrink-0" />
-                  <span>Центральная касса</span>
-                </>
-              ) : (
-                <>
-                  <Store className="w-2.5 h-2.5 text-warning shrink-0" />
-                  <span>{activeRetailStore?.name || 'Магазин'}</span>
-                </>
-              )}
-            </p>
-          )}
-        </div>
-      </div>
+      <div className={`border-t border-border bg-surface shrink-0 ${sidebarCollapsed ? 'p-2 flex flex-col items-center gap-2' : 'p-2.5 space-y-2'}`}>
+        {sidebarCollapsed ? (
+          <>
+            <div
+              title={`${currentUser?.name || ''} (${currentUser?.role || ''})`}
+              className="w-10 h-10 rounded-xl bg-accent/10 border border-accent/25 text-accent font-bold text-xs flex items-center justify-center cursor-default"
+            >
+              {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'MS'}
+            </div>
+            <button
+              type="button"
+              onClick={logout}
+              title="Выйти из аккаунта"
+              className="w-10 h-10 flex items-center justify-center rounded-xl bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 transition-colors cursor-pointer"
+            >
+              <LogOut className="w-4 h-4" />
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="flex items-center gap-2.5 px-1 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shrink-0">
+                {currentUser?.name ? currentUser.name.substring(0, 2).toUpperCase() : 'US'}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs font-semibold text-fg-muted truncate">{currentUser?.name || 'Пользователь'}</p>
+                {isSeller ? (
+                  <p className="text-[10px] text-accent truncate flex items-center gap-1" title={sellerStoreName}>
+                    <Store className="w-2.5 h-2.5 shrink-0" />
+                    <span className="truncate">{sellerStoreName || 'Магазин не привязан'}</span>
+                  </p>
+                ) : (
+                  <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
+                    {isCentralCashMode ? (
+                      <>
+                        <Landmark className="w-2.5 h-2.5 text-accent shrink-0" />
+                        <span>Центральная касса</span>
+                      </>
+                    ) : (
+                      <>
+                        <Store className="w-2.5 h-2.5 text-warning shrink-0" />
+                        <span>{activeRetailStore?.name || 'Магазин'}</span>
+                      </>
+                    )}
+                  </p>
+                )}
+              </div>
+            </div>
 
-      <div className="p-2.5 pt-0 shrink-0">
-        <button
-          onClick={logout}
-          className="w-full flex items-center justify-center gap-2 rounded-lg bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/30 text-fg-muted hover:text-danger h-9 text-xs font-semibold transition-colors"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Выход</span>
-        </button>
+            <div className="flex items-center gap-1.5 pt-0.5">
+              <button
+                type="button"
+                onClick={logout}
+                className="flex-1 flex items-center justify-center gap-1.5 h-8 rounded-lg bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 text-xs font-semibold transition-colors cursor-pointer"
+              >
+                <LogOut className="w-3.5 h-3.5" />
+                <span>Выход</span>
+              </button>
+              <button
+                type="button"
+                onClick={toggleSidebar}
+                title="Свернуть боковое меню"
+                aria-label="Свернуть боковое меню"
+                className="w-8 h-8 flex items-center justify-center rounded-lg bg-surface-raised hover:bg-surface text-fg-subtle hover:text-fg border border-border transition-colors cursor-pointer shrink-0"
+              >
+                <PanelLeftClose className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          </>
+        )}
       </div>
     </aside>
   );

@@ -508,6 +508,14 @@ export const ExpensesPage: React.FC = () => {
     setSearchQuery('');
   };
 
+  if (isSeller) {
+    return (
+      <div className="flex-1 flex flex-col bg-bg">
+        <RestrictedAccess message="Раздел расходов доступен только администраторам и партнёрам." />
+      </div>
+    );
+  }
+
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
