@@ -17,6 +17,8 @@ const db = vi.hoisted(() => {
     bonusDistributionLog: model(),
     owner: model(),
     auditLog: model(),
+    supplierBonus: model(),
+    $queryRaw: vi.fn(),
   };
 });
 
@@ -55,100 +57,38 @@ describe('BonusesService', () => {
     });
   });
 
-  describe('distributeBonusProfit', () => {
-    it('requires periodName and non-empty allocations', async () => {
-      await expect(
-        BonusesService.distributeBonusProfit({
-          periodName: '',
-          allocations: [{ ownerId: 'o1', amountUsd: 100 }],
-          userId: 'admin-1',
-        })
-      ).rejects.toThrow('Укажите название отчётного периода');
-
-      await expect(
-        BonusesService.distributeBonusProfit({
-          periodName: '3 квартал 2026',
-          allocations: [],
-          userId: 'admin-1',
-        })
-      ).rejects.toThrow('Укажите хотя бы одного партнёра');
+  describe('bonuses are not owner income', () => {
+    it('has no way to distribute the bonus pool to owners', () => {
+      expect('distributeBonusProfit' in BonusesService).toBe(false);
     });
+  });
 
-    it('rejects if distribution amount exceeds total pending pool', async () => {
-      db.bonusPoolEntry.findMany.mockResolvedValue([
-        { id: 'entry-1', profitUsd: 100, status: 'PENDING' },
-      ]);
+  describe('quarterSummary', () => {
+    it('counts the quarter since the last close: cash bonuses and sold bonus phones', async () => {
+      const lastClose = new Date('2026-07-01T00:00:00Z');
+      db.bonusDistributionLog.findFirst.mockResolvedValue({ createdAt: lastClose });
+      db.supplierBonus.findMany
+        .mockResolvedValueOnce([{ amountUsd: 200, exchangeRate: 10 }, { amountUsd: 50.5, exchangeRate: 11 }])
+        .mockResolvedValueOnce([{ id: 'fd-1' }]);
+      db.bonusPoolEntry.findMany.mockResolvedValue([{ profitUsd: 150, profitTjs: 1500 }]);
 
-      await expect(
-        BonusesService.distributeBonusProfit({
-          periodName: '3 квартал 2026',
-          allocations: [{ ownerId: 'o1', amountUsd: 150 }],
-          userId: 'admin-1',
-        })
-      ).rejects.toThrow('превышает остаток бонусного пула');
-    });
+      const quarter = await BonusesService.quarterSummary();
 
-    it('distributes bonus profit to owners and updates entries to DISTRIBUTED', async () => {
-      db.bonusPoolEntry.findMany.mockResolvedValue([
-        { id: 'e1', profitUsd: 100, status: 'PENDING' },
-        { id: 'e2', profitUsd: 100, status: 'PENDING' },
-      ]);
-      db.owner.findMany.mockResolvedValue([
-        { id: 'o1', name: 'Партнёр 1', availableProfitUsd: 50 },
-        { id: 'o2', name: 'Партнёр 2', availableProfitUsd: 50 },
-      ]);
-      db.bonusDistributionLog.create.mockResolvedValue({ id: 'log-1' });
-      db.bonusPoolEntry.updateMany.mockResolvedValue({ count: 2 });
-
-      await BonusesService.distributeBonusProfit({
-        periodName: '3 квартал 2026',
-        allocations: [
-          { ownerId: 'o1', amountUsd: 120 },
-          { ownerId: 'o2', amountUsd: 80 },
-        ],
-        note: 'Квартальное распределение',
-        userId: 'admin-1',
-      });
-
-      // Verify owner available profit updated
-      expect(db.owner.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'o1' },
-          data: {
-            totalAccruedProfitUsd: { increment: 120 },
-            availableProfitUsd: { increment: 120 },
-          },
-        })
-      );
-      expect(db.owner.update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: 'o2' },
-          data: {
-            totalAccruedProfitUsd: { increment: 80 },
-            availableProfitUsd: { increment: 80 },
-          },
-        })
-      );
-
-      // Verify entries updated to DISTRIBUTED
-      expect(db.bonusPoolEntry.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: { id: { in: ['e1', 'e2'] }, status: 'PENDING' },
-          data: expect.objectContaining({
-            status: 'DISTRIBUTED',
-            distributionId: 'log-1',
-          }),
-        })
-      );
+      expect(db.supplierBonus.findMany).toHaveBeenCalledWith(expect.objectContaining({ where: { bonusType: 'CASH_DISCOUNT', createdAt: { gt: lastClose } } }));
+      expect(quarter).toMatchObject({ since: lastClose.toISOString(), cashBonusesCount: 2, bonusDevicesReceived: 1, bonusDevicesSold: 1 });
+      expect(Number(quarter.cashBonusesUsd)).toBe(250.5);
+      expect(Number(quarter.cashBonusesTjs)).toBe(2555.5);
+      expect(Number(quarter.bonusDeviceProfitUsd)).toBe(150);
     });
   });
 
   describe('annulBonusPool', () => {
     it('marks all pending entries as ANNULLED and records log', async () => {
       db.bonusPoolEntry.findMany.mockResolvedValue([
-        { id: 'e1', profitUsd: 100, status: 'PENDING' },
-        { id: 'e2', profitUsd: 150, status: 'PENDING' },
+        { id: 'e1', profitUsd: 100, profitTjs: 1000, status: 'PENDING' },
+        { id: 'e2', profitUsd: 150, profitTjs: 1500, status: 'PENDING' },
       ]);
+      db.supplierBonus.findMany.mockResolvedValue([]);
       db.bonusDistributionLog.create.mockResolvedValue({ id: 'log-annul' });
 
       await BonusesService.annulBonusPool({
@@ -174,6 +114,18 @@ describe('BonusesService', () => {
           }),
         })
       );
+      // Zeroed, not credited to anyone.
+      expect(db.owner.update).not.toHaveBeenCalled();
+      expect(db.owner.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses to close an empty quarter', async () => {
+      db.bonusPoolEntry.findMany.mockResolvedValue([]);
+      db.supplierBonus.findMany.mockResolvedValue([]);
+
+      await expect(BonusesService.annulBonusPool({ periodName: 'Пусто', userId: 'admin-1' }))
+        .rejects.toThrow('За этот квартал бонусов нет');
+      expect(db.bonusDistributionLog.create).not.toHaveBeenCalled();
     });
   });
 });

@@ -16,17 +16,11 @@ import {
   Receipt,
   Store as StoreIcon,
   Sparkles,
-  CheckCircle2,
   ChevronRight,
   ChevronDown,
   Layers,
   Info,
-  X,
-  AlertTriangle,
-  Users,
-  Check,
-  RotateCcw,
-  Loader2
+  X
 } from 'lucide-react';
 import { MonthPicker } from '../ui/MonthPicker';
 import { StatCard } from '../ui/StatCard';
@@ -34,7 +28,6 @@ import { Badge } from '../ui/Badge';
 import { useReportsSummary, usd, tjs, monthLabel } from './reportTypes';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { useDataRefreshRevision } from '../../hooks/useDataRefreshRevision';
-import { refreshAfterMutation } from '../../utils/refreshAfterMutation';
 import { BonusPoolEntry, BonusDistributionLog } from '../../types';
 
 interface BonusesFinancePanelProps {
@@ -73,13 +66,11 @@ interface BonusPoolResponse {
 
 export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month, onMonthChange }) => {
   const {
-    currentUser,
     supplierBonuses,
     devices,
     users,
     todayRate,
-    owners,
-  } = useAppFields('currentUser', 'supplierBonuses', 'devices', 'users', 'todayRate', 'owners');
+  } = useAppFields('supplierBonuses', 'devices', 'users', 'todayRate');
 
   const namesLookup = useMemo(() => buildNameLookup(users), [users]);
   const rate = todayRate?.rate || FALLBACK_EXCHANGE_RATE;
@@ -95,25 +86,12 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
   const [selectedStockDevice, setSelectedStockDevice] = useState<Device | null>(null);
 
   const dataRefreshRevision = useDataRefreshRevision();
-  const isAdmin = currentUser?.role === 'ADMIN';
 
-  // Quarterly Bonus Pool state
+  // Bonus pool of the current quarter (read-only here: the quarter is closed on the Bonuses page)
   const [bonusPool, setBonusPool] = useState<BonusPoolResponse | null>(null);
   const [poolLoading, setPoolLoading] = useState(false);
-  const [poolActionLoading, setPoolActionLoading] = useState(false);
-  const [poolBanner, setPoolBanner] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-
-  const [isDistributeModalOpen, setIsDistributeModalOpen] = useState(false);
-  const [isAnnulModalOpen, setIsAnnulModalOpen] = useState(false);
   const [poolDetailsTab, setPoolDetailsTab] = useState<'ENTRIES' | 'HISTORY'>('ENTRIES');
   const [isPoolExpanded, setIsPoolExpanded] = useState(false);
-
-  const [distributePeriod, setDistributePeriod] = useState('');
-  const [distributeNote, setDistributeNote] = useState('');
-  const [allocations, setAllocations] = useState<{ ownerId: string; amountUsd: number }[]>([]);
-
-  const [annulPeriod, setAnnulPeriod] = useState('');
-  const [annulNote, setAnnulNote] = useState('');
 
   const fetchBonusPool = useCallback(async () => {
     setPoolLoading(true);
@@ -131,115 +109,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
     fetchBonusPool();
   }, [fetchBonusPool, dataRefreshRevision]);
 
-  const handleOpenDistribute = () => {
-    const quarter = Math.ceil((new Date().getMonth() + 1) / 3);
-    setDistributePeriod(`${quarter} квартал ${new Date().getFullYear()}`);
-    setDistributeNote('');
-    const poolUsd = Number(bonusPool?.pendingProfitUsd) || 0;
-    setAllocations(owners.map((o) => ({
-      ownerId: o.id,
-      amountUsd: +((poolUsd * (o.profitSharePercent || 0)) / 100).toFixed(2),
-    })));
-    setIsDistributeModalOpen(true);
-  };
-
-  const handlePresetShares = () => {
-    const poolUsd = Number(bonusPool?.pendingProfitUsd) || 0;
-    setAllocations(owners.map((o) => ({
-      ownerId: o.id,
-      amountUsd: +((poolUsd * (o.profitSharePercent || 0)) / 100).toFixed(2),
-    })));
-  };
-
-  const handlePresetEqual = () => {
-    const poolUsd = Number(bonusPool?.pendingProfitUsd) || 0;
-    const each = owners.length > 0 ? +(poolUsd / owners.length).toFixed(2) : 0;
-    setAllocations(owners.map((o) => ({
-      ownerId: o.id,
-      amountUsd: each,
-    })));
-  };
-
-  const handlePresetZero = () => {
-    setAllocations(owners.map((o) => ({
-      ownerId: o.id,
-      amountUsd: 0,
-    })));
-  };
-
-  const handleUpdateAllocation = (ownerId: string, val: number) => {
-    setAllocations((prev) => prev.map((a) => (a.ownerId === ownerId ? { ...a, amountUsd: val } : a)));
-  };
-
-  const totalAllocatedUsd = allocations.reduce((sum, a) => sum + (Number(a.amountUsd) || 0), 0);
   const poolPendingUsd = Number(bonusPool?.pendingProfitUsd) || 0;
-  const remainingPoolUsd = +(poolPendingUsd - totalAllocatedUsd).toFixed(2);
-
-  const handleConfirmDistribute = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (poolActionLoading) return;
-    setPoolActionLoading(true);
-    try {
-      await apiClient('/bonuses/distribute-profit', {
-        method: 'POST',
-        body: JSON.stringify({
-          periodName: distributePeriod.trim(),
-          allocations,
-          note: distributeNote.trim() || undefined,
-        }),
-      });
-      setIsDistributeModalOpen(false);
-      setPoolBanner({
-        type: 'success',
-        text: `Прибыль успешно распределена за "${distributePeriod}"! Балансы владельцев пополнены.`,
-      });
-      await fetchBonusPool();
-      await refreshAfterMutation([]);
-    } catch (err: any) {
-      setPoolBanner({
-        type: 'error',
-        text: err.message || 'Ошибка распределения бонусной прибыли',
-      });
-    } finally {
-      setPoolActionLoading(false);
-    }
-  };
-
-  const handleOpenAnnul = () => {
-    const quarter = Math.ceil((new Date().getMonth() + 1) / 3);
-    setAnnulPeriod(`Обнуление пула (${quarter} квартал ${new Date().getFullYear()})`);
-    setAnnulNote('Обнуление остатка пула после квартального отчёта');
-    setIsAnnulModalOpen(true);
-  };
-
-  const handleConfirmAnnul = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (poolActionLoading) return;
-    setPoolActionLoading(true);
-    try {
-      await apiClient('/bonuses/annul-pool', {
-        method: 'POST',
-        body: JSON.stringify({
-          periodName: annulPeriod.trim() || undefined,
-          note: annulNote.trim() || undefined,
-        }),
-      });
-      setIsAnnulModalOpen(false);
-      setPoolBanner({
-        type: 'success',
-        text: 'Бонусный пул успешно обнулен после квартального отчёта.',
-      });
-      await fetchBonusPool();
-      await refreshAfterMutation([]);
-    } catch (err: any) {
-      setPoolBanner({
-        type: 'error',
-        text: err.message || 'Ошибка обнуления бонусного пула',
-      });
-    } finally {
-      setPoolActionLoading(false);
-    }
-  };
 
   // Load itemized sales for this month to isolate sold bonus devices
   const [monthSales, setMonthSales] = useState<Sale[]>([]);
@@ -448,8 +318,8 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
               <Award className="w-3.5 h-3.5 text-accent" />
               <span>Финансовые итоги по бонусам за {periodLabel}</span>
             </h3>
-            <Badge tone="accent">
-              +100% чистая прибыль
+            <Badge tone="neutral">
+              Не входит в прибыль
             </Badge>
           </div>
 
@@ -458,7 +328,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
             <div className="rounded-xl border border-accent/40 bg-accent/5 p-3.5 flex flex-col justify-between">
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Всего доход от бонусов</span>
+                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Всего бонусов</span>
                   <Sparkles className="w-4 h-4 text-accent shrink-0" />
                 </div>
                 <div className="text-xl font-bold font-mono tracking-tight text-accent">
@@ -469,7 +339,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                 </div>
               </div>
               <div className="text-[11px] text-fg-subtle mt-2 pt-2 border-t border-accent/20">
-                Денежные скидки + 100% прибыль с подарков
+                Только для отчёта: не зачисляются на счета и не выплачиваются
               </div>
             </div>
 
@@ -502,7 +372,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
           </div>
         </div>
 
-        {/* QUARTERLY BONUS PROFIT POOL (РУЧНОЕ РАСПРЕДЕЛЕНИЕ И ОБНУЛЕНИЕ) */}
+        {/* Bonus pool of the current quarter (read-only; closed on the Bonuses page) */}
         <div className="rounded-2xl border-2 border-emerald-500/30 bg-linear-to-br from-emerald-500/10 via-surface to-surface overflow-hidden shadow-xs">
           {/* Header */}
           <div className="p-4 sm:p-5 border-b border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -510,58 +380,32 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
               <div className="flex items-center gap-2 flex-wrap">
                 <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-mono">
                   <Gift className="w-3.5 h-3.5" />
-                  Квартальный отчёт · Ручное управление
+                  Квартал бонусов
                 </span>
                 {poolPendingUsd > 0 ? (
-                  <Badge tone="success">В ожидании распределения</Badge>
+                  <Badge tone="success">Ждёт закрытия квартала</Badge>
                 ) : (
-                  <Badge tone="neutral">Пул пуст / закрыт</Badge>
+                  <Badge tone="neutral">Пул пуст</Badge>
                 )}
               </div>
               <h3 className="text-base sm:text-lg font-bold text-fg flex items-center gap-2">
-                Квартальный пул бонусной прибыли
+                Бонусные телефоны за квартал
               </h3>
               <p className="text-xs text-fg-subtle max-w-2xl leading-relaxed">
-                Прибыль от проданных бонусных товаров накапливается отдельно и не начисляется владельцам автоматически. Администратор может распределить её вручную в квартальном отчёте и затем обнулить остаток.
+                Прибыль от проданных бонусных телефонов учитывается отдельно: она ни на какой счёт не зачисляется и владельцам не выплачивается. После квартального отчёта администратор обнуляет её на странице «Бонусы».
               </p>
             </div>
 
-            {/* Admin Buttons */}
-            {isAdmin ? (
-              <div className="flex items-center gap-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={handleOpenDistribute}
-                  disabled={poolPendingUsd <= 0}
-                  className="px-3.5 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-40 disabled:hover:bg-emerald-600 text-white text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:cursor-not-allowed"
-                >
-                  <Users className="w-4 h-4" />
-                  <span>Распределить прибыль</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={handleOpenAnnul}
-                  disabled={poolPendingUsd <= 0}
-                  className="px-3 py-2 rounded-xl bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/40 text-fg-subtle hover:text-danger disabled:opacity-40 text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer disabled:cursor-not-allowed"
-                  title="Обнулить остаток пула после квартального отчёта"
-                >
-                  <RotateCcw className="w-3.5 h-3.5" />
-                  <span>Обнулить пул</span>
-                </button>
-              </div>
-            ) : (
-              <div className="text-xs text-fg-subtle italic bg-surface-raised/50 border border-border px-3 py-1.5 rounded-lg">
-                Ручное разделение и обнуление доступно администратору
-              </div>
-            )}
+            <div className="text-xs text-fg-subtle bg-surface-raised/50 border border-border px-3 py-1.5 rounded-lg shrink-0">
+              Закрытие квартала — на странице «Бонусы»
+            </div>
           </div>
 
           {/* Metric cards */}
           <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-raised/30">
             <div className="p-3.5 rounded-xl bg-surface border border-emerald-500/20 shadow-2xs">
               <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-1">
-                Нераспределённая прибыль в пуле
+                Прибыль бонусных телефонов
               </span>
               <div className="text-2xl font-black font-mono text-emerald-400">
                 {usd(poolPendingUsd)}
@@ -596,27 +440,6 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
             </div>
           </div>
 
-          {/* Action result banner */}
-          {poolBanner && (
-            <div className={`mx-4 mt-3 p-3 rounded-xl border flex items-center justify-between text-xs ${
-              poolBanner.type === 'success'
-                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
-                : 'bg-danger/10 border-danger/30 text-danger'
-            }`}>
-              <div className="flex items-center gap-2">
-                {poolBanner.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertTriangle className="w-4 h-4 shrink-0" />}
-                <span>{poolBanner.text}</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPoolBanner(null)}
-                className="p-1 hover:opacity-80"
-              >
-                <X className="w-3.5 h-3.5" />
-              </button>
-            </div>
-          )}
-
           {/* Collapsible Details Drawer: Entries & History */}
           <div className="border-t border-border/80">
             <div className="px-4 py-2 bg-surface flex items-center justify-between">
@@ -641,7 +464,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                       : 'text-fg-subtle hover:text-fg'
                   }`}
                 >
-                  История распределений ({bonusPool?.history?.length || 0})
+                  История закрытий ({bonusPool?.history?.length || 0})
                 </button>
               </div>
 
@@ -694,7 +517,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                 ) : (
                   !bonusPool?.history || bonusPool.history.length === 0 ? (
                     <div className="text-center py-6 text-xs text-fg-subtle">
-                      История распределений и обнулений пула пуста.
+                      Кварталы бонусов ещё не закрывались.
                     </div>
                   ) : (
                     <div className="space-y-2.5">
@@ -706,7 +529,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
                                 <Badge tone={isDist ? 'success' : 'neutral'}>
-                                  {isDist ? 'Распределение' : 'Обнуление'}
+                                  {isDist ? 'Распределение (до правила)' : 'Закрытие квартала'}
                                 </Badge>
                                 <span className="font-bold text-fg">{log.periodName}</span>
                                 <span className="text-[11px] text-fg-subtle">
@@ -755,8 +578,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
               Раздельный учёт бонусных доходов от поставщиков
             </p>
             <p className="text-fg-subtle text-[11px] leading-relaxed">
-              <strong>Денежные бонусы</strong> зачисляются напрямую в прибыль компании.
-              <strong> Бонусные телефоны</strong> поступают с нулевой себестоимостью ($0), поэтому 100% выручки при их продаже признаются чистой прибылью.
+              Бонусы не являются доходом: <strong>денежные бонусы</strong> и прибыль от <strong>бонусных телефонов</strong> ($0 себестоимость) не входят в прибыль, не зачисляются ни на какой счёт и не выплачиваются. Они показаны здесь для отчёта и обнуляются при закрытии квартала на странице «Бонусы».
             </p>
           </div>
         </div>
@@ -1323,261 +1145,6 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
         </div>
       )}
 
-      {/* MODAL: Distribute Bonus Profit */}
-      {isDistributeModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs font-mono">
-          <div className="w-full max-w-lg rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4 max-h-[90vh] flex flex-col">
-            <div className="flex items-center justify-between pb-3 border-b border-border shrink-0">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-emerald-500/15 text-emerald-400 border border-emerald-500/30">
-                  <Gift className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold">
-                    Распределение бонусной прибыли
-                  </h4>
-                  <p className="text-[11px] text-fg-subtle">
-                    Ручное разделение пула между партнёрами в квартальном отчёте
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsDistributeModalOpen(false)}
-                className="p-1.5 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmDistribute} className="space-y-4 overflow-y-auto flex-1 pr-1 text-xs">
-              <div>
-                <label className="block text-fg-subtle mb-1 font-medium">Отчётный период</label>
-                <input
-                  type="text"
-                  required
-                  value={distributePeriod}
-                  onChange={(e) => setDistributePeriod(e.target.value)}
-                  placeholder="Например: 3 квартал 2026"
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              {/* Presets */}
-              <div className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-surface-raised border border-border">
-                <span className="text-[11px] text-fg-subtle font-medium">Быстрое заполнение:</span>
-                <div className="flex items-center gap-1.5">
-                  <button
-                    type="button"
-                    onClick={handlePresetShares}
-                    className="px-2 py-1 rounded-md bg-surface hover:bg-surface-raised border border-border text-[11px] text-fg-muted font-medium transition-colors"
-                  >
-                    По долям (%)
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePresetEqual}
-                    className="px-2 py-1 rounded-md bg-surface hover:bg-surface-raised border border-border text-[11px] text-fg-muted font-medium transition-colors"
-                  >
-                    Поровну
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handlePresetZero}
-                    className="px-2 py-1 rounded-md bg-surface hover:bg-surface-raised border border-border text-[11px] text-fg-subtle hover:text-fg font-medium transition-colors"
-                  >
-                    Очистить
-                  </button>
-                </div>
-              </div>
-
-              {/* Owners allocation list */}
-              <div className="space-y-2">
-                <label className="block text-fg-subtle font-medium">
-                  Начисление партнёрам (в $ USD):
-                </label>
-                {owners.map((owner) => {
-                  const currentAlloc = allocations.find((a) => a.ownerId === owner.id)?.amountUsd ?? 0;
-                  const newBalance = +(Number(owner.availableProfitUsd || 0) + Number(currentAlloc || 0)).toFixed(2);
-                  return (
-                    <div key={owner.id} className="p-3 rounded-xl border border-border bg-surface-raised/40 flex items-center justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-bold text-fg">{owner.name}</span>
-                          <span className="text-[10px] text-fg-subtle">({owner.profitSharePercent}%)</span>
-                        </div>
-                        <div className="text-[11px] text-fg-subtle mt-0.5">
-                          Текущая прибыль: ${Number(owner.availableProfitUsd || 0).toFixed(2)} → <strong className="text-emerald-400">${newBalance}</strong>
-                        </div>
-                      </div>
-
-                      <div className="flex items-center gap-1.5 shrink-0">
-                        <span className="text-fg-subtle font-mono">$</span>
-                        <input
-                          type="number"
-                          step="0.01"
-                          min="0"
-                          value={currentAlloc || ''}
-                          onChange={(e) => handleUpdateAllocation(owner.id, parseFloat(e.target.value) || 0)}
-                          placeholder="0"
-                          className="w-24 rounded-lg bg-surface border border-border px-2.5 py-1 text-xs text-right font-mono font-bold text-fg focus:border-emerald-500 focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Pool balance check */}
-              <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between font-mono">
-                <div>
-                  <span className="text-fg-subtle block text-[10px] uppercase">Всего в пуле:</span>
-                  <span className="font-bold text-fg">${poolPendingUsd.toFixed(2)}</span>
-                </div>
-                <div className="text-center">
-                  <span className="text-fg-subtle block text-[10px] uppercase">Распределено:</span>
-                  <span className={`font-bold ${totalAllocatedUsd > poolPendingUsd ? 'text-danger' : 'text-emerald-400'}`}>
-                    ${totalAllocatedUsd.toFixed(2)}
-                  </span>
-                </div>
-                <div className="text-right">
-                  <span className="text-fg-subtle block text-[10px] uppercase">Остаток в пуле:</span>
-                  <span className={`font-bold ${remainingPoolUsd < 0 ? 'text-danger' : 'text-fg'}`}>
-                    ${remainingPoolUsd.toFixed(2)}
-                  </span>
-                </div>
-              </div>
-
-              {totalAllocatedUsd > poolPendingUsd && (
-                <div className="p-2 rounded-lg bg-danger/10 border border-danger/30 text-danger text-[11px] flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Сумма распределения превышает остаток пула (${poolPendingUsd.toFixed(2)})</span>
-                </div>
-              )}
-
-              {totalAllocatedUsd > 0 && remainingPoolUsd > 0 && (
-                <div className="p-2 rounded-lg bg-warning/10 border border-warning/30 text-warning text-[11px] flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Нераспределённый остаток ${remainingPoolUsd.toFixed(2)} будет списан из пула</span>
-                </div>
-              )}
-
-              <div>
-                <label className="block text-fg-subtle mb-1 font-medium">Примечание (необязательно)</label>
-                <input
-                  type="text"
-                  value={distributeNote}
-                  onChange={(e) => setDistributeNote(e.target.value)}
-                  placeholder="Комментарий к начислению прибыли..."
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg focus:border-emerald-500 focus:outline-none"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setIsDistributeModalOpen(false)}
-                  className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg-subtle hover:text-fg transition-colors"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={poolActionLoading || totalAllocatedUsd <= 0 || totalAllocatedUsd > poolPendingUsd}
-                  className="flex-1 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-xs font-bold text-white shadow-xs transition-colors flex items-center justify-center gap-1.5"
-                >
-                  {poolActionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Check className="w-3.5 h-3.5" />}
-                  <span>{poolActionLoading ? 'Сохранение…' : 'Подтвердить распределение'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Annul Bonus Pool */}
-      {isAnnulModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-xs font-mono">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center gap-2">
-                <div className="p-2 rounded-lg bg-danger/15 text-danger border border-danger/30">
-                  <RotateCcw className="w-5 h-5" />
-                </div>
-                <div>
-                  <h4 className="text-sm font-bold">
-                    Обнуление бонусного пула
-                  </h4>
-                  <p className="text-[11px] text-fg-subtle">
-                    Аннулирование остатка после квартального отчёта
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setIsAnnulModalOpen(false)}
-                className="p-1.5 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleConfirmAnnul} className="space-y-4 text-xs">
-              <div className="p-3.5 rounded-xl bg-danger/10 border border-danger/25 space-y-2">
-                <div className="flex items-center gap-2 text-danger font-semibold">
-                  <AlertTriangle className="w-4 h-4 shrink-0" />
-                  <span>Внимание: обнуление бонусного пула</span>
-                </div>
-                <p className="text-[11px] text-fg-subtle leading-relaxed">
-                  Будет списан нераспределённый остаток пула в размере <strong className="text-fg font-mono">${poolPendingUsd.toFixed(2)}</strong> ({bonusPool?.pendingCount || 0} устройств).
-                  Все связанные устройства перейдут в статус <em>АННУЛИРОВАНО</em>, а баланс пула станет <strong className="text-fg font-mono">$0.00</strong>.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1 font-medium">Отчётный период / название</label>
-                <input
-                  type="text"
-                  required
-                  value={annulPeriod}
-                  onChange={(e) => setAnnulPeriod(e.target.value)}
-                  placeholder="Закрытие 3 квартала 2026"
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg focus:border-danger focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1 font-medium">Причина / комментарий</label>
-                <input
-                  type="text"
-                  value={annulNote}
-                  onChange={(e) => setAnnulNote(e.target.value)}
-                  placeholder="Обнуление пула после квартального отчёта..."
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg focus:border-danger focus:outline-none"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2">
-                <button
-                  type="button"
-                  onClick={() => setIsAnnulModalOpen(false)}
-                  className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg-subtle hover:text-fg transition-colors"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={poolActionLoading || poolPendingUsd <= 0}
-                  className="flex-1 py-2 rounded-xl bg-danger hover:bg-danger/90 disabled:opacity-50 text-xs font-bold text-white shadow-xs transition-colors flex items-center justify-center gap-1.5"
-                >
-                  {poolActionLoading ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RotateCcw className="w-3.5 h-3.5" />}
-                  <span>{poolActionLoading ? 'Обнуление…' : 'Обнулить пул'}</span>
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

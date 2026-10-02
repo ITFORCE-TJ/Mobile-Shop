@@ -73,28 +73,6 @@ export function registerOwnerRoutes(app: Express) {
     }
   });
 
-  app.post('/api/owners/:id/payout', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const { amountUsd, source, note } = req.body ?? {};
-      const owner = await OwnersService.payout(req.params.id, amountUsd, source ?? 'Главный счет', note, req.user!.userId);
-      RealtimeSyncGateway.broadcast('OWNER_TX', { ownerId: owner.id });
-      res.json(owner);
-    } catch (error) {
-      next(error);
-    }
-  });
-
-  app.post('/api/owners/:id/reinvest', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
-    try {
-      const { amountUsd, destination, note } = req.body ?? {};
-      const owner = await OwnersService.reinvest(req.params.id, amountUsd, note, req.user!.userId, destination);
-      RealtimeSyncGateway.broadcast('OWNER_TX', { ownerId: owner.id });
-      res.json(owner);
-    } catch (error) {
-      next(error);
-    }
-  });
-
   // Partner shares per store: everyone with finance access can read them, only the admin sets them.
   app.get('/api/store-profit-shares', authenticateJwt, requireRoles('ADMIN'), async (_req, res, next) => {
     try {

@@ -88,21 +88,35 @@ try {
   const balances = async () => (await prisma.owner.findMany({ orderBy: { id: 'asc' } })).map(o => o.availableProfitUsd);
   await prisma.owner.updateMany({ data: { availableProfitUsd: D(100), totalAccruedProfitUsd: D(100) } });
   await shares(60);
+  // A new cash bonus is nobody's income: owner balances do not move.
   const bonus = await SuppliersService.createBonus({ supplierId: 'sup-dubai', bonusType: 'CASH_DISCOUNT', amountUsd: D(100), createdByUserId: 'user-admin' });
-  assert.deepEqual(await balances(), [160, 140]);
-  await shares(50);
+  assert.deepEqual(await balances(), [100, 100]);
   await SuppliersService.deleteBonus(bonus.id, 'user-admin');
   assert.deepEqual(await balances(), [100, 100]);
-  pass('bonus reversal uses original 60/40 amounts after shares change');
+  pass('new cash bonus is not accrued to owners; deleting it moves nothing');
+  // A bonus booked before that rule still carries its 60/40 owner accrual.
+  const legacyBonus = async () => {
+    const created = await SuppliersService.createBonus({ supplierId: 'sup-dubai', bonusType: 'CASH_DISCOUNT', amountUsd: D(100), createdByUserId: 'user-admin' });
+    await prisma.supplierBonus.update({ where: { id: created.id }, data: { ownerProfitAllocations: [{ ownerId: 'owner-admin', amountUsd: 60 }, { ownerId: 'owner-partner', amountUsd: 40 }] } });
+    await prisma.owner.update({ where: { id: 'owner-admin' }, data: { availableProfitUsd: { increment: 60 }, totalAccruedProfitUsd: { increment: 60 } } });
+    await prisma.owner.update({ where: { id: 'owner-partner' }, data: { availableProfitUsd: { increment: 40 }, totalAccruedProfitUsd: { increment: 40 } } });
+    return created;
+  };
+  const legacyCash = await legacyBonus();
+  assert.deepEqual(await balances(), [160, 140]);
+  await shares(50);
+  await SuppliersService.deleteBonus(legacyCash.id, 'user-admin');
+  assert.deepEqual(await balances(), [100, 100]);
+  pass('legacy bonus deletion reverses its original 60/40 accrual after shares change');
   await shares(60);
-  const editedBonus = await SuppliersService.createBonus({ supplierId: 'sup-dubai', bonusType: 'CASH_DISCOUNT', amountUsd: D(100), createdByUserId: 'user-admin' });
+  const editedBonus = await legacyBonus();
   await shares(50);
   await SuppliersService.updateBonus(editedBonus.id, { amountUsd: D(80), actorUserId: 'user-admin' });
-  assert.deepEqual(await balances(), [140, 140]);
+  assert.deepEqual(await balances(), [100, 100]);
   await shares(70);
   await SuppliersService.deleteBonus(editedBonus.id, 'user-admin');
   assert.deepEqual(await balances(), [100, 100]);
-  pass('bonus edits replace historical allocations and subsequent deletion restores balances');
+  pass('legacy bonus amount edit reverses its owner accrual without booking a new one; deletion moves nothing more');
   await shares(60);
   const beforeSummary = await reports.computeReportsSummary({ period: 'ALL' });
   const expense = await expenses.createExpenseStandalone({ category: 'OTHER', amountTjs: D(105), storeId: 'store-siyoma', paidFromCashRegister: true, createdByUserId: 'user-admin' });

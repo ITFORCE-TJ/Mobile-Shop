@@ -1,6 +1,7 @@
 import type { Express } from 'express';
 import { authenticateJwt, type AuthenticatedRequest, requireRoles } from '../../auth/auth.middleware';
 import { BonusesService } from './bonuses.service';
+import { RealtimeSyncGateway } from '../../websocket/websocket.gateway';
 
 export function registerBonusRoutes(app: Express) {
   app.get('/api/bonuses/pool', authenticateJwt, requireRoles('ADMIN'), async (_req: AuthenticatedRequest, res, next) => {
@@ -12,15 +13,19 @@ export function registerBonusRoutes(app: Express) {
     }
   });
 
-  app.post('/api/bonuses/distribute-profit', authenticateJwt, requireRoles('ADMIN'), async (req: AuthenticatedRequest, res, next) => {
+  // Bonuses are never distributed to anyone (no payout, no reinvestment): the Bonuses page
+  // shows the quarter and closes it.
+  app.get('/api/bonuses/quarter', authenticateJwt, requireRoles('ADMIN'), async (_req: AuthenticatedRequest, res, next) => {
     try {
-      const result = await BonusesService.distributeBonusProfit({
-        periodName: req.body?.periodName,
-        allocations: req.body?.allocations,
-        note: req.body?.note,
-        userId: req.user!.userId,
-      });
-      res.status(200).json(result);
+      res.json(await BonusesService.quarterSummary());
+    } catch (error) {
+      next(error);
+    }
+  });
+
+  app.get('/api/bonuses/quarter-history', authenticateJwt, requireRoles('ADMIN'), async (_req: AuthenticatedRequest, res, next) => {
+    try {
+      res.json(await BonusesService.quarterHistory());
     } catch (error) {
       next(error);
     }
@@ -33,6 +38,8 @@ export function registerBonusRoutes(app: Express) {
         note: req.body?.note,
         userId: req.user!.userId,
       });
+      // Other open admin screens refetch the zeroed quarter.
+      RealtimeSyncGateway.broadcast('INVENTORY_UPDATE', {}, { roles: ['ADMIN'] });
       res.status(200).json(result);
     } catch (error) {
       next(error);

@@ -300,7 +300,9 @@ export class SuppliersService {
       if (!supplier) throw new Error('Поставщик не найден');
       if (!['FREE_DEVICES', 'CASH_DISCOUNT'].includes(input.bonusType)) throw new Error('Некорректный тип бонуса');
       if (input.bonusType === 'CASH_DISCOUNT') input.amountUsd = requirePositiveMoney(input.amountUsd, 'Сумма бонуса');
-      const ownerProfitAllocations = input.bonusType === 'CASH_DISCOUNT' ? await currentOwnerAllocations(tx, input.amountUsd!) : [];
+      // Supplier bonuses are nobody's income: they are recorded and reported only, never
+      // accrued to an owner, a register or a payout (zeroed on the Bonuses page each quarter).
+      const ownerProfitAllocations: OwnerProfitAllocation[] = [];
 
       const bonus = await tx.supplierBonus.create({
         data: {
@@ -357,23 +359,9 @@ export class SuppliersService {
             data: { bonusId: bonus.id, deviceId: created.id, brand: device.brand, model: device.model, storage: device.storage, color: device.color, imei: device.imei, costBasisUsd },
           });
         }
-      } else if (input.bonusType === 'CASH_DISCOUNT' && input.amountUsd) {
-        // Booked purely as accrued profit, not a movement through any store's cash register —
-        // per the user (2026-09-07), this is realized straight into net profit, deliberately
-        // kept separate from the main warehouse's operating till (same profit/capital split
-        // already established for owner payout — see the domain-total-invested-capital memory).
-        await replaceOwnerAllocations(tx, [], ownerProfitAllocations, 1);
-        await tx.ledgerEntry.create({
-          data: {
-            type: 'SUPPLIER_BONUS',
-            description: `Денежный бонус от ${supplier.name}: +$${input.amountUsd}`,
-            amountUsd: input.amountUsd,
-            exchangeRate,
-            userName: actor.name,
-            referenceId: bonus.id,
-          },
-        });
       }
+      // A cash bonus is only recorded (the bonus row and its audit entry): it is no owner
+      // profit, no register movement and no journal amount.
 
       await tx.auditLog.create({
         data: {
@@ -392,8 +380,9 @@ export class SuppliersService {
   }
 
   /**
-   * CASH_DISCOUNT edits reverse the old owner-profit accrual and re-apply the new
-   * amount, same revert-then-apply pattern as expense edits. FREE_DEVICES edits are
+   * CASH_DISCOUNT edits only change the recorded amount. A bonus booked before bonuses stopped
+   * being owner income still carries its old owner accrual: an amount edit reverses that accrual
+   * (with its journal entry) and does not book a new one. FREE_DEVICES edits are
    * blocked once the underlying device has any transaction history (sold, transferred,
    * sent to repair) — the bonus record isn't the source of truth for that device anymore.
    */
@@ -411,21 +400,15 @@ export class SuppliersService {
         if (input.amountUsd !== undefined) {
           const newAmountUsd = requirePositiveMoney(input.amountUsd, 'Сумма бонуса');
           const oldAmountUsd = bonus.amountUsd || 0;
-          if (!D(newAmountUsd).eq(oldAmountUsd)) {
-            const previous = readOwnerAllocations(bonus.ownerProfitAllocations);
-            data.ownerProfitAllocations = await currentOwnerAllocations(tx, newAmountUsd);
-            await replaceOwnerAllocations(tx, previous, data.ownerProfitAllocations, 1, true);
-          }
-          data.amountUsd = newAmountUsd;
-          // Append-only journal: reverse the old amount and book the new one.
-          if (!D(newAmountUsd).eq(oldAmountUsd)) {
-            await tx.ledgerEntry.createMany({
-              data: [
-                { type: 'SUPPLIER_BONUS', description: `Сторно (правка бонуса от ${bonus.supplier.name}): −$${oldAmountUsd}`, amountUsd: D(oldAmountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
-                { type: 'SUPPLIER_BONUS', description: `Денежный бонус от ${bonus.supplier.name}: +$${newAmountUsd}`, amountUsd: newAmountUsd, exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
-              ],
+          const previous = readOwnerAllocations(bonus.ownerProfitAllocations);
+          if (!D(newAmountUsd).eq(oldAmountUsd) && previous.length > 0) {
+            await replaceOwnerAllocations(tx, previous, [], 1, true);
+            data.ownerProfitAllocations = [];
+            await tx.ledgerEntry.create({
+              data: { type: 'SUPPLIER_BONUS', description: `Сторно (правка бонуса от ${bonus.supplier.name}, бонусы больше не доход владельцев): −$${oldAmountUsd}`, amountUsd: D(oldAmountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
             });
           }
+          data.amountUsd = newAmountUsd;
         }
       } else if (bonus.bonusType === 'FREE_DEVICES' && input.freeDevice) {
         const bonusDevice = bonus.freeDevices[0];
@@ -499,7 +482,8 @@ export class SuppliersService {
           await tx.deviceTimelineEvent.deleteMany({ where: { deviceId: { in: deviceIds } } });
           await tx.device.deleteMany({ where: { id: { in: deviceIds } } });
         }
-      } else if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.amountUsd) {
+      } else if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.amountUsd && readOwnerAllocations(bonus.ownerProfitAllocations).length > 0) {
+        // Only an old bonus that was accrued to owners has anything to reverse.
         await replaceOwnerAllocations(tx, readOwnerAllocations(bonus.ownerProfitAllocations), [], 1, true);
         await tx.ledgerEntry.create({
           data: { type: 'SUPPLIER_BONUS', description: `Сторно (удаление бонуса от ${bonus.supplier.name}): −$${bonus.amountUsd}`, amountUsd: D(bonus.amountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },

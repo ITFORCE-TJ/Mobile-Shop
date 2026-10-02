@@ -2,6 +2,7 @@ import React, { useState, useMemo, useCallback, useEffect } from 'react';
 import { useAppFields } from '../../context/AppContext';
 import { SupplierBonus } from '../../types';
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
+import { BonusQuarterCard } from '../finance/BonusQuarterCard';
 import {
   Gift,
   Plus,
@@ -344,6 +345,8 @@ export const BonusesPage: React.FC = () => {
 
       {/* List of Bonuses */}
       <div className="flex-1 overflow-y-auto p-4 space-y-3 bg-bg">
+        {/* Bonuses are managed only here: the quarterly close zeroes them (admin) */}
+        {currentUser?.role === 'ADMIN' && <BonusQuarterCard />}
         {supplierBonuses.length === 0 ? (
           <div className="p-8 text-center text-fg-subtle text-xs">
             Нет активных бонусных кампаний

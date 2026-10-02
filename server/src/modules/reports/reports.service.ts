@@ -23,7 +23,9 @@ function dateWithinRange(iso: string | Date | null | undefined, range?: { gte: D
   return t >= range.gte.getTime() && t < range.lt.getTime();
 }
 
-type ProfitEvent = { storeId: string; revenueUsd: Prisma.Decimal; revenueTjs: Prisma.Decimal; profitUsd: Prisma.Decimal; rate: MoneyInput };
+// profitUsd is the whole margin (it defines the cost of goods); bonusUsd is the part of it made
+// by free bonus phones, which goes to the bonus pool and is nobody's profit (shown separately).
+type ProfitEvent = { storeId: string; revenueUsd: Prisma.Decimal; revenueTjs: Prisma.Decimal; profitUsd: Prisma.Decimal; bonusUsd: Prisma.Decimal; rate: MoneyInput };
 
 function detailNumber(details: unknown, key: string): number | undefined {
   const value = details && typeof details === 'object' && !Array.isArray(details) ? (details as Record<string, unknown>)[key] : undefined;
@@ -36,14 +38,18 @@ function sumProfitEvents(events: ProfitEvent[]) {
   let revenueTjs = D(0);
   let cogsUsd = D(0);
   let cogsTjs = D(0);
+  let bonusUsd = D(0);
+  let bonusTjs = D(0);
   for (const event of events) {
     const eventCogsUsd = event.revenueUsd.minus(event.profitUsd);
     revenueUsd = revenueUsd.plus(event.revenueUsd);
     revenueTjs = revenueTjs.plus(event.revenueTjs);
     cogsUsd = cogsUsd.plus(eventCogsUsd);
     cogsTjs = cogsTjs.plus(eventCogsUsd.mul(event.rate));
+    bonusUsd = bonusUsd.plus(event.bonusUsd);
+    bonusTjs = bonusTjs.plus(event.bonusUsd.mul(event.rate));
   }
-  return { revenueUsd, revenueTjs, cogsUsd, cogsTjs };
+  return { revenueUsd, revenueTjs, cogsUsd, cogsTjs, bonusUsd, bonusTjs };
 }
 
 function groupByStore<T extends { storeId: string }>(rows: T[]): Map<string, T[]> {
@@ -186,13 +192,14 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     if (original?.profitUsd === undefined) {
       // Legacy sale without an audited original: reported whole (exchanges included), as before.
       const cost = sale.saleItems.reduce((sum, item) => D(sum).plus(item.costBasisUsd), D(0));
-      profitEvents.push({ storeId: sale.storeId, revenueUsd: D(sale.totalUsd), revenueTjs: D(sale.totalTjs), profitUsd: roundMoney(D(sale.totalUsd).minus(cost)), rate: saleRate });
+      profitEvents.push({ storeId: sale.storeId, revenueUsd: D(sale.totalUsd), revenueTjs: D(sale.totalTjs), profitUsd: roundMoney(D(sale.totalUsd).minus(cost)), bonusUsd: D(0), rate: saleRate });
     } else {
       profitEvents.push({
         storeId: sale.storeId,
         revenueUsd: D(detailNumber(original.details, 'amountUsd') ?? sale.totalUsd),
         revenueTjs: D(detailNumber(original.details, 'amountTjs') ?? sale.totalTjs),
         profitUsd: D(original.profitUsd).plus(detailNumber(original.details, 'bonusProfitUsd') ?? 0),
+        bonusUsd: D(detailNumber(original.details, 'bonusProfitUsd') ?? 0),
         rate: saleRate,
       });
     }
@@ -212,6 +219,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       revenueUsd: D(newPriceUsd).minus(detailNumber(log.financialDetails, 'exchangeInValueUsd') ?? 0),
       revenueTjs: D(newPriceTjs).minus(detailNumber(log.financialDetails, 'exchangeInValueTjs') ?? 0),
       profitUsd: D(profitUsd).plus(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0),
+      bonusUsd: D(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0),
       rate: newPriceUsd ? D(newPriceTjs).div(newPriceUsd) : rate,
     });
   }
@@ -229,6 +237,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       revenueUsd: D(sale.totalUsd).negated(),
       revenueTjs: D(sale.totalTjs).negated(),
       profitUsd: D(reversedProfitUsd).negated().plus(resoldTradeInAdjustmentUsd),
+      bonusUsd: hasOriginal ? bonusProfitOf(logs).negated() : D(0),
       rate: sale.exchangeRate || rate,
     });
   }
@@ -313,8 +322,13 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     refundFxByStore.set(s.storeId, { usd: prev.usd.plus(fx.usd), tjs: prev.tjs.plus(fx.tjs) });
   }
 
-  const netProfitUsd = roundMoney(D(grossProfitUsd).minus(expensesUsd).plus(periodCashBonusesUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd));
-  const netProfitTjs = roundMoney(D(grossProfitTjs).minus(expensesTjs).plus(periodCashBonusesTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs));
+  // Supplier bonuses are nobody's income: neither cash bonuses nor the profit of free bonus
+  // phones (which goes to the bonus pool, zeroed each quarter) are part of profit. They are
+  // reported separately (periodCashBonuses*, bonusDeviceProfit*).
+  const bonusDeviceProfitUsd = roundMoney(totals.bonusUsd);
+  const bonusDeviceProfitTjs = roundMoney(totals.bonusTjs);
+  const netProfitUsd = roundMoney(D(grossProfitUsd).minus(bonusDeviceProfitUsd).minus(expensesUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd));
+  const netProfitTjs = roundMoney(D(grossProfitTjs).minus(bonusDeviceProfitTjs).minus(expensesTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs));
 
   const totalSupplierDebtUsd = D(supplierDebtAgg._sum.totalDebtUsd ?? 0);
   const totalSupplierDebtTjs = roundMoney(D(totalSupplierDebtUsd).mul(rate));
@@ -366,8 +380,9 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       const storeRevenueTjs = storeTotals.revenueTjs;
       const storeCogsUsd = storeTotals.cogsUsd;
       const storeCogsTjs = storeTotals.cogsTjs;
-      const storeProfitUsd = storeRevenueUsd.minus(storeCogsUsd);
-      const storeProfitTjs = storeRevenueTjs.minus(storeCogsTjs);
+      // Without the bonus-phone part: partner shares are taken from this figure.
+      const storeProfitUsd = storeRevenueUsd.minus(storeCogsUsd).minus(storeTotals.bonusUsd);
+      const storeProfitTjs = storeRevenueTjs.minus(storeCogsTjs).minus(storeTotals.bonusTjs);
       let storeUnits = 0;
       const storeModels = new Map<string, { name: string; count: number; revenueUsd: MoneyInput; profitUsd: MoneyInput }>();
       storeSales.forEach((sale) => {
@@ -399,6 +414,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
         profitTjs: roundMoney(D(storeProfitTjs).plus(storePenalty.tjs).plus(storeFx.tjs)),
         refundPenaltiesUsd: roundMoney(storePenalty.usd),
         refundFxUsd: roundMoney(storeFx.usd),
+        bonusDeviceProfitUsd: roundMoney(storeTotals.bonusUsd),
+        bonusDeviceProfitTjs: roundMoney(storeTotals.bonusTjs),
         ...storeExpenses,
         netProfitUsd: roundMoney(D(storeProfitUsd).plus(storePenalty.usd).plus(storeFx.usd).minus(storeExpenses.expensesUsd)),
         netProfitTjs: roundMoney(D(storeProfitTjs).plus(storePenalty.tjs).plus(storeFx.tjs).minus(storeExpenses.expensesTjs)),
@@ -441,8 +458,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     // "Прибыль (с учетом возвратов)" — the single recognized-profit figure the summary card,
     // the per-store cards (storeBreakdown.profitUsd/Tjs below) and netProfitUsd/Tjs all build
     // on, so they can no longer disagree the way the old client-side per-item calc did.
-    profitUsd: roundMoney(D(grossProfitUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd)),
-    profitTjs: roundMoney(D(grossProfitTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs)),
+    profitUsd: roundMoney(D(grossProfitUsd).minus(bonusDeviceProfitUsd).plus(periodRefundPenaltiesUsd).plus(periodRefundFxUsd)),
+    profitTjs: roundMoney(D(grossProfitTjs).minus(bonusDeviceProfitTjs).plus(periodRefundPenaltiesTjs).plus(periodRefundFxTjs)),
     expensesTjs,
     expensesUsd,
     periodRefundPenaltiesUsd: roundMoney(periodRefundPenaltiesUsd),
@@ -453,6 +470,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     netProfitTjs,
     periodCashBonusesUsd: roundMoney(periodCashBonusesUsd),
     periodCashBonusesTjs: roundMoney(periodCashBonusesTjs),
+    bonusDeviceProfitUsd,
+    bonusDeviceProfitTjs,
     giftDeviceUnitsSold,
     giftDeviceProfitUsd: D(giftDeviceProfitUsd.toFixed(2)),
     giftDeviceProfitTjs: roundMoney(giftDeviceProfitTjs),

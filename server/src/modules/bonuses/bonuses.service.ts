@@ -46,13 +46,6 @@ export async function reverseDistributedBonus(tx: TransactionClient, saleId: str
   return Array.from(deltas, ([ownerId, amountUsd]) => ({ ownerId, amountUsd: roundMoney(amountUsd) }));
 }
 
-export interface DistributeBonusInput {
-  periodName: string;
-  allocations: { ownerId: string; amountUsd: MoneyInput }[];
-  note?: string;
-  userId: string;
-}
-
 export interface AnnulBonusInput {
   periodName?: string;
   note?: string;
@@ -96,141 +89,52 @@ export class BonusesService {
     };
   }
 
-  public static async distributeBonusProfit(input: DistributeBonusInput) {
-    if (!input.periodName?.trim()) {
-      throw new Error('Укажите название отчётного периода (например, 1 квартал 2026)');
-    }
-    if (!Array.isArray(input.allocations) || input.allocations.length === 0) {
-      throw new Error('Укажите хотя бы одного партнёра для распределения прибыли');
-    }
-
-    return prisma.$transaction(async (tx) => {
-      const actor = await resolveActor(tx, input.userId);
-      const pendingEntries = await tx.bonusPoolEntry.findMany({
-        where: { status: 'PENDING' },
-      });
-
-      if (pendingEntries.length === 0) {
-        throw new Error('В бонусном пуле нет нераспределенной прибыли');
-      }
-
-      const totalPoolUsd = roundMoney(
-        pendingEntries.reduce((sum, e) => D(sum).plus(e.profitUsd), D(0))
-      );
-
-      const normalizedAllocations = input.allocations.map((a) => {
-        const amountUsd = requireNonNegativeMoney(a.amountUsd, 'Сумма распределения');
-        return { ownerId: a.ownerId, amountUsd };
-      }).filter((a) => D(a.amountUsd).gt(0));
-
-      if (normalizedAllocations.length === 0) {
-        throw new Error('Сумма распределения должна быть больше 0');
-      }
-
-      const totalAllocatedUsd = roundMoney(
-        normalizedAllocations.reduce((sum, a) => D(sum).plus(a.amountUsd), D(0))
-      );
-
-      if (D(totalAllocatedUsd).gt(totalPoolUsd)) {
-        throw new Error(`Сумма распределения ($${totalAllocatedUsd}) превышает остаток бонусного пула ($${totalPoolUsd})`);
-      }
-
-      const ownerIds = normalizedAllocations.map((a) => a.ownerId);
-      const owners = await tx.owner.findMany({
-        where: { id: { in: ownerIds } },
-      });
-      if (owners.length !== ownerIds.length) {
-        throw new Error('Один или несколько указанных владельцев не найдены');
-      }
-      const ownerMap = new Map(owners.map((o) => [o.id, o]));
-
-      const log = await tx.bonusDistributionLog.create({
-        data: {
-          periodName: input.periodName.trim(),
-          totalAmountUsd: totalAllocatedUsd,
-          type: 'DISTRIBUTION',
-          allocations: normalizedAllocations.map((a) => ({
-            ownerId: a.ownerId,
-            ownerName: ownerMap.get(a.ownerId)?.name ?? a.ownerId,
-            amountUsd: a.amountUsd,
-          })),
-          note: input.note?.trim() || null,
-          performedByUserId: actor.id,
-          performedByName: actor.name,
-        },
-      });
-
-      for (const allocation of normalizedAllocations) {
-        const delta = allocation.amountUsd;
-        await tx.owner.update({
-          where: { id: allocation.ownerId },
-          data: {
-            totalAccruedProfitUsd: { increment: delta },
-            availableProfitUsd: { increment: delta },
-          },
-        });
-      }
-
-      // Exactly the entries summed above: one added meanwhile waits for the next distribution,
-      // and a concurrent distribution of the same entries is rejected instead of doubled.
-      const distributed = await tx.bonusPoolEntry.updateMany({
-        where: { id: { in: pendingEntries.map((e) => e.id) }, status: 'PENDING' },
-        data: {
-          status: 'DISTRIBUTED',
-          distributionId: log.id,
-          distributedAt: new Date(),
-          distributedBy: actor.name,
-          distributionNote: input.note?.trim() || input.periodName.trim(),
-        },
-      });
-      if (distributed.count !== pendingEntries.length) throw new Error('Бонусный пул изменился во время распределения. Обновите данные и повторите');
-
-      // Every pending entry is closed by this distribution, so whatever wasn't handed out is
-      // written off explicitly instead of silently vanishing from the pool.
-      const remainderUsd = roundMoney(D(totalPoolUsd).minus(totalAllocatedUsd));
-      if (remainderUsd.gt(0)) {
-        await tx.bonusDistributionLog.create({
-          data: {
-            periodName: input.periodName.trim(),
-            totalAmountUsd: remainderUsd,
-            type: 'ANNULMENT',
-            allocations: [],
-            note: `Нераспределённый остаток бонусного пула при распределении «${input.periodName.trim()}»`,
-            performedByUserId: actor.id,
-            performedByName: actor.name,
-          },
-        });
-      }
-
-      await tx.auditLog.create({
-        data: {
-          userId: actor.id,
-          userName: actor.name,
-          userRole: actor.role,
-          action: 'BONUS_PROFIT_DISTRIBUTED',
-          details: `Распределена бонусная прибыль за ${input.periodName}: $${totalAllocatedUsd} среди ${normalizedAllocations.length} партнёров${remainderUsd.gt(0) ? `; нераспределённый остаток $${remainderUsd} списан` : ''}`,
-          financialDetails: moneyJson({
-            periodName: input.periodName,
-            totalAllocatedUsd,
-            annulledRemainderUsd: remainderUsd,
-            allocations: normalizedAllocations,
-          }),
-        },
-      });
-
-      return log;
-    }, { maxWait: 10000, timeout: 25000 });
+  /**
+   * The current bonus quarter, shown on the Bonuses page: everything since the last quarterly
+   * close. Bonuses are nobody's income — this is a report, not a balance anyone can draw from.
+   */
+  public static async quarterSummary(db: Pick<TransactionClient, 'bonusDistributionLog' | 'supplierBonus' | 'bonusPoolEntry'> = prisma) {
+    const lastClose = await db.bonusDistributionLog.findFirst({ where: { type: 'ANNULMENT' }, orderBy: { createdAt: 'desc' } });
+    const since = lastClose?.createdAt ?? null;
+    const sinceFilter = since ? { createdAt: { gt: since } } : {};
+    const [cashBonuses, deviceBonuses, pending] = await Promise.all([
+      db.supplierBonus.findMany({ where: { bonusType: 'CASH_DISCOUNT', ...sinceFilter }, select: { amountUsd: true, exchangeRate: true } }),
+      db.supplierBonus.findMany({ where: { bonusType: 'FREE_DEVICES', ...sinceFilter }, select: { id: true } }),
+      db.bonusPoolEntry.findMany({ where: { status: 'PENDING' }, select: { profitUsd: true, profitTjs: true } }),
+    ]);
+    return {
+      since: since?.toISOString() ?? null,
+      cashBonusesCount: cashBonuses.length,
+      cashBonusesUsd: roundMoney(cashBonuses.reduce((sum, b) => D(sum).plus(b.amountUsd ?? 0), D(0))),
+      cashBonusesTjs: roundMoney(cashBonuses.reduce((sum, b) => D(sum).plus(D(b.amountUsd ?? 0).mul(b.exchangeRate)), D(0))),
+      bonusDevicesReceived: deviceBonuses.length,
+      bonusDevicesSold: pending.length,
+      bonusDeviceProfitUsd: roundMoney(pending.reduce((sum, e) => D(sum).plus(e.profitUsd), D(0))),
+      bonusDeviceProfitTjs: roundMoney(pending.reduce((sum, e) => D(sum).plus(e.profitTjs), D(0))),
+    };
   }
 
+  /** Past quarterly closes, newest first. */
+  public static async quarterHistory() {
+    return prisma.bonusDistributionLog.findMany({ where: { type: 'ANNULMENT' }, orderBy: { createdAt: 'desc' }, take: 20 });
+  }
+
+  /**
+   * Quarterly close of bonuses (confirmed on the Bonuses page): the quarter's cash bonuses and
+   * bonus-phone profit are recorded in the close log and the counters start from zero. Nothing
+   * is credited to anyone and no money moves — the sold phones' cash simply stays in the registers.
+   */
   public static async annulBonusPool(input: AnnulBonusInput) {
     return prisma.$transaction(async (tx) => {
       const actor = await resolveActor(tx, input.userId);
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('bonus-quarter-close'))::text`;
+      const quarter = await BonusesService.quarterSummary(tx);
       const pendingEntries = await tx.bonusPoolEntry.findMany({
         where: { status: 'PENDING' },
       });
 
-      if (pendingEntries.length === 0) {
-        throw new Error('В бонусном пуле нет активных записей для обнуления');
+      if (pendingEntries.length === 0 && quarter.cashBonusesCount === 0 && quarter.bonusDevicesReceived === 0) {
+        throw new Error('За этот квартал бонусов нет — обнулять нечего');
       }
 
       const totalAnnulledUsd = roundMoney(
@@ -243,7 +147,7 @@ export class BonusesService {
           totalAmountUsd: totalAnnulledUsd,
           type: 'ANNULMENT',
           allocations: [],
-          note: input.note?.trim() || 'Обнуление нераспределённого бонусного пула',
+          note: input.note?.trim() || `Квартал бонусов закрыт: денежные бонусы $${quarter.cashBonusesUsd} (${quarter.cashBonusesCount}), бонусные телефоны продано ${quarter.bonusDevicesSold} на $${quarter.bonusDeviceProfitUsd}, получено ${quarter.bonusDevicesReceived}`,
           performedByUserId: actor.id,
           performedByName: actor.name,
         },
@@ -265,10 +169,13 @@ export class BonusesService {
           userName: actor.name,
           userRole: actor.role,
           action: 'BONUS_POOL_ANNULLED',
-          details: `Обнулен бонусный пул на сумму $${totalAnnulledUsd} (${pendingEntries.length} устройств)`,
+          details: `Закрыт квартал бонусов «${input.periodName?.trim() || 'без названия'}»: денежные бонусы $${quarter.cashBonusesUsd}, прибыль бонусных телефонов $${totalAnnulledUsd} (${pendingEntries.length} шт.) — обнулены, ни на какой счёт не зачислены`,
           financialDetails: moneyJson({
             totalAnnulledUsd,
             entriesCount: pendingEntries.length,
+            cashBonusesUsd: quarter.cashBonusesUsd,
+            cashBonusesCount: quarter.cashBonusesCount,
+            bonusDevicesReceived: quarter.bonusDevicesReceived,
             note: input.note,
           }),
         },

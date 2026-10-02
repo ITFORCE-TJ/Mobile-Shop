@@ -253,7 +253,8 @@ interface AppContextType {
 
   createOwnerTransaction: (params: {
     ownerId: string;
-    type: 'INVESTMENT' | 'WITHDRAWAL' | 'PROFIT_PAYOUT' | 'REINVEST';
+    // Profit payout and reinvestment were removed: profit becomes capital at the quarterly close.
+    type: 'INVESTMENT' | 'WITHDRAWAL';
     amountUsd: number;
     destination?: string;
     source?: string;
@@ -1380,38 +1381,12 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   };
 
-  const ownerProfitPayout = async (ownerId: string, amountUsd: number, source: string, note?: string): Promise<ActionResult> => {
-    try {
-      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/payout`, { method: 'POST', body: JSON.stringify({ amountUsd, source, note }) });
-      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
-      markLocalMutation(['owners', 'ownerTransactions', 'stores']);
-      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions(), fetchStores()]);
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: errorMessage(err, 'Сумма выплаты превышает доступную прибыль') };
-    }
-  };
-
-  const ownerReinvest = async (ownerId: string, amountUsd: number, destination?: string, note?: string): Promise<ActionResult> => {
-    try {
-      const updatedOwner = await apiClient<any>(`/owners/${ownerId}/reinvest`, { method: 'POST', body: JSON.stringify({ amountUsd, destination, note }) });
-      setOwners(previous => previous.map(owner => owner.id === ownerId ? mapOwner(updatedOwner) : owner));
-      markLocalMutation(['owners', 'ownerTransactions']);
-      void refreshAfterMutation([fetchOwners(), fetchOwnerTransactions()]);
-      return { success: true };
-    } catch (err) {
-      return { success: false, message: errorMessage(err, 'Сумма реинвестирования превышает доступную прибыль') };
-    }
-  };
-
   const createOwnerTransaction: AppContextType['createOwnerTransaction'] = async ({ ownerId, type, amountUsd, destination, source, storeId, note }) => {
     const storeName = storeId ? stores.find(s => s.id === storeId)?.name : undefined;
     const dest = destination || storeName || 'Главный склад';
     const src = source || storeName || 'Главный склад';
     if (type === 'INVESTMENT') return ownerInvestment(ownerId, amountUsd, dest, note);
     if (type === 'WITHDRAWAL') return ownerCapitalWithdrawal(ownerId, amountUsd, src, note);
-    if (type === 'PROFIT_PAYOUT') return ownerProfitPayout(ownerId, amountUsd, src, note);
-    if (type === 'REINVEST') return ownerReinvest(ownerId, amountUsd, dest, note);
     return { success: false, message: 'Неизвестный тип операции' };
   };
 

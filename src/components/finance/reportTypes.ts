@@ -14,6 +14,8 @@ export interface SellerStat { sellerId: string; sellerName: string; salesCount: 
 export interface StoreBreakdown extends ExpenseBreakdown {
   storeId: string; storeName: string; revenueUsd: number; revenueTjs: number; cogsUsd: number; cogsTjs: number;
   profitUsd: number; profitTjs: number; refundPenaltiesUsd: number; netProfitUsd: number; netProfitTjs: number;
+  /** Profit of sold free bonus phones: nobody's income, left out of profitUsd/netProfitUsd. */
+  bonusDeviceProfitUsd?: number; bonusDeviceProfitTjs?: number;
   unitsSold: number; salesCount: number; refundsCount: number; cashUsd: number; cashTjs: number;
   stockCount: number; stockCostUsd: number; stockCostTjs: number;
   grossMarginPercent: number; avgCheckUsd: number; avgCheckTjs: number;
@@ -52,6 +54,8 @@ export interface ReportsSummary {
   modelCounts: { name: string; count: number; revenueUsd: number; cogsUsd: number; profitUsd: number }[];
   periodCashBonusesUsd: number;
   periodCashBonusesTjs: number;
+  bonusDeviceProfitUsd?: number;
+  bonusDeviceProfitTjs?: number;
   giftDeviceUnitsSold: number;
   giftDeviceProfitUsd: number;
   giftDeviceProfitTjs: number;

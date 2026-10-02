@@ -29,7 +29,7 @@ try {
   let token = '';
   const api = async (method: string, path: string, body?: unknown, key?: string) => {
     const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(key ? { 'Idempotency-Key': key } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    return { status: r.status, data: await r.json() };
+    return { status: r.status, data: await r.json().catch(() => null) };
   };
   token = (await api('POST', '/auth/login', { login: 'admin', password: 'admin123' })).data.token;
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 10 })).status, 200);
@@ -95,7 +95,9 @@ try {
 
   await db.owner.updateMany({ data: { totalAccruedProfitUsd: 100, availableProfitUsd: 100 } });
   await api('POST', '/owners/owner-admin/investment', { amountUsd: 100 });
-  assert.equal((await api('POST', '/owners/owner-admin/payout', { amountUsd: 5 })).status, 200);
+  assert.equal((await api('POST', '/owners/owner-admin/payout', { amountUsd: 5 })).status, 404);
+  // A profit payout made before payouts were removed still blocks rewriting balances by shares.
+  await db.owner.update({ where: { id: 'owner-admin' }, data: { totalPaidProfitUsd: 5, availableProfitUsd: 95 } });
   const shares = [{ ownerId: 'owner-admin', sharePercent: 60 }, { ownerId: 'owner-partner', sharePercent: 40 }];
   assert.equal((await api('POST', '/owners/profit-shares', { shares, rebalanceBalances: true })).status, 400);
   assert.equal((await api('POST', '/owners/profit-shares', { shares })).status, 200);

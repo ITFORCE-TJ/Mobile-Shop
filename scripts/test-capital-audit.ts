@@ -30,7 +30,7 @@ try {
   let token = '';
   const api = async (method: string, path: string, body?: unknown, key?: string) => {
     const r = await fetch(base + path, { method, headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}), ...(key ? { 'Idempotency-Key': key } : {}) }, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
-    return { status: r.status, data: await r.json() };
+    return { status: r.status, data: await r.json().catch(() => null) };
   };
   token = (await api('POST', '/auth/login', { login: 'admin', password: 'admin123' })).data.token;
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 10 })).status, 200);
@@ -55,31 +55,28 @@ try {
   await ok('withdrawal', '0.01');
   s = await state(); assert.equal(s.capital, '100'); assert.equal(s.cash, '100'); assert.equal(s.account, s.cash);
   pass('withdrawal: capital and both cash balances decrease exactly');
-  await ok('payout', '10.01');
-  s = await state(); assert.equal(s.capital, '100'); assert.equal(s.profit, '89.99'); assert.equal(s.paid, '10.01'); assert.equal(s.cash, '89.99'); assert.equal(s.account, s.cash);
-  pass('profit payout: profit reduced once without reducing capital');
-  const beforeReinvest = await state();
-  await ok('reinvest', '9.99');
-  s = await state(); assert.equal(s.capital, '109.99'); assert.equal(s.profit, '80'); assert.equal(s.reinvested, '9.99'); assert.equal(s.cash, beforeReinvest.cash); assert.equal(s.finance, beforeReinvest.finance);
-  assert.equal(s.tx, beforeReinvest.tx + 1); assert.equal(s.audit, beforeReinvest.audit + 1); assert.equal(s.ledger, beforeReinvest.ledger + 1);
-  pass('reinvestment: profit becomes capital without fictitious cash movement; audit/ledger recorded');
+  // Profit payout and manual reinvestment no longer exist: profit is never paid out from here.
+  const beforeRemoved = await state();
+  for (const kind of ['payout', 'reinvest']) assert.equal((await post(kind, '1')).status, 404);
+  assert.deepEqual(await state(), beforeRemoved);
+  pass('profit payout and reinvestment endpoints are gone (404) and change nothing');
+  // Part of the capital sits outside the register (e.g. in stock): capital 120, cash 100.
+  await db.owner.update({ where: { id: 'owner-admin' }, data: { capitalBalanceUsd: { increment: 20 } } });
   const beforeInvalid = await state();
-  for (const kind of ['investment', 'withdrawal', 'payout', 'reinvest']) {
+  for (const kind of ['investment', 'withdrawal']) {
     for (const amount of [null, '', ' ', 0, -1, 'abc', 'NaN', 'Infinity', '1000000000000']) {
       assert.equal((await post(kind, amount)).status, 400, `${kind}: ${amount}`);
     }
   }
   assert.deepEqual(await state(), beforeInvalid);
-  pass('36 invalid requests rejected without any balance/history changes');
-  for (const kind of ['withdrawal', 'payout', 'reinvest']) {
-    assert.equal((await post(kind, 10000)).status, 400);
-    assert.deepEqual(await state(), beforeInvalid);
-  }
-  // Capital is sufficient, but cash is not: earlier owner update must roll back.
-  assert.equal((await post('withdrawal', 100)).status, 400);
+  pass('18 invalid requests rejected without any balance/history changes');
+  assert.equal((await post('withdrawal', 10000)).status, 400);
   assert.deepEqual(await state(), beforeInvalid);
-  pass('insufficient capital/profit/cash: complete rollback including owner and journal');
-  for (const kind of ['investment', 'withdrawal', 'payout', 'reinvest']) {
+  // Capital is sufficient, but cash is not: earlier owner update must roll back.
+  assert.equal((await post('withdrawal', 110)).status, 400);
+  assert.deepEqual(await state(), beforeInvalid);
+  pass('insufficient capital/cash: complete rollback including owner and journal');
+  for (const kind of ['investment', 'withdrawal']) {
     const before = await state();
     const results = await Promise.all([post(kind, '1.01', `capital-${kind}`), post(kind, '1.01', `capital-${kind}`)]);
     assert.deepEqual(results.map(r => r.status), [200, 200]);
@@ -89,18 +86,11 @@ try {
     assert.equal((await post(kind, '1.01', `capital-${kind}`)).status, 200);
     assert.deepEqual(await state(), after);
   }
-  pass('all four operations: simultaneous same-key requests execute once; retries replay; changed payload rejected');
-  const beforeRace = await state();
-  const race = await Promise.all([post('payout', 50, 'race-payout'), post('reinvest', 50, 'race-reinvest')]);
-  assert.deepEqual(race.map(r => r.status).sort(), [200, 400]);
-  assert.equal((await state()).tx, beforeRace.tx + 1);
-  const owner = await db.owner.findUniqueOrThrow({ where: { id: 'owner-admin' } });
-  assert(owner.availableProfitUsd.eq(owner.totalAccruedProfitUsd.minus(owner.totalPaidProfitUsd).minus(owner.totalReinvestedUsd)));
-  pass('concurrent payout/reinvestment cannot spend the same profit twice');
+  pass('investment and withdrawal: simultaneous same-key requests execute once; retries replay; changed payload rejected');
   const adminToken = token;
   token = (await api('POST', '/auth/login', { login: 'ahmad', password: 'seller123' })).data.token;
   assert(token);
-  for (const kind of ['investment', 'withdrawal', 'payout', 'reinvest']) assert.equal((await post(kind, 1)).status, 403);
+  for (const kind of ['investment', 'withdrawal']) assert.equal((await post(kind, 1)).status, 403);
   // Expenses are not a seller's business either — the server refuses, not just the UI.
   const sellerExpense = await api('POST', '/expenses', { category: 'Аренда', amountTjs: 100, storeId: 'store-siyoma' });
   assert.equal(sellerExpense.status, 403, JSON.stringify(sellerExpense));
@@ -169,28 +159,16 @@ try {
   }
   pass('partner moved Сиёма → Саховат → Сиёма: capital, every register and owner history unchanged');
 
-  // Partner profit becomes capital only after its quarter is closed; the admin is not limited.
+  // Partner profit becomes capital only at the quarterly close; there is no manual reinvestment.
   await db.owner.update({ where: { id: 'owner-partner' }, data: { availableProfitUsd: 500, totalAccruedProfitUsd: 500 } });
-  const reinvestPartner = (amount: unknown, key: string) => api('POST', '/owners/owner-partner/reinvest', { amountUsd: amount }, key);
-  const blocked = await reinvestPartner(1, 'partner-reinvest-open');
-  assert.equal(blocked.status, 400, JSON.stringify(blocked));
-  assert.match(blocked.data.message, /после закрытия квартала/);
-  assert.equal((await api('POST', '/owners/quarter-close', { quarterName: 'Q3 2026 audit', transferRemainingToCapital: false }, 'partner-close-q3')).status, 200);
-  // $200 more is earned in the new, still open quarter.
-  await db.owner.update({ where: { id: 'owner-partner' }, data: { availableProfitUsd: { increment: 200 }, totalAccruedProfitUsd: { increment: 200 } } });
-  const listed = (await api('GET', '/owners')).data.find((o: any) => o.id === 'owner-partner');
-  assert.equal(String(listed.reinvestableProfitUsd), '500');
-  assert.equal((await reinvestPartner('500.01', 'partner-reinvest-too-much')).status, 400);
-  const capitalBeforeReinvest = D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd);
-  assert.equal((await reinvestPartner(300, 'partner-reinvest-300')).status, 200);
-  assert.equal((await reinvestPartner('200.01', 'partner-reinvest-rest-too-much')).status, 400);
-  assert.equal((await reinvestPartner(200, 'partner-reinvest-200')).status, 200);
+  assert.equal((await api('POST', '/owners/owner-partner/reinvest', { amountUsd: 1 }, 'partner-reinvest-open')).status, 404);
+  const capitalBeforeClose = D((await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } })).capitalBalanceUsd);
+  const closed = await api('POST', '/owners/quarter-close', { quarterName: 'Q3 2026 audit', transferRemainingToCapital: true }, 'partner-close-q3');
+  assert.equal(closed.status, 200, JSON.stringify(closed));
   const partnerAfter = await db.owner.findUniqueOrThrow({ where: { id: 'owner-partner' } });
-  assert.equal(D(partnerAfter.capitalBalanceUsd).minus(capitalBeforeReinvest).toString(), '500');
-  assert.equal(D(partnerAfter.availableProfitUsd).toString(), '200');
-  assert.equal((await reinvestPartner(1, 'partner-reinvest-open-again')).status, 400);
-  assert.equal(String((await api('GET', '/owners')).data.find((o: any) => o.id === 'owner-partner').reinvestableProfitUsd), '0');
-  pass('partner reinvests only closed-quarter profit ($500 of $700); open-quarter profit waits for the next close');
+  assert.equal(D(partnerAfter.capitalBalanceUsd).minus(capitalBeforeClose).toString(), '500');
+  assert.equal(D(partnerAfter.availableProfitUsd).toString(), '0');
+  pass('partner profit ($500) becomes capital only at the quarterly close; manual reinvestment is gone');
   console.log(`Capital audit: ${passed} groups passed`);
 } finally {
   if (server) await new Promise<void>(resolve => server!.close(() => resolve()));

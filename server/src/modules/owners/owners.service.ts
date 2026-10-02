@@ -8,7 +8,6 @@ import { getStoreCashAccount } from '../finance/account.service';
 import { postTransaction } from '../finance/financial-transaction.service';
 import { allocateOwnerProfit } from '../sales/profit';
 import { findAdminOwner } from '../finance/owner-allocations';
-import { closedQuarterProfitByOwner } from './reinvest-limit';
 
 export class OwnersService {
   /**
@@ -124,92 +123,6 @@ export class OwnersService {
       await tx.ledgerEntry.create({ data: { type: 'OWNER_CAPITAL_WITHDRAWAL', description: `${owner.name} изъял $${amountUsd} из капитала (${targetStore.name})`, amountUsd: D(amountUsd).negated(), exchangeRate, storeId: targetStore.id, storeName: targetStore.name, userName: actor.name } });
       await tx.auditLog.create({
         data: { userId: actor.id, userName: actor.name, userRole: actor.role, action: 'OWNER_WITHDRAWAL', details: `${owner.name} изъял $${amountUsd} из капитала (${targetStore.name})`, financialDetails: moneyJson({ amountUsd, exchangeRate }) },
-      });
-      return updated;
-    }, { maxWait: 10000, timeout: 25000 });
-  }
-
-  public static async payout(ownerId: string, amountUsd: MoneyInput, source: string, note: string | undefined, userId: string) {
-    amountUsd = requirePositiveMoney(amountUsd, 'Сумма выплаты');
-    return prisma.$transaction(async (tx) => {
-      const actor = await resolveActor(tx, userId);
-      const exchangeRate = await requireTodayRate(tx);
-      const owner = await tx.owner.findUnique({ where: { id: ownerId } });
-      if (!owner) throw new Error('Владелец не найден');
-      const guard = await tx.owner.updateMany({
-        where: { id: ownerId, availableProfitUsd: { gte: amountUsd } },
-        data: { totalPaidProfitUsd: { increment: amountUsd }, availableProfitUsd: { decrement: amountUsd } },
-      });
-      if (guard.count !== 1) throw new Error('Сумма выплаты превышает доступную прибыль');
-
-      const targetStore = await OwnersService.resolveTargetStore(tx, source);
-      const cashAmountTjs = roundMoney(D(amountUsd).mul(exchangeRate));
-      const cashGuard = await tx.store.updateMany({ where: { id: targetStore.id, cashBalanceUsd: { gte: amountUsd } }, data: { cashBalanceUsd: { decrement: amountUsd } } });
-      if (!D(cashGuard.count).eq(1)) throw new Error(`В кассе "${targetStore.name}" недостаточно наличных для выплаты прибыли`);
-
-      const updated = await tx.owner.findUniqueOrThrow({ where: { id: ownerId } });
-      const ownerTx = await tx.ownerTransaction.create({
-        data: { ownerId, type: 'PROFIT_PAYOUT', amountUsd, exchangeRate, sourceOrDestination: targetStore.name, createdByUserId: actor.id, note },
-      });
-      const cashAccount = await getStoreCashAccount(tx, targetStore.id, targetStore.name);
-      await postTransaction(tx, {
-        type: 'OWNER_WITHDRAWAL',
-        direction: 'OUT',
-        numberPrefix: 'OW',
-        accountId: cashAccount.id,
-        balanceCurrency: 'USD',
-        amount: amountUsd,
-        currency: 'USD',
-        exchangeRate,
-        amountTjs: cashAmountTjs,
-        amountUsd,
-        categoryName: 'Выплата прибыли владельцу',
-        counterpartyType: 'OWNER',
-        counterpartyId: ownerId,
-        counterpartyName: owner.name,
-        shopId: targetStore.id,
-        sourceType: 'OWNER_TRANSACTION',
-        sourceId: ownerTx.id,
-        description: `Выплачена прибыль ${owner.name}: $${amountUsd} (${targetStore.name})`,
-        createdByUserId: actor.id,
-      });
-      await tx.ledgerEntry.create({ data: { type: 'OWNER_PROFIT_PAYOUT', description: `Выплачена прибыль ${owner.name}: $${amountUsd} (${targetStore.name})`, amountUsd: D(amountUsd).negated(), exchangeRate, storeId: targetStore.id, storeName: targetStore.name, userName: actor.name } });
-      await tx.auditLog.create({
-        data: { userId: actor.id, userName: actor.name, userRole: actor.role, action: 'PROFIT_PAYOUT', details: `Выплачена прибыль ${owner.name}: $${amountUsd} (${targetStore.name})`, financialDetails: moneyJson({ amountUsd, exchangeRate }) },
-      });
-      return updated;
-    }, { maxWait: 10000, timeout: 25000 });
-  }
-
-  public static async reinvest(ownerId: string, amountUsd: MoneyInput, note: string | undefined, userId: string, destination?: string) {
-    amountUsd = requirePositiveMoney(amountUsd, 'Сумма реинвестирования');
-    return prisma.$transaction(async (tx) => {
-      const actor = await resolveActor(tx, userId);
-      const exchangeRate = await requireTodayRate(tx);
-      // Locked so a parallel payout cannot spend the same closed-quarter profit.
-      await tx.$queryRaw`SELECT id FROM owners WHERE id = ${ownerId} FOR UPDATE`;
-      const owners = await tx.owner.findMany({ include: { user: { select: { role: true } } } });
-      const owner = owners.find((o) => o.id === ownerId);
-      if (!owner) throw new Error('Владелец не найден');
-      if (owner.id !== findAdminOwner(owners)?.id) {
-        const allowed = (await closedQuarterProfitByOwner(tx, [owner])).get(owner.id) ?? 0;
-        if (D(amountUsd).gt(allowed)) {
-          throw new Error(`Прибыль партнёра переходит в капитал только после закрытия квартала. Сейчас можно реинвестировать не больше $${D(allowed)} — остаток прибыли закрытых кварталов`);
-        }
-      }
-      const guard = await tx.owner.updateMany({
-        where: { id: ownerId, availableProfitUsd: { gte: amountUsd } },
-        data: { availableProfitUsd: { decrement: amountUsd }, totalReinvestedUsd: { increment: amountUsd }, capitalBalanceUsd: { increment: amountUsd } },
-      });
-      if (guard.count !== 1) throw new Error('Сумма реинвестирования превышает доступную прибыль');
-      const targetStore = await OwnersService.resolveTargetStore(tx, destination);
-      const updated = await tx.owner.findUniqueOrThrow({ where: { id: ownerId } });
-      await tx.ownerTransaction.create({
-        data: { ownerId, type: 'REINVEST', amountUsd, exchangeRate, sourceOrDestination: targetStore.name, createdByUserId: actor.id, note },
-      });
-      await tx.ledgerEntry.create({ data: { type: 'OWNER_REINVESTMENT', description: `${owner.name} реинвестировал $${amountUsd} доступной прибыли в капитал (${targetStore.name})`, amountUsd, exchangeRate, storeId: targetStore.id, storeName: targetStore.name, userName: actor.name } });
-      await tx.auditLog.create({
-        data: { userId: actor.id, userName: actor.name, userRole: actor.role, action: 'REINVEST', details: `${owner.name} реинвестировал $${amountUsd} доступной прибыли в капитал (${targetStore.name})`, financialDetails: moneyJson({ amountUsd, exchangeRate }) },
       });
       return updated;
     }, { maxWait: 10000, timeout: 25000 });
@@ -501,15 +414,7 @@ export class OwnersService {
    */
   public static async listWithResolvedNames() {
     const owners = await prisma.owner.findMany({ include: { user: { select: { id: true, name: true, storeId: true, role: true } } }, orderBy: { createdAt: 'asc' } });
-    const adminId = findAdminOwner(owners)?.id;
-    const closedProfit = await closedQuarterProfitByOwner(prisma, owners);
-    return owners.map((o: any) => ({
-      ...o,
-      name: o.user?.name ?? o.name,
-      storeId: o.storeId ?? o.user?.storeId ?? null,
-      // What a manual reinvestment may move into capital right now (see reinvest()).
-      reinvestableProfitUsd: o.id === adminId ? o.availableProfitUsd : closedProfit.get(o.id) ?? 0,
-    }));
+    return owners.map((o: any) => ({ ...o, name: o.user?.name ?? o.name, storeId: o.storeId ?? o.user?.storeId ?? null }));
   }
 
   /** Explicitly (re)links an owner's capital record to a specific login account. */

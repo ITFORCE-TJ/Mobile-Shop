@@ -32,7 +32,7 @@ import {
 import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { expenseCategoryLabel } from '../../utils/expenseCategories';
 import { ReportPreviewModal } from '../common/ReportPreviewModal';
-import { useStoreContext } from '../../utils/storeContext';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 interface ExpenseBreakdown {
   expensesUsd: number;
@@ -44,6 +44,8 @@ interface ExpenseBreakdown {
 interface StoreBreakdown extends ExpenseBreakdown {
   storeId: string; storeName: string; revenueUsd: number; revenueTjs: number; cogsUsd: number; cogsTjs: number;
   profitUsd: number; profitTjs: number; refundPenaltiesUsd: number; netProfitUsd: number; netProfitTjs: number;
+  /** Profit of sold free bonus phones: nobody's income, left out of profitUsd/netProfitUsd. */
+  bonusDeviceProfitUsd?: number; bonusDeviceProfitTjs?: number;
   unitsSold: number; salesCount: number; cashUsd: number; cashTjs: number;
   stockCount: number; stockCostUsd: number; stockCostTjs: number;
   topModels: { name: string; count: number; revenueUsd: number; profitUsd: number }[];
@@ -74,8 +76,11 @@ interface ReportsSummary {
   periodRefundPenaltiesTjs: number;
   netProfitUsd: number;
   netProfitTjs: number;
+  /** Supplier bonuses are nobody's income: shown for reference, never in profit or owner shares. */
   periodCashBonusesUsd: number;
   periodCashBonusesTjs: number;
+  bonusDeviceProfitUsd?: number;
+  bonusDeviceProfitTjs?: number;
   giftDeviceUnitsSold?: number;
   giftDeviceProfitUsd?: number;
   giftDeviceProfitTjs?: number;
@@ -235,11 +240,10 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
       }
     }
 
-    if (selectedStore === 'all' && isOwnerAdmin && (data.periodCashBonusesUsd > 0 || data.mainWarehouseExpenses.expensesUsd > 0)) {
-      const centralUsd = data.periodCashBonusesUsd - data.mainWarehouseExpenses.expensesUsd;
-      const centralTjs = data.periodCashBonusesTjs - data.mainWarehouseExpenses.expensesTjs;
-      periodUsd += centralUsd;
-      periodTjs += centralTjs;
+    // Central office: only its general expenses. Supplier bonuses are not added to anyone.
+    if (selectedStore === 'all' && isOwnerAdmin && data.mainWarehouseExpenses.expensesUsd > 0) {
+      periodUsd -= data.mainWarehouseExpenses.expensesUsd;
+      periodTjs -= data.mainWarehouseExpenses.expensesTjs;
     }
 
     return {
@@ -353,7 +357,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
 
   const salesReportStoreName = salesReportStoreId === 'all'
     ? 'Все магазины'
-    : (retailStores.find((s) => s.id === salesReportStoreId)?.name || '');
+    : formatStoreName(retailStores.find((s) => s.id === salesReportStoreId)?.name || '');
 
   const downloadFinancialReport = async () => {
     if (!salesReportStoreId || !summary || reportDownloading || reportDataLoading || reportDataError) return;
@@ -368,6 +372,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
         cogsTjs: data.cogsTjs, cogsUsd: data.cogsUsd,
         grossProfitTjs: data.grossProfitTjs, grossProfitUsd: data.grossProfitUsd,
         refundPenaltiesTjs: data.periodRefundPenaltiesTjs, refundPenaltiesUsd: data.periodRefundPenaltiesUsd,
+        bonusDeviceProfitTjs: data.bonusDeviceProfitTjs ?? 0, bonusDeviceProfitUsd: data.bonusDeviceProfitUsd ?? 0,
         profitTjs: data.profitTjs, profitUsd: data.profitUsd,
         cashBonusesTjs: data.periodCashBonusesTjs, cashBonusesUsd: data.periodCashBonusesUsd,
         expensesTjs: data.expensesTjs, expensesUsd: data.expensesUsd,
@@ -384,13 +389,17 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
       const grossProfitUsd = revenueUsd - cogsUsd;
       const profitTjs = breakdown?.profitTjs ?? grossProfitTjs;
       const profitUsd = breakdown?.profitUsd ?? grossProfitUsd;
+      const bonusDeviceProfitTjs = breakdown?.bonusDeviceProfitTjs ?? 0;
+      const bonusDeviceProfitUsd = breakdown?.bonusDeviceProfitUsd ?? 0;
 
       reportSummary = {
         periodLabel, storeName: salesReportStoreName, exchangeRate: rate,
         unitsSold: breakdown?.unitsSold ?? 0,
         revenueTjs, revenueUsd, cogsTjs, cogsUsd, grossProfitTjs, grossProfitUsd,
-        refundPenaltiesTjs: profitTjs - grossProfitTjs,
-        refundPenaltiesUsd: profitUsd - grossProfitUsd,
+        // profit = gross − bonus-phone profit + retained penalties
+        refundPenaltiesTjs: profitTjs - grossProfitTjs + bonusDeviceProfitTjs,
+        refundPenaltiesUsd: profitUsd - grossProfitUsd + bonusDeviceProfitUsd,
+        bonusDeviceProfitTjs, bonusDeviceProfitUsd,
         profitTjs, profitUsd,
         cashBonusesTjs: 0, cashBonusesUsd: 0,
         expensesTjs: +expensesTjs.toFixed(2),
@@ -438,7 +447,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
             className="h-9 rounded-lg bg-surface-raised border border-border px-2.5 text-xs font-semibold text-fg-muted focus:outline-none focus:border-accent"
           >
             <option value="all">Все магазины</option>
-            {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+            {retailStores.map((s) => <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>)}
           </select>
         )}
         {view === 'summary' && (
@@ -458,7 +467,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
           <>
             <div>
               <h3 className="text-xs font-semibold text-fg-subtle uppercase tracking-wide mb-2 px-0.5">
-                Итог за {periodLabel}{selectedStore !== 'all' ? ` — ${retailStores.find((s) => s.id === selectedStore)?.name ?? ''}` : ''}
+                Итог за {periodLabel}{selectedStore !== 'all' ? ` — ${formatStoreName(retailStores.find((s) => s.id === selectedStore)?.name ?? '')}` : ''}
               </h3>
               <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
                 <StatCard label="Выручка" value={usd(data.revenueUsd)} subvalue={`${tjs(data.revenueTjs)} · ${data.salesCount} чеков${data.refundsCount ? ` · ${data.refundsCount} возвр.` : ''}`} icon={Receipt} tone="neutral" />
@@ -524,6 +533,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                       ]
                     : [{ label: 'Выручка', value: usd(data.revenueUsd) }]),
                   { label: 'Себестоимость проданного', value: `−${usd(data.cogsUsd)}` },
+                  ...(data.bonusDeviceProfitUsd ? [{ label: 'Прибыль бонусных телефонов (не доход)', value: `−${usd(data.bonusDeviceProfitUsd)}` }] : []),
                   ...(data.periodRefundPenaltiesUsd ? [{ label: 'Удержано при возвратах', value: `+${usd(data.periodRefundPenaltiesUsd)}` }] : []),
                   { label: 'Расходы (включая зарплату)', value: `−${usd(data.expensesUsd)}` },
                 ].map((row) => (
@@ -535,33 +545,32 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
               </div>
 
               <div className="flex items-center justify-between pt-1.5 border-t border-border font-bold">
-                <span>Операционная чистая прибыль</span>
-                <span className={(data.netProfitUsd - (data.periodCashBonusesUsd || 0)) >= 0 ? 'text-accent' : 'text-danger'}>
-                  {signedUsd(+(data.netProfitUsd - (data.periodCashBonusesUsd || 0)).toFixed(2))}
+                <span>Чистая прибыль</span>
+                <span className={data.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}>
+                  {signedUsd(data.netProfitUsd)}
                 </span>
               </div>
 
-              {/* Separate Bonus Income Section */}
+              {/* Supplier bonuses: for reference only — not income, not in profit, not credited anywhere */}
               <div className="pt-2 border-t border-dashed border-border/80 space-y-1.5">
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold text-info flex items-center gap-1.5">
                     <Sparkles className="w-3.5 h-3.5" />
-                    <span>Бонусы поставщиков (отдельный учет)</span>
+                    <span>Бонусы поставщиков — справочно</span>
                   </span>
-                  <span className="text-xs font-bold text-info">
-                    +{usd(data.periodCashBonusesUsd || 0)}
-                  </span>
+                  <span className="text-[10px] text-fg-subtle">не входят в прибыль</span>
                 </div>
                 <div className="flex items-center justify-between text-[11px] text-fg-subtle">
-                  <span>Доход от бонусных устройств (в бонусном пуле)</span>
-                  <span className="font-medium text-fg-muted">{usd(data.giftDeviceProfitUsd || 0)}</span>
+                  <span>Денежные бонусы</span>
+                  <span className="font-medium text-fg-muted">{usd(data.periodCashBonusesUsd || 0)}</span>
                 </div>
-                <div className="flex items-center justify-between pt-1 border-t border-border font-bold text-xs">
-                  <span>Итого совокупный результат</span>
-                  <span className={data.netProfitUsd >= 0 ? 'text-fg font-black' : 'text-danger font-black'}>
-                    {signedUsd(data.netProfitUsd)}
-                  </span>
+                <div className="flex items-center justify-between text-[11px] text-fg-subtle">
+                  <span>Прибыль бонусных телефонов</span>
+                  <span className="font-medium text-fg-muted">{usd(data.bonusDeviceProfitUsd || 0)}</span>
                 </div>
+                <p className="text-[11px] text-fg-subtle leading-snug">
+                  Не зачисляются ни на какой счёт и не выплачиваются; обнуляются при закрытии квартала на странице «Бонусы».
+                </p>
               </div>
             </div>
 
@@ -594,7 +603,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                     // Shares are per store: list each store this owner shares in.
                     const ownerStoreShares = storeProfitShares
                       .filter((sh) => sh.ownerId === owner.id)
-                      .map((sh) => `${stores.find((st) => st.id === sh.storeId)?.name ?? 'Магазин'} ${sh.sharePercent}%`)
+                      .map((sh) => `${formatStoreName(stores.find((st) => st.id === sh.storeId)?.name ?? 'Магазин')} ${sh.sharePercent}%`)
                       .join(', ');
                     const { periodAccruedUsd, periodAccruedTjs } = getOwnerPeriodTotal(owner, data);
                     return (
@@ -608,7 +617,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                               <span className="text-xs sm:text-sm font-bold text-fg">{owner.name}</span>
                               {attachedStore && (
                                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface border border-border text-fg-subtle font-semibold shrink-0">
-                                  {attachedStore.name}
+                                  {formatStoreName(attachedStore.name)}
                                 </span>
                               )}
                             </div>
@@ -642,7 +651,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                 {/* Per-store breakdown table */}
                 <div className="space-y-1.5 pt-1">
                   <p className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">
-                    Начисления по магазинам ({selectedStore === 'all' ? 'все магазины' : retailStores.find(s => s.id === selectedStore)?.name || 'выбранный магазин'}):
+                    Начисления по магазинам ({selectedStore === 'all' ? 'все магазины' : formatStoreName(retailStores.find(s => s.id === selectedStore)?.name || 'выбранный магазин')}):
                   </p>
                   <div className="overflow-x-auto rounded-lg border border-border">
                     <table className="w-full text-left text-xs">
@@ -656,7 +665,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                             const attachedStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : undefined;
                             return (
                               <th key={owner.id} className="py-2 px-3 text-right">
-                                {owner.name} {attachedStore ? `(${attachedStore.name})` : isOwnerAdmin ? '(Все магазины)' : ''}
+                                {owner.name} {attachedStore ? `(${formatStoreName(attachedStore.name)})` : isOwnerAdmin ? '(Все магазины)' : ''}
                               </th>
                             );
                           })}
@@ -667,7 +676,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           <tr key={store.storeId} className="hover:bg-surface-raised/50">
                             <td className="py-2.5 px-3 font-semibold text-fg-muted flex items-center gap-1.5">
                               <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
-                              <span>{store.storeName}</span>
+                              <span>{formatStoreName(store.storeName)}</span>
                             </td>
                             <td className={`py-2.5 px-3 text-right font-bold ${store.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>
                               {signedUsd(store.netProfitUsd)}
@@ -684,14 +693,14 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                           </tr>
                         ))}
 
-                        {/* Central unassigned expenses & bonuses row if viewing all stores */}
-                        {selectedStore === 'all' && (data.periodCashBonusesUsd > 0 || data.mainWarehouseExpenses.expensesUsd > 0) && (() => {
-                          const centralNetUsd = +(data.periodCashBonusesUsd - data.mainWarehouseExpenses.expensesUsd).toFixed(2);
+                        {/* Central office general expenses row if viewing all stores (bonuses are not anyone's) */}
+                        {selectedStore === 'all' && data.mainWarehouseExpenses.expensesUsd > 0 && (() => {
+                          const centralNetUsd = -data.mainWarehouseExpenses.expensesUsd;
                           return (
                             <tr className="hover:bg-surface-raised/50 bg-surface-raised/20">
                               <td className="py-2.5 px-3 text-fg-subtle flex items-center gap-1.5">
                                 <Warehouse className="w-3.5 h-3.5 text-fg-subtle shrink-0" />
-                                <span>Центральный офис (бонусы/общие расходы)</span>
+                                <span>Центральный офис (общие расходы)</span>
                               </td>
                               <td className={`py-2.5 px-3 text-right font-semibold ${centralNetUsd >= 0 ? 'text-accent' : 'text-danger'}`}>
                                 {signedUsd(centralNetUsd)}
@@ -828,7 +837,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                       </div>
                       <div className="min-w-0">
                         <div className="flex items-center gap-2">
-                          <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{store.storeName}</h4>
+                          <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{formatStoreName(store.storeName)}</h4>
                           <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-subtle font-semibold shrink-0">
                             {store.salesCount} чеков
                           </span>
@@ -1001,7 +1010,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                     </div>
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
-                        <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{mainWarehouse.name}</h4>
+                        <h4 className="font-bold text-xs sm:text-sm text-fg truncate">{formatStoreName(mainWarehouse.name)}</h4>
                         <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/15 border border-amber-500/30 text-amber-500 font-semibold shrink-0">
                           ГЛАВНЫЙ СКЛАД
                         </span>

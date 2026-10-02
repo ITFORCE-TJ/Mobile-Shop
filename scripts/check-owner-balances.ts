@@ -47,8 +47,9 @@ async function main() {
  * Capital reconciliation (everything in USD): what the owners hold — capital plus profit not yet
  * paid out — must equal what the business holds: all cash registers plus stock at cost, minus
  * what it owes suppliers. Items that legitimately sit outside that equation are listed
- * separately (card takings never reach a register, supplier cash bonuses are profit without
- * cash, the undistributed bonus pool, unpaid expenses, manual register corrections); whatever
+ * separately (card takings never reach a register, old supplier cash bonuses that were accrued
+ * to owners without cash, bonus-phone cash that belongs to the company and not to the owners,
+ * unpaid expenses, manual register corrections); whatever
  * is left is a real discrepancy to investigate.
  */
 async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; availableProfitUsd: Prisma.Decimal }[]) {
@@ -57,9 +58,11 @@ async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; ava
     prisma.store.findMany({ select: { cashBalanceUsd: true } }),
     prisma.device.aggregate({ _sum: { costBasisUsd: true }, where: { status: { not: 'SOLD' } } }),
     prisma.supplier.aggregate({ _sum: { totalDebtUsd: true } }),
-    prisma.bonusPoolEntry.aggregate({ _sum: { profitUsd: true }, where: { status: 'PENDING' } }),
+    // Bonus-phone profit is nobody's income: pending or zeroed at a quarterly close, its cash stays
+    // in the registers (a refunded sale gave it back to the customer).
+    prisma.bonusPoolEntry.aggregate({ _sum: { profitUsd: true }, where: { status: { in: ['PENDING', 'ANNULLED'] }, sale: { status: { not: 'REFUNDED' } } } }),
     prisma.expense.findMany({ where: { status: 'UNPAID', cancelledAt: null }, select: { amountUsd: true, amountTjs: true, exchangeRate: true } }),
-    prisma.supplierBonus.aggregate({ _sum: { amountUsd: true }, where: { bonusType: 'CASH_DISCOUNT' } }),
+    prisma.supplierBonus.findMany({ where: { bonusType: 'CASH_DISCOUNT' }, select: { amountUsd: true, ownerProfitAllocations: true } }),
     prisma.sale.findMany({ where: { status: { not: 'REFUNDED' } }, select: { totalUsd: true, totalTjs: true, cardAmountTjs: true } }),
     prisma.financialTransaction.findMany({ where: { type: 'ADJUSTMENT', status: 'POSTED', sourceType: 'STORE_ADJUSTMENT' }, select: { direction: true, amountUsd: true } }),
     prisma.customer.aggregate({ _sum: { totalDebtTjs: true } }),
@@ -81,8 +84,9 @@ async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; ava
   const explained: [string, Prisma.Decimal][] = [
     ['Оплаты картой (деньги вне касс)', cardTakings],
     ['Долг покупателей', customerReceivable],
-    ['Денежные бонусы поставщиков (прибыль без денег)', D(cashBonuses._sum.amountUsd ?? 0)],
-    ['Нераспределённый бонусный пул', D(pool._sum.profitUsd ?? 0).negated()],
+    // Only bonuses booked before bonuses stopped being owner income were accrued without cash.
+    ['Старые денежные бонусы, начисленные владельцам (прибыль без денег)', sum(cashBonuses.filter((b) => Array.isArray(b.ownerProfitAllocations) && b.ownerProfitAllocations.length > 0).map((b) => b.amountUsd ?? 0))],
+    ['Деньги от бонусных телефонов (у компании, не у владельцев)', D(pool._sum.profitUsd ?? 0).negated()],
     ['Неоплаченные расходы (прибыль уже уменьшена, деньги ещё в кассе)', unpaidUsd.negated()],
     ['Ручные корректировки касс', manual.negated()],
   ];

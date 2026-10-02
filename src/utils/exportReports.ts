@@ -13,6 +13,9 @@ export interface ComprehensiveReportSummary {
   grossProfitUsd: number;
   refundPenaltiesTjs: number;
   refundPenaltiesUsd: number;
+  /** Profit of sold free bonus phones: nobody's income, shown for reference and left out of profit. */
+  bonusDeviceProfitTjs: number;
+  bonusDeviceProfitUsd: number;
   profitTjs: number;
   profitUsd: number;
   cashBonusesTjs: number;
@@ -205,14 +208,11 @@ export function buildSalesReportTable(sales: Sale[], rate: number = 9.5, cashBon
     }
   });
 
-  // Supplier cash bonuses are tied to the supplier/main warehouse, not any one store, so
-  // this isn't this store's own money — it's appended once, clearly labeled, rather than
-  // silently folded into totalProfitUsd where it would look like the store earned it.
+  // Supplier cash bonuses are nobody's income: shown once for reference, never added to profit.
   if (cashBonusesUsd !== 0) {
-    totalProfitUsd += cashBonusesUsd;
     rows.push([
       '', '', '', '',
-      'Бонусы поставщиков за период (наличными, по всему бизнесу)',
+      'Бонусы поставщиков за период — справочно, не входят в прибыль',
       '', '', '', '', '',
       cashBonusesUsd.toFixed(2),
       '', 'БОНУС'
@@ -515,17 +515,24 @@ export async function buildComprehensiveReportWorkbook({
   penaltyRow.getCell(19).value = summary.refundPenaltiesUsd;
   penaltyRow.font = { bold: true, color: { argb: XLSX_DARK } };
 
+  // Bonus phones ($0 cost) are in the sales above, but their profit is nobody's income.
+  const bonusDeviceRow = salesSheet.addRow(['МИНУС ПРИБЫЛЬ БОНУСНЫХ ТЕЛЕФОНОВ (не доход):']);
+  const bonusDeviceRowNumber = bonusDeviceRow.number;
+  bonusDeviceRow.getCell(18).value = summary.bonusDeviceProfitTjs;
+  bonusDeviceRow.getCell(19).value = summary.bonusDeviceProfitUsd;
+  bonusDeviceRow.font = { bold: true, color: { argb: XLSX_MUTED } };
+
   const profitAfterReturnsRow = salesSheet.addRow(['ПРИБЫЛЬ С УЧЁТОМ ВОЗВРАТОВ:']);
   const profitAfterReturnsRowNumber = profitAfterReturnsRow.number;
-  profitAfterReturnsRow.getCell(18).value = cellFormula(`R${recognizedRowNumber}+R${penaltyRowNumber}`, summary.profitTjs);
-  profitAfterReturnsRow.getCell(19).value = cellFormula(`S${recognizedRowNumber}+S${penaltyRowNumber}`, summary.profitUsd);
+  profitAfterReturnsRow.getCell(18).value = cellFormula(`R${recognizedRowNumber}+R${penaltyRowNumber}-R${bonusDeviceRowNumber}`, summary.profitTjs);
+  profitAfterReturnsRow.getCell(19).value = cellFormula(`S${recognizedRowNumber}+S${penaltyRowNumber}-S${bonusDeviceRowNumber}`, summary.profitUsd);
   styleTotalRow(profitAfterReturnsRow, XLSX_GREEN);
 
-  const bonusRow = salesSheet.addRow(['БОНУСЫ ПОСТАВЩИКОВ:']);
+  const bonusRow = salesSheet.addRow(['БОНУСЫ ПОСТАВЩИКОВ (справочно, не входят в прибыль):']);
   const bonusRowNumber = bonusRow.number;
   bonusRow.getCell(18).value = summary.cashBonusesTjs;
   bonusRow.getCell(19).value = summary.cashBonusesUsd;
-  bonusRow.font = { bold: true, color: { argb: XLSX_GREEN } };
+  bonusRow.font = { bold: true, color: { argb: XLSX_MUTED } };
 
   for (let rowNumber = salesRawTotalNumber; rowNumber <= bonusRowNumber; rowNumber += 1) {
     for (let column = 12; column <= 21; column += 1) salesSheet.getRow(rowNumber).getCell(column).numFmt = XLSX_MONEY_FORMAT;
@@ -622,15 +629,17 @@ export async function buildComprehensiveReportWorkbook({
     ['Прибыль от продаж', cellFormula(`'Продажи'!R${recognizedRowNumber}`, summary.grossProfitTjs), cellFormula(`'Продажи'!S${recognizedRowNumber}`, summary.grossProfitUsd)],
     ['Штрафы, удержанные при возвратах', cellFormula(`'Продажи'!R${penaltyRowNumber}`, summary.refundPenaltiesTjs), cellFormula(`'Продажи'!S${penaltyRowNumber}`, summary.refundPenaltiesUsd)],
     ['Прибыль с учётом возвратов', cellFormula(`'Продажи'!R${profitAfterReturnsRowNumber}`, summary.profitTjs), cellFormula(`'Продажи'!S${profitAfterReturnsRowNumber}`, summary.profitUsd)],
-    ['Бонусы поставщиков', cellFormula(`'Продажи'!R${bonusRowNumber}`, summary.cashBonusesTjs), cellFormula(`'Продажи'!S${bonusRowNumber}`, summary.cashBonusesUsd)],
+    ['Денежные бонусы поставщиков (справочно)', cellFormula(`'Продажи'!R${bonusRowNumber}`, summary.cashBonusesTjs), cellFormula(`'Продажи'!S${bonusRowNumber}`, summary.cashBonusesUsd)],
     ['Расходы', cellFormula(`'Расходы'!I${expenseTotalRowNumber}`, summary.expensesTjs), cellFormula(`'Расходы'!K${expenseTotalRowNumber}`, summary.expensesUsd)],
+    ['Прибыль бонусных телефонов (справочно)', cellFormula(`'Продажи'!R${bonusDeviceRowNumber}`, summary.bonusDeviceProfitTjs), cellFormula(`'Продажи'!S${bonusDeviceRowNumber}`, summary.bonusDeviceProfitUsd)],
   ];
   for (const values of summaryRows) summarySheet.addRow(values);
 
   const netProfitRow = summarySheet.addRow(['ЧИСТАЯ ПРИБЫЛЬ ПОСЛЕ РАСХОДОВ']);
   const netProfitRowNumber = netProfitRow.number;
-  netProfitRow.getCell(2).value = cellFormula(`B11+B12-B13`, summary.netProfitTjs);
-  netProfitRow.getCell(3).value = cellFormula(`C11+C12-C13`, summary.netProfitUsd);
+  // Bonuses (rows 12 and 14) are for reference only: net profit = profit after returns − expenses.
+  netProfitRow.getCell(2).value = cellFormula(`B11-B13`, summary.netProfitTjs);
+  netProfitRow.getCell(3).value = cellFormula(`C11-C13`, summary.netProfitUsd);
   styleTotalRow(netProfitRow, summary.netProfitUsd >= 0 ? XLSX_GREEN : XLSX_RED);
 
   const checkRow = summarySheet.addRow(['Контроль расхождения с серверным итогом']);
@@ -653,7 +662,7 @@ export async function buildComprehensiveReportWorkbook({
     }
   }
   const noteRowNumber = checkRow.number + 2;
-  summarySheet.getCell(`A${noteRowNumber}`).value = 'Формула: прибыль с учётом возвратов + бонусы поставщиков − расходы.';
+  summarySheet.getCell(`A${noteRowNumber}`).value = 'Формула: прибыль с учётом возвратов − расходы. Бонусы поставщиков и прибыль бонусных телефонов — справочно: это не доход, они не зачисляются ни на какой счёт и обнуляются при закрытии квартала бонусов.';
   summarySheet.mergeCells(`A${noteRowNumber}:C${noteRowNumber}`);
   summarySheet.getCell(`A${noteRowNumber}`).font = { italic: true, size: 9, color: { argb: XLSX_MUTED } };
 

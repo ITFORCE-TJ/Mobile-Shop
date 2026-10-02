@@ -133,7 +133,9 @@ export const OwnersPage: React.FC = () => {
     }
   }, [owners, selectedOwnerId]);
 
-  const [txType, setTxType] = useState<'INVESTMENT' | 'WITHDRAWAL' | 'PROFIT_PAYOUT' | 'REINVEST'>('PROFIT_PAYOUT');
+  // Owners only invest or withdraw capital here. Profit is never paid out from this page: it
+  // becomes capital at the quarterly close.
+  const [txType, setTxType] = useState<'INVESTMENT' | 'WITHDRAWAL'>('INVESTMENT');
   const [amountUsd, setAmountUsd] = useState('');
   const [note, setNote] = useState('');
   const [selectedTxStoreId, setSelectedTxStoreId] = useState<string>('');
@@ -398,7 +400,7 @@ export const OwnersPage: React.FC = () => {
 
   const openTxModalForOwner = (
     ownerId: string,
-    defaultType: 'INVESTMENT' | 'PROFIT_PAYOUT' | 'WITHDRAWAL' | 'REINVEST',
+    defaultType: 'INVESTMENT' | 'WITHDRAWAL',
     targetStoreId?: string
   ) => {
     setSelectedOwnerId(ownerId);
@@ -481,27 +483,6 @@ export const OwnersPage: React.FC = () => {
       return;
     }
 
-    const currentOwner = owners.find(o => o.id === selectedOwnerId);
-
-    if ((txType === 'REINVEST' || txType === 'PROFIT_PAYOUT') && currentOwner) {
-      const availProfit = currentOwner.availableProfitUsd ?? 0;
-      if (val > availProfit) {
-        setStatusBanner({
-          tone: 'error',
-          text: `Сумма ($${val}) превышает доступный остаток к выплате ($${availProfit})`
-        });
-        return;
-      }
-      const reinvestable = currentOwner.reinvestableProfitUsd ?? availProfit;
-      if (txType === 'REINVEST' && val > reinvestable) {
-        setStatusBanner({
-          tone: 'error',
-          text: `Прибыль партнёра переходит в капитал только после закрытия квартала. Сейчас можно реинвестировать не больше $${reinvestable}`
-        });
-        return;
-      }
-    }
-
     const targetStore = stores.find(s => s.id === selectedTxStoreId);
     if (!targetStore) {
       setStatusBanner({ tone: 'error', text: 'Выберите кассу: магазин или центральный склад' });
@@ -524,14 +505,7 @@ export const OwnersPage: React.FC = () => {
         setIsTxModalOpen(false);
         setAmountUsd('');
         setNote('');
-        const typeText =
-          txType === 'REINVEST'
-            ? 'Реинвестирование'
-            : txType === 'INVESTMENT'
-            ? 'Внесение капитала'
-            : txType === 'PROFIT_PAYOUT'
-            ? 'Выплата прибыли'
-            : 'Изъятие капитала';
+        const typeText = txType === 'INVESTMENT' ? 'Внесение капитала' : 'Изъятие капитала';
         setStatusBanner({
           tone: 'success',
           text: `Операция «${typeText}» на сумму $${val.toLocaleString()} успешно проведена`
@@ -548,8 +522,8 @@ export const OwnersPage: React.FC = () => {
     if (isSubmitting) return;
     const quarterName = `${selectedQuarter} ${selectedQuarterYear}`;
     const sweepNote = transferRemainingToCapital
-      ? 'Невыплаченный остаток прибыли партнеров будет зачислен в их капитал.'
-      : 'Невыплаченный остаток прибыли партнеров перейдет на следующий период.';
+      ? 'Прибыль партнеров будет зачислена в их капитал.'
+      : 'Прибыль партнеров перейдет на следующий период.';
     if (!window.confirm(`Закрыть период ${quarterName}? ${sweepNote}`)) {
       return;
     }
@@ -705,7 +679,7 @@ export const OwnersPage: React.FC = () => {
           {/* Available Profit */}
           <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
             <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">К выплате</span>
+              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Прибыль до закрытия квартала</span>
               <div className="w-7 h-7 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shrink-0">
                 <Wallet className="w-3.5 h-3.5" />
               </div>
@@ -722,7 +696,7 @@ export const OwnersPage: React.FC = () => {
               </span>
             </div>
             <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              Доступный остаток прибыли
+              Станет капиталом при закрытии квартала
             </div>
           </div>
         </div>
@@ -935,10 +909,10 @@ export const OwnersPage: React.FC = () => {
                         </span>
                       </div>
 
-                      {/* Available for payout */}
+                      {/* Profit not yet capitalized: it becomes capital at the quarterly close */}
                       <div className="p-3 rounded-xl bg-warning/10 border border-warning/25 space-y-1">
                         <span className="text-[10px] font-semibold text-warning uppercase block">
-                          Остаток к выплате
+                          Прибыль до закрытия квартала
                         </span>
                         <div className="text-base sm:text-lg font-bold text-warning">
                           ${formatMoney(profitUsd)}
@@ -1035,7 +1009,7 @@ export const OwnersPage: React.FC = () => {
                   </div>
 
                   {/* Clean Action Buttons */}
-                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 pt-3 border-t border-border">
+                  <div className="grid grid-cols-2 gap-1.5 pt-3 border-t border-border">
                     <button
                       type="button"
                       onClick={() => openTxModalForOwner(owner.id, 'INVESTMENT')}
@@ -1043,26 +1017,6 @@ export const OwnersPage: React.FC = () => {
                       title="Внести личные средства в капитал"
                     >
                       + Внести
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openTxModalForOwner(owner.id, 'PROFIT_PAYOUT')}
-                      disabled={profitUsd <= 0}
-                      className="px-2 py-2 rounded-xl bg-warning/15 hover:bg-warning/25 disabled:opacity-40 disabled:cursor-not-allowed text-warning border border-warning/30 text-xs font-bold transition-all text-center cursor-pointer"
-                      title="Выплатить начисленную чистую прибыль"
-                    >
-                      ↑ Выплата
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={() => openTxModalForOwner(owner.id, 'REINVEST')}
-                      disabled={profitUsd <= 0}
-                      className="px-2 py-2 rounded-xl bg-surface-raised hover:bg-surface disabled:opacity-40 disabled:cursor-not-allowed text-fg-muted hover:text-fg border border-border text-xs font-semibold transition-all text-center cursor-pointer"
-                      title="Реинвестировать остаток прибыли в капитал"
-                    >
-                      Реинвест
                     </button>
 
                     <button
@@ -1639,12 +1593,10 @@ export const OwnersPage: React.FC = () => {
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Тип операции *</label>
                 <select
                   value={txType}
-                  onChange={(e) => setTxType(e.target.value as any)}
+                  onChange={(e) => setTxType(e.target.value as 'INVESTMENT' | 'WITHDRAWAL')}
                   className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
                 >
                   <option value="INVESTMENT">Внесение капитала (Вложение)</option>
-                  <option value="PROFIT_PAYOUT">Выплата чистой прибыли</option>
-                  <option value="REINVEST">Реинвестирование из прибыли</option>
                   <option value="WITHDRAWAL">Изъятие / вывод капитала</option>
                 </select>
               </div>
@@ -1669,40 +1621,6 @@ export const OwnersPage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Helper for available profit */}
-              {(() => {
-                const currentOwner = owners.find(o => o.id === selectedOwnerId);
-                const availProfit = currentOwner?.availableProfitUsd ?? 0;
-                const reinvestable = currentOwner?.reinvestableProfitUsd ?? availProfit;
-                const limit = txType === 'REINVEST' ? reinvestable : availProfit;
-
-                if ((txType === 'REINVEST' || txType === 'PROFIT_PAYOUT') && availProfit > 0) {
-                  return (
-                    <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-2 text-xs">
-                      <div className="flex items-center justify-between text-xs">
-                        <span className="text-fg-muted">Остаток к выплате:</span>
-                        <strong className="text-warning font-bold">${availProfit.toLocaleString()} USD</strong>
-                      </div>
-                      {txType === 'REINVEST' && reinvestable < availProfit && (
-                        <p className="text-fg-muted leading-snug">
-                          Можно реинвестировать: <strong className="text-fg">${reinvestable.toLocaleString()}</strong>.
-                          Прибыль текущего квартала перейдёт в капитал при закрытии квартала.
-                        </p>
-                      )}
-                      {limit > 0 && (
-                        <button
-                          type="button"
-                          onClick={() => setAmountUsd(limit.toFixed(2))}
-                          className="w-full py-1.5 px-2 rounded-lg bg-warning/20 hover:bg-warning/30 text-warning text-xs font-bold border border-warning/40 transition-colors cursor-pointer"
-                        >
-                          Заполнить весь остаток (${limit.toLocaleString()})
-                        </button>
-                      )}
-                    </div>
-                  );
-                }
-                return null;
-              })()}
 
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Сумма ($ USD) *</label>
@@ -1863,9 +1781,9 @@ export const OwnersPage: React.FC = () => {
                   className="rounded bg-surface border-border text-warning focus:ring-0 mt-0.5"
                 />
                 <div>
-                  <strong className="block text-warning">Автоматически зачислить невыплаченный остаток в капитал</strong>
+                  <strong className="block text-warning">Зачислить прибыль в капитал</strong>
                   <span className="text-[11px] text-fg-subtle block mt-0.5">
-                    Невыплаченный остаток будет перенесен в оборотный капитал партнеров. Если снять галочку — остаток сохранится к выплате на следующий период.
+                    Прибыль партнеров будет перенесена в их оборотный капитал. Если снять галочку — прибыль останется до следующего закрытия квартала.
                   </span>
                 </div>
               </label>

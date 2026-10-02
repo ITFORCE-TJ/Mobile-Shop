@@ -10,7 +10,8 @@ import {
   Warehouse,
   Send,
   Check,
-  Loader2
+  Loader2,
+  Clock
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
@@ -41,13 +42,27 @@ export const TransferPage: React.FC = () => {
   const sellerStoreName = currentUser?.storeName || (currentUser?.storeId ? stores.find(s => s.id === currentUser.storeId)?.name : undefined) || 'Мой магазин';
   const mainWarehouse = stores.find(s => s.isMainWarehouse);
   // Store staff send only their own store's stock to the central warehouse.
-  const defaultFromId = isStoreScoped ? (currentUser?.storeId || '') : stores[0]?.id || '';
+  const defaultFromId = isStoreScoped
+    ? (currentUser?.storeId || '')
+    : ((storeCtx.mode === 'STORE' && storeCtx.storeId) ? storeCtx.storeId : (stores[0]?.id || ''));
   const defaultToId = isStoreScoped ? (mainWarehouse?.id || '') : '';
 
   const [fromLocationId, setFromLocationId] = useState<string>(defaultFromId);
   const [toLocationId, setToLocationId] = useState<string>(defaultToId);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [selectedDeviceIds, setSelectedDeviceIds] = useState<string[]>([]);
+
+  // Automatically sync fromLocationId when stores or currentUser load
+  useEffect(() => {
+    if (isStoreScoped) {
+      if (currentUser?.storeId && fromLocationId !== currentUser.storeId) {
+        setFromLocationId(currentUser.storeId);
+      }
+    } else if (!fromLocationId && stores.length > 0) {
+      const preferred = (storeCtx.mode === 'STORE' && storeCtx.storeId) ? storeCtx.storeId : stores[0].id;
+      setFromLocationId(preferred);
+    }
+  }, [isStoreScoped, currentUser?.storeId, stores, storeCtx.mode, storeCtx.storeId, fromLocationId]);
 
   // Automatically ensure destination is set to the central warehouse for store staff
   useEffect(() => {
@@ -167,6 +182,11 @@ export const TransferPage: React.FC = () => {
 
   const handleOpenConfirmModal = () => {
     const effectiveToId = isStoreScoped ? (mainWarehouse?.id || toLocationId) : toLocationId;
+    const effectiveFromId = isStoreScoped ? (currentUser?.storeId || fromLocationId) : fromLocationId;
+    if (!effectiveFromId) {
+      setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите склад отправления' });
+      return;
+    }
     if (!effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
       return;
@@ -175,7 +195,7 @@ export const TransferPage: React.FC = () => {
       setStatusMessage({ type: 'error', text: 'Выберите хотя бы одно устройство для перемещения' });
       return;
     }
-    if (fromLocationId === effectiveToId) {
+    if (effectiveFromId === effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Исходный склад и склад назначения не могут совпадать' });
       return;
     }
@@ -184,15 +204,24 @@ export const TransferPage: React.FC = () => {
 
   const handleExecuteTransfer = async () => {
     const effectiveToId = isStoreScoped ? (mainWarehouse?.id || toLocationId) : toLocationId;
+    const effectiveFromId = isStoreScoped ? (currentUser?.storeId || fromLocationId) : fromLocationId;
+    if (!effectiveFromId) {
+      setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите склад отправления' });
+      return;
+    }
     if (!effectiveToId) {
       setStatusMessage({ type: 'error', text: 'Пожалуйста, выберите куда отправлять товар (пункт назначения)' });
+      return;
+    }
+    if (effectiveFromId === effectiveToId) {
+      setStatusMessage({ type: 'error', text: 'Исходный склад и склад назначения не могут совпадать' });
       return;
     }
     if (isSubmittingTransfer) return;
     setIsSubmittingTransfer(true);
     try {
       const res = await createTransferRequest({
-        fromLocationId,
+        fromLocationId: effectiveFromId,
         toLocationId: effectiveToId,
         deviceIds: selectedDeviceIds,
       });
@@ -551,27 +580,48 @@ export const TransferPage: React.FC = () => {
                       ))}
                     </div>
 
-                    {/* Pending Actions — approving/rejecting is ADMIN/PARTNER-only server-side */}
-                    {tr.status === 'PENDING_APPROVAL' && !isSeller && (
-                      <div className="pt-1 flex items-center justify-between sm:justify-end gap-3">
-                        <button
-                          type="button"
-                          onClick={() => { setRejectReason(''); setRejectTarget(tr); }}
-                          disabled={processingTransferId === tr.id}
-                          className="px-3 py-1.5 rounded-xl bg-danger/10 hover:bg-danger/15 text-danger border border-danger/30 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                        >
-                          Отклонить
-                        </button>
-                        <button
-                          onClick={() => handleApprove(tr.id)}
-                          disabled={processingTransferId === tr.id}
-                          className="px-4 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors disabled:opacity-60 flex items-center gap-1.5"
-                        >
-                          {processingTransferId === tr.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                          {processingTransferId === tr.id ? 'Обработка…' : 'Подтвердить и принять'}
-                        </button>
-                      </div>
-                    )}
+                    {/* Pending Actions — approving/rejecting is ADMIN-only for main warehouse, PARTNER for non-warehouse destination */}
+                    {tr.status === 'PENDING_APPROVAL' && (() => {
+                      const isToWarehouse = tr.toLocationId === mainWarehouse?.id || tr.toLocationName?.toLowerCase().includes('склад');
+                      const isFromWarehouse = tr.fromLocationId === mainWarehouse?.id || tr.fromLocationName?.toLowerCase().includes('склад');
+                      const involvesWarehouse = isToWarehouse || isFromWarehouse;
+                      const canApprove = currentUser?.role === 'ADMIN' ||
+                        (currentUser?.role === 'PARTNER' && !involvesWarehouse && currentUser.storeId === tr.toLocationId);
+
+                      if (canApprove) {
+                        return (
+                          <div className="pt-1 flex items-center justify-between sm:justify-end gap-3">
+                            <button
+                              type="button"
+                              onClick={() => { setRejectReason(''); setRejectTarget(tr); }}
+                              disabled={processingTransferId === tr.id}
+                              className="px-3 py-1.5 rounded-xl bg-danger/10 hover:bg-danger/15 text-danger border border-danger/30 text-xs font-bold transition-colors disabled:opacity-50 flex items-center gap-1.5"
+                            >
+                              Отклонить
+                            </button>
+                            <button
+                              onClick={() => handleApprove(tr.id)}
+                              disabled={processingTransferId === tr.id}
+                              className="px-4 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors disabled:opacity-60 flex items-center gap-1.5"
+                            >
+                              {processingTransferId === tr.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                              {processingTransferId === tr.id ? 'Обработка…' : 'Подтвердить и принять'}
+                            </button>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div className="pt-1 flex items-center justify-between text-xs">
+                          <span className="flex items-center gap-1.5 text-warning font-medium">
+                            <Clock className="w-3.5 h-3.5" />
+                            {isToWarehouse
+                              ? 'Ожидает приёмки администратором на главном складе'
+                              : 'Ожидает подтверждения принимающей стороной'}
+                          </span>
+                        </div>
+                      );
+                    })()}
                   </div>
                 ))}
               </div>

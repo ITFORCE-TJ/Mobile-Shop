@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildComprehensiveReportWorkbook, type ComprehensiveReportInput } from './exportReports';
+import { buildComprehensiveReportWorkbook, buildSalesReportTable, type ComprehensiveReportInput } from './exportReports';
 
 const fixture: ComprehensiveReportInput = {
   generatedBy: 'Администратор',
@@ -67,14 +67,17 @@ const fixture: ComprehensiveReportInput = {
     grossProfitUsd: 50,
     refundPenaltiesTjs: 100,
     refundPenaltiesUsd: 10,
-    profitTjs: 600,
-    profitUsd: 60,
+    // Bonuses are nobody's income: bonus-phone profit leaves profit, cash bonuses never enter it.
+    bonusDeviceProfitTjs: 150,
+    bonusDeviceProfitUsd: 15,
+    profitTjs: 450,
+    profitUsd: 45,
     cashBonusesTjs: 50,
     cashBonusesUsd: 5,
     expensesTjs: 200,
     expensesUsd: 20,
-    netProfitTjs: 450,
-    netProfitUsd: 45,
+    netProfitTjs: 250,
+    netProfitUsd: 25,
   },
 };
 
@@ -86,10 +89,14 @@ describe('comprehensive Excel report', () => {
     expect(workbook.getWorksheet('Продажи')?.getCell('A5').value).toBe(101);
     expect(workbook.getWorksheet('Расходы')?.getCell('I5').value).toBe(200);
 
-    const netTjs = workbook.getWorksheet('Итого')?.getCell('B14').value;
-    const netUsd = workbook.getWorksheet('Итого')?.getCell('C14').value;
-    expect(netTjs).toMatchObject({ formula: 'B11+B12-B13', result: 450 });
-    expect(netUsd).toMatchObject({ formula: 'C11+C12-C13', result: 45 });
+    const summarySheet = workbook.getWorksheet('Итого');
+    const netTjs = summarySheet?.getCell('B15').value;
+    const netUsd = summarySheet?.getCell('C15').value;
+    expect(netTjs).toMatchObject({ formula: 'B11-B13', result: 250 });
+    expect(netUsd).toMatchObject({ formula: 'C11-C13', result: 25 });
+    expect(String(summarySheet?.getCell('A12').value)).toMatch(/справочно/);
+    expect(String(summarySheet?.getCell('A14').value)).toMatch(/бонусных телефонов.*справочно/);
+    expect(summarySheet?.getCell('C14').value).toMatchObject({ result: 15 });
 
     const serialized = await workbook.xlsx.writeBuffer();
     expect(serialized.byteLength).toBeGreaterThan(5_000);
@@ -97,6 +104,15 @@ describe('comprehensive Excel report', () => {
     const ExcelJS = (await import('exceljs')).default;
     const reopened = new ExcelJS.Workbook();
     await reopened.xlsx.load(serialized);
-    expect(reopened.getWorksheet('Итого')?.getCell('B14').value).toMatchObject({ result: 450 });
+    expect(reopened.getWorksheet('Итого')?.getCell('B15').value).toMatchObject({ result: 250 });
   }, 60_000);
+});
+
+describe('sales report preview', () => {
+  it('shows supplier cash bonuses for reference without adding them to profit', () => {
+    const withBonus = buildSalesReportTable(fixture.sales, 10, 5);
+    const withoutBonus = buildSalesReportTable(fixture.sales, 10, 0);
+    expect(withBonus.totalsRow[10]).toBe(withoutBonus.totalsRow[10]);
+    expect(withBonus.rows.some((row) => String(row[4]).includes('справочно'))).toBe(true);
+  });
 });

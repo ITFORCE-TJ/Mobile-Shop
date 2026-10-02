@@ -144,13 +144,21 @@ try {
     userId: 'user-admin', items: [{ deviceId, salePriceTjs: D(salePriceTjs) }], paymentMethod: 'CASH' });
   const pendingPoolUsd = async () => (await prisma.bonusPoolEntry.findMany({ where: { status: 'PENDING' } }))
     .reduce((sum, e) => sum.plus(e.profitUsd), D(0));
-  const { BonusesService } = await import('../server/src/modules/bonuses/bonuses.service');
-  const distributePool = async () => {
-    const pool = await pendingPoolUsd();
+  // The bonus pool is no longer distributed to owners. Older data still holds distributions made
+  // before that rule; this seeds one exactly as the removed 50/50 distribution recorded it.
+  const legacyDistribute = async () => {
+    const entries = await prisma.bonusPoolEntry.findMany({ where: { status: 'PENDING' } });
+    const pool = entries.reduce((sum, e) => sum.plus(e.profitUsd), D(0));
     if (pool.lte(0)) return;
     const half = pool.div(2).toDecimalPlaces(2);
-    await BonusesService.distributeBonusProfit({ periodName: 'Regression', userId: 'user-admin',
-      allocations: [{ ownerId: 'owner-admin', amountUsd: half }, { ownerId: 'owner-partner', amountUsd: pool.minus(half) }] });
+    const allocations = [{ ownerId: 'owner-admin', amountUsd: half }, { ownerId: 'owner-partner', amountUsd: pool.minus(half) }];
+    const log = await prisma.bonusDistributionLog.create({ data: { periodName: 'Regression', totalAmountUsd: pool, type: 'DISTRIBUTION',
+      allocations: moneyJson(allocations), performedByUserId: 'user-admin' } });
+    await prisma.bonusPoolEntry.updateMany({ where: { id: { in: entries.map((e) => e.id) } },
+      data: { status: 'DISTRIBUTED', distributionId: log.id, distributedAt: new Date(), distributedBy: 'Regression' } });
+    for (const a of allocations) {
+      await prisma.owner.update({ where: { id: a.ownerId }, data: { availableProfitUsd: { increment: a.amountUsd }, totalAccruedProfitUsd: { increment: a.amountUsd } } });
+    }
   };
   await shares(50);
 
@@ -170,14 +178,22 @@ try {
   assert.equal(await pendingPoolUsd(), poolBefore);
   console.log('PASS: bonus-flagged device with $100 cost books $50 profit, nothing to the bonus pool');
 
-  // Free bonus device: sale -> pool distributed -> refund takes the distributed bonus back.
-  await distributePool();
+  // Free bonus device: its sale goes to the bonus pool, never to the owners; refunding it moves no profit.
+  const pendingBonus = await bonusDevice(0);
+  let pendingSaleId = '';
+  assert.deepEqual(await change(async () => { pendingSaleId = (await sell(pendingBonus.id, 1900)).id; }), none);
+  assert.equal(await pendingPoolUsd(), 190);
+  assert.deepEqual(await change(() => refund(pendingSaleId, 1900)), none);
+  assert.equal(await pendingPoolUsd(), 0);
+  console.log('PASS: free bonus device sale and its refund leave owner profit untouched; the pool entry is annulled');
+
+  // Historical data: a refund of a free bonus device whose $190 was distributed under the old rule takes it back.
   const freeBonus = await bonusDevice(0);
   const freeSale = await sell(freeBonus.id, 1900);
   assert.equal(await pendingPoolUsd(), 190);
-  assert.deepEqual(await change(distributePool), [{ accrued: 95, available: 95 }, { accrued: 95, available: 95 }]);
+  assert.deepEqual(await change(legacyDistribute), [{ accrued: 95, available: 95 }, { accrued: 95, available: 95 }]);
   assert.deepEqual(await change(() => refund(freeSale.id, 1900)), [{ accrued: -95, available: -95 }, { accrued: -95, available: -95 }]);
-  console.log('PASS: refund of a sold free bonus device reverses the already distributed $190');
+  console.log('PASS: refund of a sold free bonus device reverses the historically distributed $190');
 
   // Exchanged free bonus device comes back at its trade-in value, so its resale is a regular
   // sale; the pool keeps only the original $190: 190 - 150 credit + 160 resale = $200 total.
@@ -219,15 +235,6 @@ try {
   assert.equal(centSale.saleItems.reduce((sum, i) => sum.plus(i.salePriceUsd), D(0)), centSale.totalUsd);
   await setTodayRate(10, 'user-admin');
   console.log('PASS: item USD prices sum exactly to the receipt total');
-
-  // Partial bonus distribution records the undistributed remainder instead of dropping it.
-  await sell((await bonusDevice(0)).id, 1000);
-  const remainderPool = await pendingPoolUsd();
-  await BonusesService.distributeBonusProfit({ periodName: 'Partial', userId: 'user-admin',
-    allocations: [{ ownerId: 'owner-admin', amountUsd: D(remainderPool).minus(40) }] });
-  const annulment = await prisma.bonusDistributionLog.findFirst({ where: { type: 'ANNULMENT' }, orderBy: { createdAt: 'desc' } });
-  assert.equal(annulment?.totalAmountUsd, 40);
-  console.log('PASS: partial bonus distribution logs the $40 remainder as annulled');
 
   // A write never silently reuses an older day's rate.
   await prisma.exchangeRate.deleteMany({});

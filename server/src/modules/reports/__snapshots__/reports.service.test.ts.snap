@@ -2,6 +2,8 @@
 
 exports[`financial report query optimization preserves all totals > preserves the complete report for all 1`] = `
 {
+  "bonusDeviceProfitTjs": 0,
+  "bonusDeviceProfitUsd": 0,
   "cogsTjs": 3282164.1,
   "cogsUsd": 328216.41,
   "exchangesCount": 0,
@@ -76,8 +78,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "revenueUsd": 78931.56,
     },
   ],
-  "netProfitTjs": 2235520.3,
-  "netProfitUsd": 223560.03,
+  "netProfitTjs": 2235265.3,
+  "netProfitUsd": 223534.53,
   "periodCashBonusesTjs": 255,
   "periodCashBonusesUsd": 25.5,
   "periodFreeDeviceBonusesReceived": 1,
@@ -94,6 +96,8 @@ exports[`financial report query optimization preserves all totals > preserves th
   "salesCount": 1846,
   "storeBreakdown": [
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1010,
       "cashUsd": 101,
       "cogsTjs": 166008.3,
@@ -158,6 +162,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1020,
       "cashUsd": 102,
       "cogsTjs": 166008.3,
@@ -222,6 +228,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1070,
       "cashUsd": 107,
       "cogsTjs": 166008.3,
@@ -286,6 +294,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1080,
       "cashUsd": 108,
       "cogsTjs": 166008.3,
@@ -350,6 +360,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1140,
       "cashUsd": 114,
       "cogsTjs": 166008.3,
@@ -414,6 +426,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1150,
       "cashUsd": 115,
       "cogsTjs": 166008.3,
@@ -478,6 +492,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1000,
       "cashUsd": 100,
       "cogsTjs": 162008.1,
@@ -542,6 +558,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1030,
       "cashUsd": 103,
       "cogsTjs": 162008.1,
@@ -606,6 +624,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1040,
       "cashUsd": 104,
       "cogsTjs": 164008.2,
@@ -670,6 +690,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1050,
       "cashUsd": 105,
       "cogsTjs": 164008.2,
@@ -734,6 +756,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1060,
       "cashUsd": 106,
       "cogsTjs": 162008.1,
@@ -798,6 +822,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1090,
       "cashUsd": 109,
       "cogsTjs": 162008.1,
@@ -862,6 +888,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1100,
       "cashUsd": 110,
       "cogsTjs": 164008.2,
@@ -926,6 +954,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1110,
       "cashUsd": 111,
       "cogsTjs": 164008.2,
@@ -990,6 +1020,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1120,
       "cashUsd": 112,
       "cogsTjs": 164008.2,
@@ -1054,6 +1086,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1130,
       "cashUsd": 113,
       "cogsTjs": 164008.2,
@@ -1118,6 +1152,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1160,
       "cashUsd": 116,
       "cogsTjs": 164008.2,
@@ -1182,6 +1218,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1170,
       "cashUsd": 117,
       "cogsTjs": 164008.2,
@@ -1246,6 +1284,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1180,
       "cashUsd": 118,
       "cogsTjs": 162008.1,
@@ -1310,6 +1350,8 @@ exports[`financial report query optimization preserves all totals > preserves th
       "unpaidExpensesTjs": 0,
     },
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1190,
       "cashUsd": 119,
       "cogsTjs": 164008.2,
@@ -1391,6 +1433,8 @@ exports[`financial report query optimization preserves all totals > preserves th
 
 exports[`financial report query optimization preserves all totals > preserves the complete report for store-0 1`] = `
 {
+  "bonusDeviceProfitTjs": 0,
+  "bonusDeviceProfitUsd": 0,
   "cogsTjs": 162008.1,
   "cogsUsd": 16200.81,
   "exchangesCount": 0,
@@ -1483,6 +1527,8 @@ exports[`financial report query optimization preserves all totals > preserves th
   "salesCount": 92,
   "storeBreakdown": [
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1000,
       "cashUsd": 100,
       "cogsTjs": 162008.1,
@@ -1564,6 +1610,8 @@ exports[`financial report query optimization preserves all totals > preserves th
 
 exports[`financial report query optimization preserves all totals > preserves the complete report for store-1 1`] = `
 {
+  "bonusDeviceProfitTjs": 0,
+  "bonusDeviceProfitUsd": 0,
   "cogsTjs": 166008.3,
   "cogsUsd": 16600.83,
   "exchangesCount": 0,
@@ -1656,6 +1704,8 @@ exports[`financial report query optimization preserves all totals > preserves th
   "salesCount": 93,
   "storeBreakdown": [
     {
+      "bonusDeviceProfitTjs": 0,
+      "bonusDeviceProfitUsd": 0,
       "cashTjs": 1010,
       "cashUsd": 101,
       "cogsTjs": 166008.3,
