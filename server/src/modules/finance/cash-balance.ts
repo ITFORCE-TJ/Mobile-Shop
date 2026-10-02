@@ -38,3 +38,16 @@ export async function loadCashLedger(tx: TransactionClient, accountId: string) {
     select: { accountId: true, destinationAccountId: true, direction: true, balanceCurrency: true, amountTjs: true, amountUsd: true },
   });
 }
+
+/**
+ * A store register's balance in both currencies as the ledger explains it: its account's rows
+ * plus, for registers converted to USD by the migration (no rows for that opening balance),
+ * the original TJS/USD that migration recorded in its audit entry.
+ */
+export async function registerLedgerBalance(db: Pick<TransactionClient, 'financialAccount' | 'financialTransaction' | 'auditLog'>, storeId: string) {
+  const account = await db.financialAccount.findUnique({ where: { storeId } });
+  const ledger = account ? cashBalanceFromLedger(account.id, await loadCashLedger(db as TransactionClient, account.id)) : { tjs: '0', usd: '0' };
+  const migration = await db.auditLog.findFirst({ where: { action: 'CASH_REGISTER_USD_MIGRATION', targetId: storeId }, orderBy: { createdAt: 'asc' } });
+  const carried = (migration?.financialDetails ?? {}) as { cashBalanceTjs?: number; cashBalanceUsd?: number };
+  return { tjs: D(ledger.tjs).plus(carried.cashBalanceTjs ?? 0), usd: D(ledger.usd).plus(carried.cashBalanceUsd ?? 0) };
+}

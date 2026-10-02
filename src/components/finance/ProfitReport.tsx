@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import { decimal, moneyNumber, sumMoney } from '../../utils/money';
+import { allocateByShares, decimal, moneyNumber, sumMoney } from '../../utils/money';
 import { useNavigate } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
@@ -225,32 +225,35 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
     return pairs.find((sh) => sh.ownerId === owner.id)?.sharePercent ?? 0;
   }, [adminOwner, storeProfitShares]);
 
+  // A store's amount split between its owners cent-exact, the same way the server books profit:
+  // the parts always add up to the store figure (no cent shown twice).
+  const splitStoreAmount = useCallback((storeId: string, amount: number) =>
+    allocateByShares(amount, owners.map((o) => ({ id: o.id, percent: getOwnerShareForStore(o, storeId) }))),
+  [owners, getOwnerShareForStore]);
+
   const getOwnerPeriodTotal = useCallback((owner: { id: string; storeId?: string | null; userId?: string | null; profitSharePercent?: number }, data: ReportsSummary) => {
     const isOwnerAdmin = owner.id === adminOwner?.id || (!owner.storeId && users.find(u => u.id === owner.userId)?.role === 'ADMIN');
-    let periodUsd = 0;
-    let periodTjs = 0;
+    let periodUsd = decimal(0);
+    let periodTjs = decimal(0);
 
     const breakdown = selectedStore === 'all' ? data.storeBreakdown : data.storeBreakdown.filter(s => s.storeId === selectedStore);
 
     for (const store of breakdown) {
-      const share = getOwnerShareForStore(owner, store.storeId);
-      if (share > 0) {
-        periodUsd = moneyNumber(decimal(periodUsd).plus(decimal(store.netProfitUsd).mul(share).div(100)));
-        periodTjs = moneyNumber(decimal(periodTjs).plus(decimal(store.netProfitTjs).mul(share).div(100)));
-      }
+      periodUsd = periodUsd.plus(splitStoreAmount(store.storeId, store.netProfitUsd)[owner.id] ?? 0);
+      periodTjs = periodTjs.plus(splitStoreAmount(store.storeId, store.netProfitTjs)[owner.id] ?? 0);
     }
 
     // Central office: only its general expenses. Supplier bonuses are not added to anyone.
     if (selectedStore === 'all' && isOwnerAdmin && data.mainWarehouseExpenses.expensesUsd > 0) {
-      periodUsd -= data.mainWarehouseExpenses.expensesUsd;
-      periodTjs -= data.mainWarehouseExpenses.expensesTjs;
+      periodUsd = periodUsd.minus(data.mainWarehouseExpenses.expensesUsd);
+      periodTjs = periodTjs.minus(data.mainWarehouseExpenses.expensesTjs);
     }
 
     return {
-      periodAccruedUsd: +(periodUsd.toFixed(2)),
-      periodAccruedTjs: +(periodTjs.toFixed(2)),
+      periodAccruedUsd: moneyNumber(periodUsd),
+      periodAccruedTjs: moneyNumber(periodTjs),
     };
-  }, [adminOwner, getOwnerShareForStore, selectedStore]);
+  }, [adminOwner, splitStoreAmount, selectedStore]);
 
   // Period/store filtering happens on the server (/api/reports/summary), so what crosses the
   // network scales with the selected month, not with the business's entire history.
@@ -569,7 +572,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                   <span className="font-medium text-fg-muted">{usd(data.bonusDeviceProfitUsd || 0)}</span>
                 </div>
                 <p className="text-[11px] text-fg-subtle leading-snug">
-                  Не выплачиваются; деньги хранятся на Бонусном счёте. Счётчики обнуляются при закрытии квартала на странице «Бонусы».
+                  Никому не начисляются; деньги на Бонусном счёте, ими распоряжается администратор. Счётчики обнуляются при закрытии квартала на странице «Бонусы».
                 </p>
               </div>
             </div>
@@ -683,7 +686,7 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                             </td>
                             {sortedOwners.map((owner) => {
                               const share = getOwnerShareForStore(owner, store.storeId);
-                              const ownerProfit = share > 0 ? +(store.netProfitUsd * share / 100).toFixed(2) : 0;
+                              const ownerProfit = share > 0 ? splitStoreAmount(store.storeId, store.netProfitUsd)[owner.id] ?? 0 : 0;
                               return (
                                 <td key={owner.id} className={`py-2.5 px-3 text-right font-bold ${share === 0 ? 'text-fg-subtle/40 font-normal' : ownerProfit >= 0 ? 'text-fg-muted' : 'text-danger'}`}>
                                   {share > 0 ? signedUsd(ownerProfit) : '—'}
@@ -944,8 +947,8 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                         <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
                           {storeOwners.map((owner) => {
                             const share = getOwnerShareForStore(owner, store.storeId);
-                            const ownerStoreNet = +(store.netProfitUsd * share / 100).toFixed(2);
-                            const ownerStoreNetTjs = +(store.netProfitTjs * share / 100).toFixed(2);
+                            const ownerStoreNet = share > 0 ? splitStoreAmount(store.storeId, store.netProfitUsd)[owner.id] ?? 0 : 0;
+                            const ownerStoreNetTjs = share > 0 ? splitStoreAmount(store.storeId, store.netProfitTjs)[owner.id] ?? 0 : 0;
                             return (
                               <div key={owner.id} className="p-2.5 rounded-xl bg-surface-raised/60 border border-border flex items-center justify-between gap-2">
                                 <div className="flex items-center gap-2 min-w-0">

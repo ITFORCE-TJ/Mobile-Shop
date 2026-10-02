@@ -2,6 +2,7 @@ import { D, type MoneyInput } from '../../common/decimal';
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../prisma/prisma.service';
 import { getRateForDate } from '../exchange-rate/exchange-rate.service';
+import { getBusinessDateKey } from '../../common/business-date';
 import { calculateRecognizedProfit } from '../sales/profit';
 import { roundMoney } from '../../common/money';
 
@@ -124,13 +125,13 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     // Exchanges processed in the period, whenever the exchanged sale itself happened.
     prisma.auditLog.findMany({
       where: { action: 'EXCHANGE', ...(dateRange ? { createdAt: dateRange } : {}) },
-      select: { targetId: true, financialDetails: true },
+      select: { targetId: true, financialDetails: true, createdAt: true },
     }),
     prisma.supplier.aggregate({ _sum: { totalDebtUsd: true } }),
     prisma.supplier.findMany({ where: { totalDebtUsd: { gt: 0 } }, orderBy: { totalDebtUsd: 'desc' }, take: 8,
       select: { id: true, name: true, totalPurchasedUsd: true, totalPaidUsd: true, totalDebtUsd: true } }),
     prisma.store.findFirst({ where: { isMainWarehouse: true }, select: { id: true, cashBalanceUsd: true } }),
-    prisma.store.findMany({ where: { isMainWarehouse: false, ...(storeFilter ? { id: storeFilter } : {}) },
+    prisma.store.findMany({ where: { isMainWarehouse: false, active: true, ...(storeFilter ? { id: storeFilter } : {}) },
       select: { id: true, name: true, cashBalanceUsd: true } }),
   ]);
   // Today's (or the latest known) rate only values USD figures in TJS for display; every
@@ -140,8 +141,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     const r = D(ownRate || rate);
     return r.gt(0) ? D(tjs).div(r) : D(0);
   };
-  // Bonus-device profit recorded on a sale or exchange. It is real profit for the period
-  // (the device cost nothing), even though owners receive it later from the bonus pool.
+  // Bonus-device profit recorded on a sale or exchange (the device cost nothing). It is nobody's
+  // income: reported separately and excluded from profit; its money goes to the Bonus Account.
   const bonusProfitOf = (logs: { action: string; financialDetails: unknown }[]) => logs
     .filter((log) => ['SALE', 'SALE_BELOW_COST', 'EXCHANGE'].includes(log.action))
     .reduce((sum, log) => sum.plus(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0), D(0));
@@ -155,7 +156,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
     logSaleIds.length
       ? prisma.auditLog.findMany({
           where: { targetId: { in: logSaleIds }, action: { in: ['SALE', 'SALE_BELOW_COST', 'EXCHANGE', 'REFUND'] } },
-          select: { targetId: true, action: true, financialDetails: true },
+          select: { targetId: true, action: true, financialDetails: true, createdAt: true },
         })
       : Promise.resolve([]),
     exchangeSaleIds.length
@@ -172,6 +173,17 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       select: { storeId: true, costBasisUsd: true, purchasePriceUsd: true },
     }),
   ]);
+  // A record without its own rate is valued in TJS at the rate of its own day — never at today's,
+  // which would change a closed period's TJS figures every day.
+  const dayRates = new Map<string, MoneyInput | null>();
+  const neededDays = [
+    ...profitLogs.filter((log) => log.action === 'REFUND' && detailNumber(log.financialDetails, 'exchangeRate') === undefined).map((log) => log.createdAt),
+    ...periodExchangeLogs.filter((log) => !detailNumber(log.financialDetails, 'newPriceUsd')).map((log) => log.createdAt),
+  ].filter((d): d is Date => d instanceof Date);
+  await Promise.all([...new Map(neededDays.map((d) => [getBusinessDateKey(d), d])).values()]
+    .map(async (d) => { dayRates.set(getBusinessDateKey(d), await getRateForDate(d)); }));
+  const rateOn = (d: Date | null | undefined) => (d ? dayRates.get(getBusinessDateKey(d)) : null) || rate;
+
   const profitsBySale = new Map<string, typeof profitLogs>();
   for (const log of profitLogs) {
     if (log.targetId) profitsBySale.set(log.targetId, [...(profitsBySale.get(log.targetId) ?? []), log]);
@@ -183,8 +195,8 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
 
   // Revenue and profit are built from three kinds of events, each reported in the period
   // it happened — the same moments owner profit is accrued, so monthly figures match the
-  // Owners page (bonus-device profit included here reaches owners when the bonus pool is
-  // distributed) and a closed month never changes when a sale is refunded later.
+  // Owners page and a closed month never changes when a sale is refunded later. Bonus-phone
+  // profit is carried separately (bonusUsd) and is nobody's income: it is left out of profit.
   const profitEvents: ProfitEvent[] = [];
   for (const sale of periodSalesAllStores) {
     const saleRate = sale.exchangeRate || rate;
@@ -220,7 +232,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
       revenueTjs: D(newPriceTjs).minus(detailNumber(log.financialDetails, 'exchangeInValueTjs') ?? 0),
       profitUsd: D(profitUsd).plus(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0),
       bonusUsd: D(detailNumber(log.financialDetails, 'bonusProfitUsd') ?? 0),
-      rate: newPriceUsd ? D(newPriceTjs).div(newPriceUsd) : rate,
+      rate: newPriceUsd ? D(newPriceTjs).div(newPriceUsd) : rateOn(log.createdAt),
     });
   }
   let refundsRevenueUsd = D(0);
@@ -311,7 +323,7 @@ export async function computeReportsSummary(input: ReportsSummaryInput) {
   const refundFx = (sale: { id: string }) => {
     const refundLog = (profitsBySale.get(sale.id) ?? []).find((log) => log.action === 'REFUND');
     const usd = D(detailNumber(refundLog?.financialDetails, 'fxGainUsd') ?? 0);
-    return { usd, tjs: usd.mul(detailNumber(refundLog?.financialDetails, 'exchangeRate') ?? rate) };
+    return { usd, tjs: usd.mul(detailNumber(refundLog?.financialDetails, 'exchangeRate') ?? rateOn(refundLog?.createdAt)) };
   };
   const periodRefundFxUsd = refundedSales.reduce((acc, s) => acc.plus(refundFx(s).usd), D(0));
   const periodRefundFxTjs = refundedSales.reduce((acc, s) => acc.plus(refundFx(s).tjs), D(0));

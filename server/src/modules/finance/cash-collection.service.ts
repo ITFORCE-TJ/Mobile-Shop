@@ -7,7 +7,7 @@ import { getBusinessDateKey } from '../../common/business-date';
 import { resolveActor } from '../../common/actor';
 import { requireNonNegativeMoney } from '../../common/money';
 import { dateRangeForPeriod, type ReportPeriod } from '../reports/reports.service';
-import { cashBalanceFromLedger, loadCashLedger } from './cash-balance';
+import { cashBalanceFromLedger, loadCashLedger, registerLedgerBalance } from './cash-balance';
 import { notifyAdmins } from '../notifications/notification.service';
 
 type Db = Pick<TransactionClient, 'financialAccount' | 'financialTransaction' | 'auditLog' | 'cashHandover' | 'bonusPoolEntry'>;
@@ -91,12 +91,7 @@ export function splitRegister(cash: { usd: MoneyInput; tjs: MoneyInput }, due: {
  * to USD have no rows: their original TJS and USD come from that migration's audit record.
  */
 async function registerBalance(db: Db, store: { id: string; name: string; isMainWarehouse: boolean; cashBalanceUsd: MoneyInput }): Promise<RegisterBalance> {
-  const account = await db.financialAccount.findUnique({ where: { storeId: store.id } });
-  const ledger = account ? cashBalanceFromLedger(account.id, await loadCashLedger(db as TransactionClient, account.id)) : { tjs: '0', usd: '0' };
-  const migration = await db.auditLog.findFirst({ where: { action: 'CASH_REGISTER_USD_MIGRATION', targetId: store.id }, orderBy: { createdAt: 'asc' } });
-  const carried = (migration?.financialDetails ?? {}) as { cashBalanceTjs?: number; cashBalanceUsd?: number };
-  const tjs = D(ledger.tjs).plus(carried.cashBalanceTjs ?? 0);
-  const usd = D(ledger.usd).plus(carried.cashBalanceUsd ?? 0);
+  const { tjs, usd } = await registerLedgerBalance(db, store.id);
   const cashUsd = D(store.cashBalanceUsd);
 
   const due = store.isMainWarehouse ? { usd: D(0), tjs: D(0), count: 0 } : await bonusDue(db, store.id);

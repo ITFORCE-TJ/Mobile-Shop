@@ -1,5 +1,5 @@
 import { getBusinessDateKey } from '../../utils/businessDate';
-import { formatMoney } from '../../utils/money';
+import { decimal, formatMoney, moneyNumber } from '../../utils/money';
 import { formatUserName } from '../../utils/formatUser';
 import { capitalByLocation } from '../../utils/ownerCapital';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -619,7 +619,7 @@ export const OwnersPage: React.FC = () => {
                 <span className="text-xs font-bold text-fg-subtle">USD</span>
               </div>
               <span className="text-[11px] text-fg-muted block mt-0.5">
-                ≈ {formatMoney(totalCapitalInvested * rate)} TJS
+                ≈ {formatMoney(moneyNumber(decimal(totalCapitalInvested).mul(rate)))} TJS
               </span>
             </div>
             <div className="pt-2 border-t border-border flex items-center justify-between text-[10px] text-fg-subtle">
@@ -692,7 +692,7 @@ export const OwnersPage: React.FC = () => {
                 <span className="text-xs font-bold text-fg-subtle">USD</span>
               </div>
               <span className="text-[11px] text-fg-muted block mt-0.5">
-                ≈ {formatMoney(totalAvailableProfit * rate)} TJS
+                ≈ {formatMoney(moneyNumber(decimal(totalAvailableProfit).mul(rate)))} TJS
               </span>
             </div>
             <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
@@ -821,9 +821,9 @@ export const OwnersPage: React.FC = () => {
               const ownerPairs = storeProfitShares.filter(sh => sh.ownerId === owner.id);
               const share = owner.id === adminOwner?.id ? null : ownerPairs.reduce((max, sh) => Math.max(max, sh.sharePercent), 0);
               const capUsd = owner.capitalBalanceUsd ?? 0;
-              const capTjs = Math.round(capUsd * rate);
+              const capTjs = moneyNumber(decimal(capUsd).mul(rate));
               const profitUsd = owner.availableProfitUsd ?? 0;
-              const profitTjs = Math.round(profitUsd * rate);
+              const profitTjs = moneyNumber(decimal(profitUsd).mul(rate));
 
               return (
                 <div

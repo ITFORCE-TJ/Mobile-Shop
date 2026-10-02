@@ -53,3 +53,25 @@ export function formatRateOrInput(value: number | string | null | undefined): st
   return num.toFixed(2);
 }
 
+
+/**
+ * Splits an amount between owners by percent, cent-exact, exactly as the server books owner
+ * profit (allocateOwnerProfit): floor each share in cents, then hand the leftover cents to the
+ * largest remainders (ties by id). The parts always add up to the total, losses included.
+ */
+export function allocateByShares(total: Decimal | number | string, shares: { id: string; percent: number | string }[]): Record<string, number> {
+  const active = shares.filter((s) => new Decimal(s.percent).gt(0));
+  if (!active.length) return {};
+  const amount = new Decimal(total).toDecimalPlaces(2);
+  const cents = amount.abs().mul(100).round();
+  const totalShare = active.reduce((sum, s) => sum.plus(s.percent), new Decimal(0));
+  const parts = active.map((s) => {
+    const exact = cents.mul(s.percent).div(totalShare);
+    return { id: s.id, cents: exact.floor(), remainder: exact.minus(exact.floor()) };
+  });
+  const leftover = cents.minus(parts.reduce((sum, p) => sum.plus(p.cents), new Decimal(0))).toNumber();
+  const ranked = [...parts].sort((a, b) => b.remainder.comparedTo(a.remainder) || a.id.localeCompare(b.id));
+  for (let i = 0; i < leftover; i++) ranked[i].cents = ranked[i].cents.plus(1);
+  const sign = amount.isNegative() ? -1 : 1;
+  return Object.fromEntries(parts.map((p) => [p.id, p.cents.isZero() ? 0 : p.cents.mul(sign).div(100).toNumber()]));
+}

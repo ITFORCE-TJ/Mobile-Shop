@@ -55,13 +55,14 @@ async function main() {
  */
 async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; availableProfitUsd: Prisma.Decimal }[]) {
   const sum = (values: Prisma.Decimal.Value[]) => values.reduce<Prisma.Decimal>((acc, v) => acc.plus(v), D(0));
-  const [stores, stock, supplierDebt, pool, unpaid, cashBonuses, keptSales, adjustments, customerDebt, rate, salePostings, bonusAccount] = await Promise.all([
+  const [stores, stock, supplierDebt, pool, unpaid, cashBonuses, keptSales, adjustments, customerDebt, rate, salePostings, bonusAccount, bonusPayouts] = await Promise.all([
     prisma.store.findMany({ select: { cashBalanceUsd: true } }),
     prisma.device.aggregate({ _sum: { costBasisUsd: true }, where: { status: { not: 'SOLD' } } }),
     prisma.supplier.aggregate({ _sum: { totalDebtUsd: true } }),
     // Bonus-phone profit is nobody's income: pending or zeroed at a quarterly close, its cash stays
     // in the registers (a refunded sale gave it back to the customer).
-    prisma.bonusPoolEntry.aggregate({ _sum: { profitUsd: true }, where: { status: { in: ['PENDING', 'ANNULLED'] }, sale: { status: { not: 'REFUNDED' } } } }),
+    // Distributed to owners and not taken back = owners' profit; everything else is the company's.
+    prisma.bonusPoolEntry.aggregate({ _sum: { profitUsd: true }, where: { sale: { status: { not: 'REFUNDED' } }, OR: [{ status: { in: ['PENDING', 'ANNULLED'] } }, { status: 'DISTRIBUTED', annulledAt: { not: null } }] } }),
     prisma.expense.findMany({ where: { status: 'UNPAID', cancelledAt: null }, select: { amountUsd: true, amountTjs: true, exchangeRate: true } }),
     prisma.supplierBonus.findMany({ where: { bonusType: 'CASH_DISCOUNT' }, select: { amountUsd: true, ownerProfitAllocations: true, bonusAccountTransactionId: true } }),
     prisma.sale.findMany({ where: { status: { not: 'REFUNDED' } }, select: { id: true, totalUsd: true, totalTjs: true, cardAmountTjs: true } }),
@@ -71,6 +72,8 @@ async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; ava
     // The posting each sale made into its register ("Чек #N: ..."), to tell which sales put their card part there.
     prisma.financialTransaction.findMany({ where: { sourceType: 'SALE', type: 'INCOME', description: { startsWith: 'Чек #' } }, select: { sourceId: true, description: true } }),
     prisma.financialAccount.findFirst({ where: { OR: [{ systemKey: 'BONUS_ACCOUNT' }, { name: 'Бонусный счёт', storeId: null }] }, orderBy: { createdAt: 'asc' }, select: { balanceUsd: true } }),
+    // Paid out of the Bonus Account by the admin (cancelled payouts are reversed, so excluded).
+    prisma.financialTransaction.aggregate({ _sum: { amountUsd: true }, where: { sourceType: 'BONUS_ACCOUNT_PAYOUT', status: 'POSTED', reversedTransactionId: null } }),
   ]);
 
   const capital = sum(owners.map((o) => o.capitalBalanceUsd));
@@ -98,6 +101,7 @@ async function reconcileCapital(owners: { capitalBalanceUsd: Prisma.Decimal; ava
     ['Старые денежные бонусы, начисленные владельцам (прибыль без денег)', sum(cashBonuses.filter((b) => Array.isArray(b.ownerProfitAllocations) && b.ownerProfitAllocations.length > 0).map((b) => b.amountUsd ?? 0))],
     ['Деньги от бонусных телефонов (в кассах или на Бонусном счёте, у компании, не у владельцев)', D(pool._sum.profitUsd ?? 0).negated()],
     ['Денежные бонусы на Бонусном счёте (у компании, не у владельцев)', sum(cashBonuses.filter((b) => b.bonusAccountTransactionId).map((b) => b.amountUsd ?? 0)).negated()],
+    ['Выдано с Бонусного счёта (деньги компании, не прибыль владельцев)', D(bonusPayouts._sum.amountUsd ?? 0)],
     ['Неоплаченные расходы (прибыль уже уменьшена, деньги ещё в кассе)', unpaidUsd.negated()],
     ['Ручные корректировки касс', manual.negated()],
   ];

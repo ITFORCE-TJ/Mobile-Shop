@@ -9,7 +9,10 @@ const db = vi.hoisted(() => ({
   auditLog: { findMany: vi.fn() }, device: { findMany: vi.fn() },
 }));
 vi.mock('../../prisma/prisma.service', () => ({ prisma: db }));
-vi.mock('../exchange-rate/exchange-rate.service', () => ({ getRateForDate: async () => 10 }));
+const rates = vi.hoisted(() => ({ byDay: new Map<string, number>(), fallback: 10 }));
+vi.mock('../exchange-rate/exchange-rate.service', () => ({
+  getRateForDate: async (d: Date) => rates.byDay.get(d.toISOString().slice(0, 10)) ?? rates.fallback,
+}));
 import { computeReportsSummary } from './reports.service';
 
 const date = new Date('2026-09-15T09:00:00Z');
@@ -38,6 +41,7 @@ function result(table: string, rows: any[], select?: any) {
 
 beforeEach(() => {
   vi.clearAllMocks(); workload = [];
+  rates.byDay.clear(); rates.fallback = 10;
   db.sale.findMany.mockImplementation(async ({ where, select }) => result('sales', sales.filter((sale) =>
     (!where.storeId || sale.storeId === where.storeId) && (!where.id || where.id.in.includes(sale.id)) &&
     (where.status !== 'REFUNDED' || sale.status === 'REFUNDED')), select));
@@ -69,3 +73,25 @@ describe('financial report query optimization preserves all totals', () => {
     }
   });
 });
+
+describe('TJS of past records never uses the current rate', () => {
+  it('values a refund FX result at the rate of the refund day when its log has no rate', async () => {
+    const refundDay = new Date('2026-09-10T08:00:00Z');
+    rates.byDay.set('2026-09-10', 11);
+    rates.fallback = 12; // "today"
+    const refunded = { id: 'refunded-1', storeId: 'store-0', status: 'REFUNDED', totalTjs: 2000, totalUsd: 200, exchangeRate: 10,
+      penaltyFeeUsd: 0, penaltyFeeTjs: 0, createdAt: new Date('2026-09-01T08:00:00Z'), updatedAt: refundDay, refundedAt: refundDay, saleItems: [] };
+    db.sale.findMany.mockImplementation(async ({ where, select }) => (where.status === 'REFUNDED' ? [refunded] : []).map((row) => project(row, select)));
+    db.auditLog.findMany.mockImplementation(async ({ where, select }) => {
+      const actions: string[] = where.action.in ?? [where.action];
+      const rows = actions.includes('REFUND')
+        ? [{ targetId: 'refunded-1', action: 'REFUND', createdAt: refundDay, financialDetails: { fxGainUsd: 18.18 } }]
+        : [];
+      return rows.map((row) => project(row, select));
+    });
+    const summary = await computeReportsSummary({ period: 'SPECIFIC_MONTH', month: '2026-09' });
+    expect(Number(summary.periodRefundFxUsd)).toBe(18.18);
+    expect(Number(summary.periodRefundFxTjs)).toBe(199.98);
+  });
+});
+

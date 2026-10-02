@@ -1,4 +1,4 @@
-import { expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { decimal, moneyNumber, sumMoney, formatMoney, formatTjs, formatUsd, formatRateOrInput } from './money';
 import { getBusinessDateKey } from './businessDate';
 
@@ -31,3 +31,29 @@ it('formats money and rates always with 2 decimal places', () => {
   expect(formatUsd(10.5)).toContain('.50');
 });
 
+
+describe('allocateByShares (same cent-exact split as the server)', () => {
+  it('splits $100.01 at 50/50 into $50.01 + $50.00, never $50.01 twice', async () => {
+    const { allocateByShares } = await import('./money');
+    expect(allocateByShares(100.01, [{ id: 'admin', percent: 50 }, { id: 'partner', percent: 50 }])).toEqual({ admin: 50.01, partner: 50 });
+  });
+
+  it('always adds up to the total exactly, losses included', async () => {
+    const { allocateByShares } = await import('./money');
+    for (const total of [0.03, 100.01, 333.33, -0.03, -150.55, 1234.57]) {
+      const split = allocateByShares(total, [{ id: 'a', percent: 33.33 }, { id: 'b', percent: 33.33 }, { id: 'c', percent: 33.34 }]);
+      expect(Object.values(split).reduce((s, v) => s + Math.round(v * 100), 0)).toBe(Math.round(total * 100));
+    }
+  });
+
+  it('matches the server allocation (allocateOwnerProfit) cent for cent', async () => {
+    const { allocateByShares } = await import('./money');
+    const { allocateOwnerProfit } = await import('../../server/src/modules/sales/profit');
+    const owners = [{ id: 'owner-admin', percent: 60 }, { id: 'owner-partner', percent: 40 }];
+    for (const total of [0.01, 0.05, 99.99, 100.01, -19.04, -150.55, 7.77]) {
+      const server = Object.fromEntries(allocateOwnerProfit(total, owners.map((o) => ({ id: o.id, profitSharePercent: o.percent })))
+        .map((a) => [a.ownerId, Number(a.amountUsd)]));
+      expect(allocateByShares(total, owners)).toEqual(server);
+    }
+  });
+});

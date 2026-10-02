@@ -157,7 +157,7 @@ export const SettingsPage: React.FC = () => {
         setMergingStore(null);
         setStatusMessage({
           type: 'success',
-          text: `Магазин «${sourceName}» объединён с «${targetName}»: касса и вся история перенесены.`
+          text: `Магазин «${sourceName}» объединён с «${targetName}» и закрыт: касса переведена, продажи, товары, ремонты, расходы и инкассации перенесены.`
         });
       } else {
         setStatusMessage({ type: 'error', text: res.message || 'Ошибка объединения магазинов' });
@@ -720,7 +720,7 @@ export const SettingsPage: React.FC = () => {
               </select>
               <p className="text-[11px] text-danger flex items-start space-x-1.5 pt-1">
                 <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>Магазин «{mergingStore.name}» будет удалён после переноса. Действие необратимо.</span>
+                <span>Магазин «{mergingStore.name}» будет закрыт после переноса: его касса переводится одной проводкой, история журнала сохраняется. Действие необратимо.</span>
               </p>
             </div>
 

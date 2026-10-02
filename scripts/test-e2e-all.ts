@@ -1,3 +1,6 @@
+// Destructive suite (cleans up with direct deletes): refuses anything but a temporary schema.
+// Run it with `npm run test:e2e`, which creates and drops that schema.
+import './lib/require-disposable-db';
 import { D } from '../server/src/common/decimal';
 import { app } from '../server/src/app';
 import { prisma } from '../server/src/prisma/prisma.service';

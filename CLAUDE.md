@@ -37,7 +37,9 @@ npx prisma db seed                       # prisma/seed.ts
 DB-backed integration suites are plain `tsx` scripts in `scripts/` (not vitest). They need a migrated, seeded local DB:
 
 ```bash
-npm run test:e2e             # scripts/test-e2e-all.ts: boots `app` on a random port and drives the HTTP API
+npm run test:e2e             # scripts/test-e2e-isolated.ts: runs test-e2e-all.ts (boots `app`, drives the HTTP API) in a temporary schema
+npm run test:store-merge     # store merge on a real temporary schema
+npm run audit:bonus-collections  # read-only check of collections and the Bonus Account
 npm run test:audit-fixes     # creates and drops its own schema, runs migrate + seed + e2e inside it
 npm run test:profit-refund
 npm run test:functional

@@ -1,7 +1,8 @@
 import { D, moneyJson, type MoneyInput } from '../../common/decimal';
 import { prisma } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
-import { getStoreCashAccount } from '../finance/account.service';
+import { getStoreCashAccount, lockCashRegister } from '../finance/account.service';
+import { registerLedgerBalance } from '../finance/cash-balance';
 import { postTransaction } from '../finance/financial-transaction.service';
 import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
 import { roundMoney } from '../../common/money';
@@ -135,11 +136,12 @@ export class StoresService {
   }
 
   /**
-   * Merges a duplicate store into a surviving one: every record referencing the
-   * source store (devices, sales, repairs, expenses, transfers, purchase invoices,
-   * payments, assigned sellers) is reassigned to the target, the source's cash
-   * balance is folded into the target's, then the now-empty source is deleted.
-   * Unlike remove(), this works even when the source has real sales/repair history.
+   * Merges a duplicate store into a surviving one and closes it. Every business record of the
+   * source (devices, sales, repairs, expenses, transfers, purchase invoices, payments, cash
+   * collections, receipts, assigned staff and partner) moves to the target. The ledger is
+   * append-only: no existing journal row is rewritten — the source register's balance moves to
+   * the target by one closing transfer carrying its historical TJS and USD, and the source store
+   * and its account are deactivated (kept for that history) instead of deleted.
    */
   public static async mergeAndDelete(sourceStoreId: string, targetStoreId: string, userId: string) {
     if (sourceStoreId === targetStoreId) throw new Error('Магазин-источник и магазин-получатель должны отличаться');
@@ -150,11 +152,17 @@ export class StoresService {
         tx.store.findUnique({ where: { id: sourceStoreId } }),
         tx.store.findUnique({ where: { id: targetStoreId } }),
       ]);
-      if (!source) throw new Error('Магазин-источник не найден');
-      if (!target) throw new Error('Магазин-получатель не найден');
+      if (!source || !source.active) throw new Error('Магазин-источник не найден или уже закрыт');
+      if (!target || !target.active) throw new Error('Магазин-получатель не найден или закрыт');
       if (source.isMainWarehouse) throw new Error('Главный склад нельзя объединить с другим магазином');
 
+      // Same lock order as a cash collection (store register, then the receiving one), and both
+      // registers must agree with their ledger accounts before anything moves.
+      const { account: sourceAccount } = await lockCashRegister(tx, sourceStoreId, actor, 'Объединение магазинов');
+      const { account: targetAccount } = await lockCashRegister(tx, targetStoreId, actor, 'Объединение магазинов');
+
       await tx.user.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
+      await tx.owner.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
       await tx.device.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
       await tx.sale.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
       await tx.supplierInvoice.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
@@ -164,34 +172,35 @@ export class StoresService {
       await tx.transferRequest.updateMany({ where: { toStoreId: sourceStoreId }, data: { toStoreId: targetStoreId } });
       await tx.repairTicket.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
       await tx.expense.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
-      await tx.ledgerEntry.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
-      // FinancialTransaction.accountId can't just be repointed to targetStoreId the way
-      // the loose storeId/shopId string fields above are — it's a real FK into
-      // FinancialAccount, and each store has exactly one (@unique). Reassign the actual
-      // rows to the target's account, fold the balance in, then the now-empty source
-      // account can be dropped before the source store itself is.
-      const targetAccount = await getStoreCashAccount(tx, targetStoreId, target.name);
-      const sourceAccount = await tx.financialAccount.findUnique({ where: { storeId: sourceStoreId } });
-      if (sourceAccount) {
-        await tx.financialTransaction.updateMany({ where: { accountId: sourceAccount.id }, data: { accountId: targetAccount.id, shopId: targetStoreId } });
-        await tx.financialTransaction.updateMany({ where: { destinationAccountId: sourceAccount.id }, data: { destinationAccountId: targetAccount.id } });
-        await tx.financialAccount.update({
-          where: { id: targetAccount.id },
-          data: { balanceTjs: { increment: sourceAccount.balanceTjs }, balanceUsd: { increment: sourceAccount.balanceUsd } },
+      await tx.cashHandover.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
+      await tx.storeReceipt.updateMany({ where: { storeId: sourceStoreId }, data: { storeId: targetStoreId } });
+      await tx.storeReceipt.updateMany({ where: { fromStoreId: sourceStoreId }, data: { fromStoreId: targetStoreId } });
+
+      // The register moves by one ledger transfer at its own historical amounts.
+      const cashUsd = D(source.cashBalanceUsd);
+      const { tjs: cashTjs } = await registerLedgerBalance(tx, sourceStoreId);
+      if (cashUsd.lt(0) || cashTjs.lt(0)) {
+        throw new Error(`Касса «${source.name}» отрицательная ($${cashUsd}). Сначала выполните корректировку кассы`);
+      }
+      if (!cashUsd.isZero() || !cashTjs.isZero()) {
+        await postTransaction(tx, {
+          type: 'TRANSFER', direction: 'NEUTRAL', numberPrefix: 'TR',
+          accountId: sourceAccount.id, destinationAccountId: targetAccount.id,
+          balanceCurrency: 'USD', amount: cashTjs, currency: 'TJS',
+          exchangeRate: cashUsd.gt(0) ? cashTjs.div(cashUsd).toDecimalPlaces(4) : null,
+          amountTjs: cashTjs, amountUsd: cashUsd,
+          shopId: sourceStoreId, sourceType: 'STORE_MERGE', sourceId: sourceStoreId,
+          description: `Объединение магазинов: касса «${source.name}» → «${target.name}»`,
+          createdByUserId: actor.id, guardBalance: true,
         });
-        await tx.financialAccount.delete({ where: { id: sourceAccount.id } });
+        const guard = await tx.store.updateMany({ where: { id: sourceStoreId, cashBalanceUsd: cashUsd }, data: { cashBalanceUsd: 0 } });
+        if (guard.count !== 1) throw new Error(`Касса «${source.name}» изменилась во время объединения. Повторите`);
+        await tx.store.update({ where: { id: targetStoreId }, data: { cashBalanceUsd: { increment: cashUsd } } });
       }
 
-      await tx.store.update({ where: { id: targetStoreId }, data: { cashBalanceUsd: { increment: source.cashBalanceUsd } } });
-
-      try {
-        await tx.store.delete({ where: { id: sourceStoreId } });
-      } catch (error: any) {
-        if (error?.code === 'P2003') {
-          throw new Error('Не удалось полностью перенести историю магазина — обратитесь к разработчику');
-        }
-        throw error;
-      }
+      // Closed, not deleted: its ledger account and journal rows stay as the history they are.
+      await tx.store.update({ where: { id: sourceStoreId }, data: { active: false } });
+      await tx.financialAccount.update({ where: { id: sourceAccount.id }, data: { active: false } });
 
       await tx.auditLog.create({
         data: {
@@ -199,7 +208,9 @@ export class StoresService {
           userName: actor.name,
           userRole: actor.role,
           action: 'STORE_MERGE',
-          details: `Магазин "${source.name}" объединён с "${target.name}": перенесена касса $${source.cashBalanceUsd} и вся история продаж/ремонтов/расходов`,
+          targetId: sourceStoreId,
+          details: `Магазин "${source.name}" объединён с "${target.name}" и закрыт: касса ${cashTjs} TJS ($${cashUsd}) переведена, продажи, товары, ремонты, расходы и инкассации перенесены`,
+          financialDetails: moneyJson({ sourceStoreId, targetStoreId, cashUsd, cashTjs }),
         },
       });
 

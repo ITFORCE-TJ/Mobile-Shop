@@ -185,7 +185,10 @@ app.get('/api/stores', authenticateJwt, async (req: AuthenticatedRequest, res, n
     const storeId = req.user!.storeId;
     // Store staff get their own store, plus the main warehouse by name only (a receipt names it
     // as the source; a return can be sent to it). Its cash and stock stay ADMIN-only.
-    const where = isStoreScoped ? (storeId ? { OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' }) : undefined;
+    // Closed (merged) stores are history only and are not offered anywhere.
+    const where = isStoreScoped
+      ? (storeId ? { active: true, OR: [{ id: storeId }, { isMainWarehouse: true }] } : { id: '__none__' })
+      : { active: true };
     const stores = await prisma.store.findMany({ where, orderBy: { name: 'asc' } });
     res.json(isStoreScoped
       ? stores.map((s) => (s.isMainWarehouse ? { id: s.id, name: s.name, isMainWarehouse: true, active: s.active } : s))
