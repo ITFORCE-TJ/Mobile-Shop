@@ -55,6 +55,21 @@ describe('PWA update safety guard', () => {
     expect(isSafeToUpdate()).toBe(true);
   });
 
+  it('two screens with the same unfinished work: finishing one keeps the update blocked', () => {
+    const cart = registerBusyOperation('Незавершённая продажа');
+    const other = registerBusyOperation('Незавершённая продажа');
+    cart();
+    expect(getUpdateSafetyAssessment().safe).toBe(false);
+    other();
+    expect(getUpdateSafetyAssessment().safe).toBe(true);
+  });
+
+  it('names the unfinished work without internal ids', () => {
+    const done = registerBusyOperation('Незавершённая продажа');
+    expect(getUpdateSafetyAssessment().reason).toBe('Выполняется операция: Незавершённая продажа');
+    done();
+  });
+
   it('prevents update when an input is actively focused with content', () => {
     activeElement = {
       tagName: 'INPUT',

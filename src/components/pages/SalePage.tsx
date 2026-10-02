@@ -31,6 +31,7 @@ import { Dialog } from '../ui/Dialog';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
 import { soundEffects } from '../../utils/sound';
 import { useUIStore } from '../../stores/useUIStore';
+import { useUnfinishedWork } from '../../utils/pwaUpdateSafety';
 
 interface CartItem {
   device: Device;
@@ -54,6 +55,7 @@ export const SalePage: React.FC = () => {
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedBrand, setSelectedBrand] = useState<string>('ALL');
   const [cart, setCart] = useState<CartItem[]>([]);
+  useUnfinishedWork(cart.length > 0, 'Незавершённая продажа');
   const [isCartOpen, setIsCartOpen] = useState(false);
   const [expandedVariantKey, setExpandedVariantKey] = useState<string | null>(null);
   const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false);

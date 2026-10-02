@@ -1,7 +1,11 @@
+import { useEffect } from 'react';
 import { hasActiveMutations } from '../api/client';
 import { useUIStore } from '../stores/useUIStore';
 
-const activeBusyOperations = new Set<string>();
+// Each registration is counted separately: two screens with the same kind of unfinished work
+// keep updates blocked until both are done.
+const activeBusyOperations = new Map<number, string>();
+let nextBusyId = 0;
 
 /**
  * Register a critical in-progress operation (e.g. barcode scan batch, file export, payment checkout)
@@ -9,10 +13,19 @@ const activeBusyOperations = new Set<string>();
  * Returns a disposal function to unregister when the operation completes.
  */
 export function registerBusyOperation(operationName: string): () => void {
-  activeBusyOperations.add(operationName);
+  const id = ++nextBusyId;
+  activeBusyOperations.set(id, operationName);
   return () => {
-    activeBusyOperations.delete(operationName);
+    activeBusyOperations.delete(id);
   };
+}
+
+/**
+ * Keeps automatic updates (which reload the page) away while a screen holds unfinished work
+ * that lives only in memory — a non-empty sales cart, a receipt being scanned, an open form.
+ */
+export function useUnfinishedWork(active: boolean, label: string) {
+  useEffect(() => (active ? registerBusyOperation(label) : undefined), [active, label]);
 }
 
 export function hasBusyOperations(): boolean {
@@ -42,7 +55,7 @@ export function getUpdateSafetyAssessment(): UpdateSafetyAssessment {
 
   // 2. Check manually registered critical operations
   if (activeBusyOperations.size > 0) {
-    const ops = Array.from(activeBusyOperations).join(', ');
+    const ops = Array.from(new Set(activeBusyOperations.values())).join(', ');
     return { safe: false, reason: `Выполняется операция: ${ops}` };
   }
 
@@ -63,7 +76,8 @@ export function getUpdateSafetyAssessment(): UpdateSafetyAssessment {
 
   // 4. Check active user editing / typing
   const activeEl = document.activeElement;
-  if (activeEl) {
+  // Typing on the lock screen or the update toast itself is not work an update would destroy.
+  if (activeEl && !activeEl.closest?.('[data-pwa-ignore="true"]')) {
     const tagName = activeEl.tagName.toLowerCase();
     if (tagName === 'input' || tagName === 'textarea' || tagName === 'select' || (activeEl as HTMLElement).isContentEditable) {
       // If user is focused on an input/textarea, do not interrupt typing

@@ -11,7 +11,28 @@ export function hasActiveMutations(): boolean {
   return pendingMutations.size > 0;
 }
 
+/** Absolute URL of an API endpoint (web: same origin via /api; native: VITE_API_URL). */
+function apiUrl(endpoint: string): string {
+  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+  return API_BASE_URL.startsWith('http') ? `${API_BASE_URL.replace(/\/$/, '')}${cleanEndpoint}` : `${API_BASE_URL}${cleanEndpoint}`;
+}
+
+/**
+ * Ends a server session the app no longer uses (locked after inactivity, or a token an earlier
+ * version kept across launches), with that session's own token. Best effort and isolated: its
+ * outcome never touches the current session.
+ */
+export async function revokeAbandonedSession(token: string): Promise<void> {
+  try {
+    await fetch(apiUrl('/auth/logout'), { method: 'POST', headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` }, keepalive: true });
+  } catch { /* offline: the token is already gone from the device and expires on the server */ }
+}
+
 export async function apiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  // While locked nothing but signing in may reach the server (no polling, no data).
+  if (useAuthStore.getState().locked && !endpoint.startsWith('/auth/login')) {
+    throw Object.assign(new Error('Сеанс заблокирован. Войдите снова, чтобы продолжить'), { status: 423 });
+  }
   const mutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase()) && !endpoint.startsWith('/auth/');
   if (!mutation) return request<T>(endpoint, options);
   const identity = JSON.stringify([useAuthStore.getState().currentUser?.id, options.method, endpoint, options.body ?? null]);
@@ -56,10 +77,7 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
     ...options.headers,
   };
 
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
-  const url = API_BASE_URL.startsWith('http')
-    ? `${API_BASE_URL.replace(/\/$/, '')}${cleanEndpoint}`
-    : `${API_BASE_URL}${cleanEndpoint}`;
+  const url = apiUrl(endpoint);
 
   const controller = new AbortController();
   let timedOut = false;
@@ -82,7 +100,8 @@ async function request<T>(endpoint: string, options: RequestInit = {}): Promise<
       throw new Error('Сессия изменилась. Ответ предыдущего пользователя отклонён.');
     }
     if (!response.ok) {
-      if (response.status === 401) {
+      // A rejected sign-in (wrong password) is not a lost session: never log out over it.
+      if (response.status === 401 && !endpoint.startsWith('/auth/')) {
         useAuthStore.getState().logout();
       }
       const errorData = await response.json().catch(() => ({

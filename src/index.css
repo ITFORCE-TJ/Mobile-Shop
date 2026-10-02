@@ -1,5 +1,9 @@
 @import "tailwindcss";
 
+/* Session locked after inactivity: the app stays mounted (unfinished work is kept) but is
+   hidden at once, before React renders the lock screen. */
+html[data-session-locked] #root { visibility: hidden; }
+
 /* =========================================================================
    DESIGN SYSTEM TOKENS (new — used by src/components/ui/* and redesigned
    pages). Legacy pages not yet migrated keep using the literal Tailwind

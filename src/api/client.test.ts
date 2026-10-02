@@ -1,13 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { webcrypto } from 'node:crypto';
-const auth = vi.hoisted(() => ({ token: 'test-token', currentUser: { id: 'test-user' }, logout: vi.fn() }));
+const auth = vi.hoisted(() => ({ token: 'test-token' as string | null, locked: false, currentUser: { id: 'test-user' }, logout: vi.fn() }));
 vi.mock('../stores/useAuthStore', () => ({ useAuthStore: { getState: () => auth } }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => false } }));
-import { apiClient, REQUEST_TIMEOUT_MS } from './client';
+import { apiClient, REQUEST_TIMEOUT_MS, revokeAbandonedSession } from './client';
 
 describe('mutation retry protocol', () => {
   beforeEach(() => {
     auth.token = 'test-token';
+    auth.locked = false;
+    auth.logout.mockReset();
     const storage = new Map<string, string>();
     vi.stubGlobal('crypto', webcrypto);
     vi.stubGlobal('sessionStorage', { getItem: (k: string) => storage.get(k), setItem: (k: string, v: string) => storage.set(k, v), removeItem: (k: string) => storage.delete(k) });
@@ -67,5 +69,35 @@ describe('mutation retry protocol', () => {
   it('rejects an old response after account switching', async () => {
     vi.stubGlobal('fetch', vi.fn(async () => { auth.token = 'new-session'; return new Response('[]'); }));
     await expect(apiClient('/sales')).rejects.toThrow('Сессия изменилась');
+  });
+
+  it('sends nothing while the session is locked, except signing in', async () => {
+    auth.locked = true;
+    auth.token = null;
+    const fetchMock = vi.fn(() => Promise.resolve(new Response('{"token":"t","user":{}}')));
+    vi.stubGlobal('fetch', fetchMock);
+    await expect(apiClient('/owners')).rejects.toThrow('Сеанс заблокирован');
+    await expect(apiClient('/sales', { method: 'POST', body: '{}' })).rejects.toThrow('Сеанс заблокирован');
+    expect(fetchMock).not.toHaveBeenCalled();
+    await expect(apiClient('/auth/login', { method: 'POST', body: '{}' })).resolves.toEqual({ token: 't', user: {} });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(auth.logout).not.toHaveBeenCalled();
+  });
+  it('a wrong password at the lock screen does not end the locked session', async () => {
+    auth.locked = true;
+    auth.token = null;
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve(new Response('{"message":"Неверный логин или пароль"}', { status: 401 }))));
+    await expect(apiClient('/auth/login', { method: 'POST', body: '{}' })).rejects.toThrow('Неверный логин или пароль');
+    expect(auth.logout).not.toHaveBeenCalled();
+  });
+  it('revokes an abandoned session with its own token, never touching the current one', async () => {
+    const fetchMock = vi.fn((_url: string, _options: RequestInit) => Promise.resolve(new Response('', { status: 401 })));
+    vi.stubGlobal('fetch', fetchMock);
+    await revokeAbandonedSession('old-token');
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, options] = fetchMock.mock.calls[0];
+    expect(url).toBe('/api/auth/logout');
+    expect(new Headers(options.headers).get('Authorization')).toBe('Bearer old-token');
+    expect(auth.logout).not.toHaveBeenCalled();
   });
 });

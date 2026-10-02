@@ -1,6 +1,7 @@
 import React, { lazy, Suspense } from 'react';
 import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { useAuthStore } from '../stores/useAuthStore';
+import { useInactivityLock } from '../services/sessionLock';
 import { PageId } from '../types';
 import { formatUserName } from '../utils/formatUser';
 
@@ -78,6 +79,8 @@ export function MainLayout() {
   const connection = useConnectionStatus();
   const location = useLocation();
   const { currentUser } = useAuthStore();
+  // Locks after 10 minutes without user activity (all roles).
+  useInactivityLock();
   const { isDailyRateModalOpen, setDailyRateModalOpen, isStoreSwitchModalOpen, setStoreSwitchModalOpen } = useUIStore();
   const { isRateModalOpen, closeDailyRateModal, activePage, setActivePage, selectedStoreId, stores, isScannerOpen } = useAppFields('isRateModalOpen', 'closeDailyRateModal', 'activePage', 'setActivePage', 'selectedStoreId', 'stores', 'isScannerOpen');
 

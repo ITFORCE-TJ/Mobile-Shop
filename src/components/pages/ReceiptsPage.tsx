@@ -15,6 +15,7 @@ import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { LoadingState } from '../ui/Skeleton';
 import { StatusBanner, type StatusMessage } from '../ui/StatusBanner';
 import { useStoreContext } from '../../utils/storeContext';
+import { useUnfinishedWork } from '../../utils/pwaUpdateSafety';
 
 interface ScannedDevice {
   id: string;
@@ -151,6 +152,7 @@ export const ReceiptsPage: React.FC = () => {
   // ---------- store staff: scanning ----------
   const [tab, setTab] = useState<'NEW' | 'HISTORY'>('NEW');
   const [scanned, setScanned] = useState<ScannedDevice[]>([]);
+  useUnfinishedWork(scanned.length > 0, 'Незавершённая приёмка');
   const [manualCode, setManualCode] = useState('');
   const [continuous, setContinuous] = useState(true);
   const [submitting, setSubmitting] = useState(false);

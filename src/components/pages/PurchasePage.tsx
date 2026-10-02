@@ -25,6 +25,7 @@ import { soundEffects } from '../../utils/sound';
 import { MonthPicker } from '../ui/MonthPicker';
 import { Combobox } from '../ui/Combobox';
 import { getBusinessDateKey } from '../../utils/businessDate';
+import { useUnfinishedWork } from '../../utils/pwaUpdateSafety';
 
 interface PurchaseItem {
   imei: string;
@@ -137,6 +138,7 @@ export const PurchasePage: React.FC = () => {
 
   // Mode: 'list' (History of purchases) or 'form' (Register new purchase intake)
   const [viewMode, setViewMode] = useState<'list' | 'form'>('list');
+  useUnfinishedWork(viewMode === 'form', 'Незавершённый приход');
   const [expandedDeviceGroups, setExpandedDeviceGroups] = useState<Record<string, boolean>>({});
 
   // List search & filters

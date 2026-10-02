@@ -118,4 +118,22 @@ describe('PWAUpdateService', () => {
 
     expect(pwaUpdateService.isStandalone()).toBe(true);
   });
+
+  it('a new version activated by another tab does not reload over unfinished work; it reloads once safe', () => {
+    const reload = vi.fn();
+    vi.stubGlobal('window', { location: { reload } });
+    const service = pwaUpdateService as unknown as { state: { isUpdating: boolean; hasUpdate: boolean; waitingWorker: unknown }; handleControllerChange: () => void };
+    service.state.isUpdating = false;
+    service.state.waitingWorker = null;
+    const safety = vi.spyOn(safetyModule, 'getUpdateSafetyAssessment').mockReturnValue({ safe: false, reason: 'Выполняется операция: Незавершённая продажа' });
+
+    service.handleControllerChange();
+    expect(reload).not.toHaveBeenCalled();
+    expect(pwaUpdateService.getState().hasUpdate).toBe(true);
+
+    safety.mockReturnValue({ safe: true });
+    expect(pwaUpdateService.trySafeAutoUpdate()).toBe(true);
+    expect(reload).toHaveBeenCalledTimes(1);
+  });
 });
+

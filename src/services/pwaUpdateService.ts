@@ -93,15 +93,29 @@ class PWAUpdateService {
       }
 
       // Handle controllerchange: when the new service worker activates and claims the clients
-      let reloaded = false;
-      navigator.serviceWorker.addEventListener('controllerchange', () => {
-        if (reloaded) return;
-        reloaded = true;
-        this.performSafeReload();
-      });
+      navigator.serviceWorker.addEventListener('controllerchange', () => this.handleControllerChange());
     } catch (err) {
       console.warn('[PWA] ServiceWorker setup error:', err);
     }
+  }
+
+  private reloadedForController = false;
+
+  /**
+   * A new version took control of this page. Reload into it when this tab asked for the update
+   * or holds no unfinished work; if another tab activated it while this one has a cart or form
+   * in progress, keep the update pending and apply it once that work is done.
+   */
+  public handleControllerChange() {
+    if (this.reloadedForController) return;
+    if (this.state.isUpdating || getUpdateSafetyAssessment().safe) {
+      this.reloadedForController = true;
+      this.performSafeReload();
+      return;
+    }
+    this.state.hasUpdate = true;
+    this.state.waitingWorker = null;
+    this.notify();
   }
 
   private attachRegistration(reg: ServiceWorkerRegistration) {
