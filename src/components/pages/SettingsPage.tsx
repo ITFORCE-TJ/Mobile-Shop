@@ -212,12 +212,6 @@ export const SettingsPage: React.FC = () => {
             <p className="text-[10px] text-fg-subtle truncate">Оформление, курс валют, филиалы и параметры приложения</p>
           </div>
         </div>
-
-        <div className="flex items-center gap-2 shrink-0">
-          <span className="text-[11px] font-mono text-fg-subtle px-2 py-0.5 rounded-md bg-surface-raised border border-border">
-            v{pwa.buildInfo.version}
-          </span>
-        </div>
       </div>
 
       {statusMessage && (
@@ -511,37 +505,21 @@ export const SettingsPage: React.FC = () => {
               </div>
             )}
 
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5 text-xs">
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-raised border border-border/60">
-                <span className="text-[9px] uppercase font-bold text-fg-subtle block">Версия</span>
-                <span className="font-semibold text-fg mt-0.5 block text-xs">v{pwa.buildInfo.version}</span>
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-raised border border-border/60">
-                <span className="text-[9px] uppercase font-bold text-fg-subtle block">Git Сборка</span>
-                <span className="font-mono text-xs text-accent mt-0.5 block truncate">{pwa.buildInfo.commit}</span>
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-raised border border-border/60">
-                <span className="text-[9px] uppercase font-bold text-fg-subtle block">Дата сборки</span>
-                <span className="text-[11px] text-fg font-medium mt-0.5 block truncate">
-                  {new Date(pwa.buildInfo.buildTime).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                </span>
-              </div>
-              <div className="px-2.5 py-1.5 rounded-lg bg-surface-raised border border-border/60">
-                <span className="text-[9px] uppercase font-bold text-fg-subtle block">Статус</span>
-                <span className="text-[11px] font-semibold text-fg mt-0.5 block flex items-center gap-1.5">
-                  {pwa.offline ? (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
-                      Офлайн
-                    </>
-                  ) : (
-                    <>
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
-                      Онлайн
-                    </>
-                  )}
-                </span>
-              </div>
+            <div className="flex items-center justify-between text-xs px-2.5 py-1.5 rounded-lg bg-surface-raised border border-border/60">
+              <span className="text-[11px] text-fg-subtle">Состояние подключения:</span>
+              <span className="text-[11px] font-semibold text-fg flex items-center gap-1.5">
+                {pwa.offline ? (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-danger shrink-0" />
+                    Офлайн
+                  </>
+                ) : (
+                  <>
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
+                    Онлайн
+                  </>
+                )}
+              </span>
             </div>
           </div>
         </div>

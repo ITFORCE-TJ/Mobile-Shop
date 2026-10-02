@@ -126,60 +126,106 @@ interface DeviceRowProps {
   storeName?: string;
   isMainWarehouse?: boolean;
   rate?: number;
+  hideModelName?: boolean;
   onClick: () => void;
 }
 
-const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device, isAdmin, storeName, isMainWarehouse, rate, onClick }, ref) => (
-  <button
-    ref={ref}
-    type="button"
-    onClick={onClick}
-    className="w-full text-left px-3.5 sm:px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors hover:bg-surface-raised/50"
-  >
-    <div className="min-w-0">
-      <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap">
-        <p className="text-xs sm:text-sm font-bold text-fg-muted truncate">{device.brand} {device.model}</p>
-        {device.ram && (
-          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/30 font-mono">
-            {device.ram.toUpperCase().includes('GB') ? device.ram : `${device.ram} GB`}
-          </span>
-        )}
-        <Badge tone="neutral">{device.storage}</Badge>
-        <Badge tone="neutral">{device.color}</Badge>
-        {storeName && (
-          <span className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-bold border ${
-            isMainWarehouse
-              ? 'bg-amber-500/10 text-amber-500 border-amber-500/25'
-              : 'bg-accent/10 text-accent border-accent/25'
-          }`}>
-            {isMainWarehouse ? <Warehouse className="w-3 h-3 text-amber-500 shrink-0" /> : <Store className="w-3 h-3 text-accent shrink-0" />}
-            <span className="truncate max-w-32">{storeName}</span>
-          </span>
-        )}
-      </div>
-      <p className="text-xs text-fg-subtle mt-0.5 truncate font-mono">
-        IMEI: {device.imei}{device.imei2 ? ` / ${device.imei2}` : ''}
-      </p>
-    </div>
+const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device, isAdmin, storeName, isMainWarehouse, rate, hideModelName, onClick }, ref) => {
+  const isSpecialStatus = device.status !== 'STORE_STOCK' && device.status !== 'MAIN_WAREHOUSE';
+  const showStatusBadge = isSpecialStatus || !storeName;
 
-    <div className="text-right shrink-0 flex items-center gap-2">
-      {/* Non-admins receive cost 0 from the server (it is hidden), so only the bonus flag counts for them. */}
-      {(device.isBonus || (isAdmin && device.purchaseCostUsd === 0)) ? (
-        <Badge tone="accent">Бонус</Badge>
-      ) : isAdmin && device.purchaseCostUsd > 0 ? (
-        <div className="text-right">
-          <span className="text-xs font-bold text-fg-muted block">{formatUsd(device.purchaseCostUsd)}</span>
-          {approxTjs(device.purchaseCostUsd, rate) && <span className="text-[10px] text-fg-subtle block">{approxTjs(device.purchaseCostUsd, rate)}</span>}
+  return (
+    <button
+      ref={ref}
+      type="button"
+      onClick={onClick}
+      className="group w-full text-left px-3 py-2 sm:py-2.5 sm:px-4 active:bg-surface-raised flex items-center justify-between gap-2.5 transition-colors hover:bg-surface-raised/50 cursor-pointer"
+    >
+      <div className="min-w-0 flex-1">
+        {/* Line 1: Model/Specs & Color */}
+        <div className="flex items-center gap-1.5 min-w-0">
+          {!hideModelName ? (
+            <p className="text-xs sm:text-sm font-bold text-fg-muted truncate shrink min-w-0">
+              {device.brand} {device.model}
+            </p>
+          ) : null}
+
+          {device.storage && (
+            <span className="font-extrabold text-xs text-fg font-mono shrink-0">
+              {device.storage}
+            </span>
+          )}
+
+          {device.ram && (
+            <span className="px-1 py-0.2 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/25 font-mono shrink-0">
+              {device.ram.toUpperCase().includes('GB') ? device.ram : `${device.ram} GB`}
+            </span>
+          )}
+
+          {device.color && (
+            <span className="text-[11px] font-medium text-fg-subtle truncate shrink-0 max-w-28">
+              {device.color}
+            </span>
+          )}
+
+          {device.isBonus && (
+            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-accent/20 text-accent border border-accent/30 shrink-0">
+              Бонус
+            </span>
+          )}
         </div>
-      ) : null}
-      {!isAdmin && (device.retailPriceTjs ?? 0) > 0 && (
-        <span className="text-xs font-bold tabular-nums text-accent whitespace-nowrap">{formatTjs(device.retailPriceTjs)}</span>
-      )}
-      <Badge tone={STATUS_TONE[device.status]}>{STATUS_LABELS[device.status] || device.status}</Badge>
-      <ChevronRight className="w-4 h-4 text-fg-subtle" />
-    </div>
-  </button>
-));
+
+        {/* Line 2: IMEI + Location / Status */}
+        <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle mt-0.5 truncate font-mono">
+          <span>IMEI: {device.imei}{device.imei2 ? ` / ${device.imei2}` : ''}</span>
+          {storeName && (
+            <>
+              <span className="opacity-40">·</span>
+              <span className={`inline-flex items-center gap-1 font-sans text-[11px] font-medium truncate ${
+                isMainWarehouse ? 'text-amber-500' : 'text-accent'
+              }`}>
+                {isMainWarehouse ? <Warehouse className="w-3 h-3 shrink-0" /> : <Store className="w-3 h-3 shrink-0" />}
+                <span className="truncate max-w-36">{storeName}</span>
+              </span>
+            </>
+          )}
+          {showStatusBadge && (
+            <>
+              <span className="opacity-40">·</span>
+              <Badge tone={STATUS_TONE[device.status] || 'neutral'}>
+                {STATUS_LABELS[device.status] || device.status}
+              </Badge>
+            </>
+          )}
+        </div>
+      </div>
+
+      {/* Right Column: Price & Chevron */}
+      <div className="text-right shrink-0 flex items-center gap-2">
+        {device.isBonus || (isAdmin && device.purchaseCostUsd === 0) ? (
+          <span className="text-[11px] font-bold text-accent font-mono">Бонус</span>
+        ) : isAdmin && device.purchaseCostUsd > 0 ? (
+          <div className="text-right">
+            <span className="text-xs font-bold text-fg-muted font-mono block leading-tight">
+              {formatUsd(device.purchaseCostUsd)}
+            </span>
+            {approxTjs(device.purchaseCostUsd, rate) && (
+              <span className="text-[10px] text-fg-subtle font-mono block leading-none mt-0.5">
+                {approxTjs(device.purchaseCostUsd, rate)}
+              </span>
+            )}
+          </div>
+        ) : !isAdmin && (device.retailPriceTjs ?? 0) > 0 ? (
+          <span className="text-xs font-bold font-mono text-accent whitespace-nowrap">
+            {formatTjs(device.retailPriceTjs)}
+          </span>
+        ) : null}
+
+        <ChevronRight className="w-3.5 h-3.5 text-fg-subtle group-hover:translate-x-0.5 transition-transform" />
+      </div>
+    </button>
+  );
+});
 DeviceRow.displayName = 'DeviceRow';
 
 export const InventoryPage: React.FC = () => {
@@ -797,178 +843,108 @@ export const InventoryPage: React.FC = () => {
   // Windowed rendering for the flat list; heights are re-measured when the rows change meaning.
   const flatRows = useVirtualRows<HTMLElement>({
     count: inventoryViewMode === 'FLAT_LIST' && viewTab === 'DEVICES' ? filteredDevices.length : 0,
-    estimateSize: isMobileLayout ? 72 : 61,
+    estimateSize: isMobileLayout ? 52 : 54,
     resetKey: `${isMobileLayout ? 'm' : 'd'}|${filteredDevices.length}|${filteredDevices[0]?.id ?? ''}|${sortBy}`,
   });
 
   const filterFields = (
-    <div className="space-y-3.5">
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
-                  {/* Filter 1: Brand */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Бренд
-                    </label>
-                    <select
-                      value={selectedBrand}
-                      onChange={(e) => setSelectedBrand(e.target.value)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      {brands.map(b => (
-                        <option key={b.value} value={b.value}>{b.label}</option>
-                      ))}
-                    </select>
-                  </div>
+    <div>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 sm:gap-3 text-xs">
+        {/* Filter 1: Brand */}
+        <div>
+          <label className="block text-[11px] font-semibold text-fg-subtle mb-1 truncate">
+            Бренд
+          </label>
+          <select
+            value={selectedBrand}
+            onChange={(e) => setSelectedBrand(e.target.value)}
+            className="w-full h-9 rounded-xl bg-surface border border-border px-2.5 py-1.5 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer truncate"
+          >
+            {brands.map(b => (
+              <option key={b.value} value={b.value}>{b.label}</option>
+            ))}
+          </select>
+        </div>
 
-                  {/* Filter 2: RAM */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Оперативная память
-                    </label>
-                    <select
-                      value={selectedRam}
-                      onChange={(e) => setSelectedRam(e.target.value)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      <option value="ALL">Любая оперативная память</option>
-                      {availableRams.map(ram => (
-                        <option key={ram} value={ram}>{ram} GB</option>
-                      ))}
-                    </select>
-                  </div>
+        {/* Filter 2: Status / Type */}
+        <div>
+          <label className="block text-[11px] font-semibold text-fg-subtle mb-1 truncate">
+            Наличие
+          </label>
+          <select
+            value={selectedStatusFilter}
+            onChange={(e) => setSelectedStatusFilter(e.target.value as any)}
+            className="w-full h-9 rounded-xl bg-surface border border-border px-2.5 py-1.5 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer truncate"
+          >
+            <option value="ALL">Все {activeStore ? `(«${activeStore.name}»)` : 'в наличии'}</option>
+            {selectedLocationId === 'ALL' && (
+              <>
+                <option value="MAIN_WAREHOUSE">Центральный склад</option>
+                <option value="STORE_STOCK">В магазинах</option>
+              </>
+            )}
+            <option value="BONUS_ONLY">Бонусы поставщиков</option>
+            <option value="EXCHANGE_ONLY">После обмена</option>
+          </select>
+        </div>
 
-                  {/* Filter 3: Storage */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Встроенная память
-                    </label>
-                    <select
-                      value={selectedStorage}
-                      onChange={(e) => setSelectedStorage(e.target.value)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      <option value="ALL">Любой объем памяти</option>
-                      {availableStorages.map(st => (
-                        <option key={st} value={st}>{st}</option>
-                      ))}
-                    </select>
-                  </div>
+        {/* Filter 3: RAM */}
+        <div>
+          <label className="block text-[11px] font-semibold text-fg-subtle mb-1 truncate">
+            Оперативная память
+          </label>
+          <select
+            value={selectedRam}
+            onChange={(e) => setSelectedRam(e.target.value)}
+            className="w-full h-9 rounded-xl bg-surface border border-border px-2.5 py-1.5 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer truncate"
+          >
+            <option value="ALL">Любая память</option>
+            {availableRams.map(ram => (
+              <option key={ram} value={ram}>{ram} GB</option>
+            ))}
+          </select>
+        </div>
 
-                  {/* Filter 4: Status / Type */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Наличие
-                    </label>
-                    <select
-                      value={selectedStatusFilter}
-                      onChange={(e) => setSelectedStatusFilter(e.target.value as any)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      <option value="ALL">Все товары {activeStore ? `(в «${activeStore.name}»)` : 'в наличии'}</option>
-                      {selectedLocationId === 'ALL' && (
-                        <>
-                          <option value="MAIN_WAREHOUSE">Только на центральном складе</option>
-                          <option value="STORE_STOCK">Только в магазинах</option>
-                        </>
-                      )}
-                      <option value="BONUS_ONLY">Только бонусы поставщиков</option>
-                      <option value="EXCHANGE_ONLY">Только после обмена</option>
-                    </select>
-                  </div>
-                </div>
+        {/* Filter 4: Storage */}
+        <div>
+          <label className="block text-[11px] font-semibold text-fg-subtle mb-1 truncate">
+            Встроенная память
+          </label>
+          <select
+            value={selectedStorage}
+            onChange={(e) => setSelectedStorage(e.target.value)}
+            className="w-full h-9 rounded-xl bg-surface border border-border px-2.5 py-1.5 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer truncate"
+          >
+            <option value="ALL">Любой объем</option>
+            {availableStorages.map(st => (
+              <option key={st} value={st}>{st}</option>
+            ))}
+          </select>
+        </div>
 
-                {/* Second row of filters: Price range & Sort */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 pt-2 border-t border-border text-xs">
-                  {/* Price Range */}
-                  {isAdmin && (
-                    <div>
-                      <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                        Себестоимость, $
-                      </label>
-                      <div className="flex items-center gap-2">
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="От $"
-                          value={minPriceUsd}
-                          onChange={(e) => setMinPriceUsd(e.target.value)}
-                          className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                        />
-                        <span className="text-fg-subtle">—</span>
-                        <input
-                          type="number"
-                          min="0"
-                          placeholder="До $"
-                          value={maxPriceUsd}
-                          onChange={(e) => setMaxPriceUsd(e.target.value)}
-                          className="w-1/2 rounded-xl bg-surface border border-border px-3 py-1.5 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                        />
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Quick price presets */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Диапазон себестоимости
-                    </label>
-                    <div className="flex items-center gap-1.5 flex-wrap pt-0.5">
-                      {[
-                        { label: '< $200', min: '', max: '200' },
-                        { label: '$200–500', min: '200', max: '500' },
-                        { label: '$500–1000', min: '500', max: '1000' },
-                        { label: '> $1000', min: '1000', max: '' },
-                      ].map((preset) => {
-                        const isActive = minPriceUsd === preset.min && maxPriceUsd === preset.max;
-                        return (
-                          <button
-                            key={preset.label}
-                            type="button"
-                            onClick={() => {
-                              if (isActive) {
-                                setMinPriceUsd('');
-                                setMaxPriceUsd('');
-                              } else {
-                                setMinPriceUsd(preset.min);
-                                setMaxPriceUsd(preset.max);
-                              }
-                            }}
-                            className={`px-2 py-1 rounded-lg text-[10px] font-semibold border transition-colors cursor-pointer ${
-                              isActive
-                                ? 'bg-accent text-accent-fg border-accent'
-                                : 'bg-surface hover:bg-surface-raised border-border text-fg-muted'
-                            }`}
-                          >
-                            {preset.label}
-                          </button>
-                        );
-                      })}
-                    </div>
-                  </div>
-
-                  {/* Sorting */}
-                  <div>
-                    <label className="block text-xs font-semibold text-fg-subtle mb-1">
-                      Сортировка
-                    </label>
-                    <select
-                      value={sortBy}
-                      onChange={(e) => setSortBy(e.target.value as any)}
-                      className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                    >
-                      <option value="COUNT_DESC">По количеству: больше → меньше</option>
-                      <option value="COUNT_ASC">По количеству: меньше → больше</option>
-                      <option value="NAME_ASC">По названию бренда: А → Я</option>
-                      <option value="NAME_DESC">По названию бренда: Я → А</option>
-                      {isAdmin && (
-                        <>
-                          <option value="PRICE_DESC">По себестоимости: дорогие → дешевые</option>
-                          <option value="PRICE_ASC">По себестоимости: дешевые → дорогие</option>
-                        </>
-                      )}
-                    </select>
-                  </div>
-                </div>
+        {/* Filter 5: Sorting */}
+        <div className="col-span-2 sm:col-span-1">
+          <label className="block text-[11px] font-semibold text-fg-subtle mb-1 truncate">
+            Сортировка
+          </label>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value as any)}
+            className="w-full h-9 rounded-xl bg-surface border border-border px-2.5 py-1 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer truncate"
+          >
+            <option value="COUNT_DESC">По количеству: больше → меньше</option>
+            <option value="COUNT_ASC">По количеству: меньше → больше</option>
+            <option value="NAME_ASC">По названию бренда: А → Я</option>
+            <option value="NAME_DESC">По названию бренда: Я → А</option>
+            {isAdmin && (
+              <>
+                <option value="PRICE_DESC">По цене: дорогие → дешевые</option>
+                <option value="PRICE_ASC">По цене: дешевые → дорогие</option>
+              </>
+            )}
+          </select>
+        </div>
+      </div>
     </div>
   );
 
@@ -981,11 +957,11 @@ export const InventoryPage: React.FC = () => {
         {/* Row 1: Mode Switcher (List of Goods vs Locations List) & Location Selector */}
         <div className="flex items-center justify-between gap-2">
           {!isStoreScoped && storeCtx.mode === 'CENTRAL' ? (
-            <div className="flex items-center gap-1 p-0.5 sm:p-1 rounded-xl bg-surface-raised border border-border shrink-0">
+            <div className="flex-1 sm:flex-initial flex items-center gap-1 p-0.5 sm:p-1 rounded-xl bg-surface-raised border border-border">
               <button
                 type="button"
                 onClick={() => setViewTab('DEVICES')}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'DEVICES'
                     ? 'bg-accent text-accent-fg shadow-xs'
                     : 'text-fg-subtle hover:text-fg-muted'
@@ -1004,7 +980,7 @@ export const InventoryPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setViewTab('LOCATIONS')}
-                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                className={`flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'LOCATIONS'
                     ? 'bg-accent text-accent-fg shadow-xs'
                     : 'text-fg-subtle hover:text-fg-muted'
@@ -1034,7 +1010,7 @@ export const InventoryPage: React.FC = () => {
                     setSelectedStatusFilter('ALL');
                   }
                 }}
-                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer max-w-[140px] sm:max-w-none truncate"
+                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer max-w-[130px] sm:max-w-none truncate"
               >
                 <option value="ALL">Все локации</option>
                 {mainWarehouse && (
@@ -1081,7 +1057,7 @@ export const InventoryPage: React.FC = () => {
         </div>
 
         {/* Mobile Sleek Compact Metric Bar (saves ~120px of vertical space) */}
-        <div className={`grid sm:hidden bg-surface-raised border border-border rounded-xl py-2 px-1 text-center divide-x divide-border shadow-2xs ${
+        <div className={`grid sm:hidden bg-surface-raised border border-border rounded-xl py-1.5 px-0.5 text-center divide-x divide-border shadow-2xs ${
           isAdmin ? 'grid-cols-4' : 'grid-cols-3'
         }`}>
           <div className="px-1 min-w-0">
@@ -1186,13 +1162,13 @@ export const InventoryPage: React.FC = () => {
                 </button>
               </div>
 
-              {/* Mobile Subrow: View Mode Switcher on Left + Filter Button on Right in ONE compact line */}
-              <div className="flex sm:hidden items-center justify-between gap-1.5">
-                <div className="flex items-center gap-0.5 bg-surface-raised p-0.5 rounded-xl border border-border">
+              {/* Mobile Subrow: View Mode Switcher on Left + Filter Button on Right with full width distribution (no empty spaces) */}
+              <div className="flex sm:hidden items-center gap-1.5">
+                <div className="flex-1 grid grid-cols-3 p-0.5 rounded-xl bg-surface-raised border border-border">
                   <button
                     type="button"
                     onClick={() => setInventoryViewMode('BY_BRAND')}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       inventoryViewMode === 'BY_BRAND'
                         ? 'bg-accent text-accent-fg shadow-xs'
                         : 'text-fg-subtle hover:text-fg-muted'
@@ -1205,7 +1181,7 @@ export const InventoryPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setInventoryViewMode('BY_MODEL')}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       inventoryViewMode === 'BY_MODEL'
                         ? 'bg-accent text-accent-fg shadow-xs'
                         : 'text-fg-subtle hover:text-fg-muted'
@@ -1218,7 +1194,7 @@ export const InventoryPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setInventoryViewMode('FLAT_LIST')}
-                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                    className={`flex items-center justify-center gap-1 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
                       inventoryViewMode === 'FLAT_LIST'
                         ? 'bg-accent text-accent-fg shadow-xs'
                         : 'text-fg-subtle hover:text-fg-muted'
@@ -1233,7 +1209,7 @@ export const InventoryPage: React.FC = () => {
                   type="button"
                   onClick={() => setShowAdvancedFilters(prev => !prev)}
                   aria-expanded={showAdvancedFilters}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+                  className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
                     showAdvancedFilters || activeFiltersCount > 0
                       ? 'bg-accent/15 border-accent text-accent shadow-xs'
                       : 'bg-surface-raised border-border text-fg-muted hover:border-fg-subtle'
@@ -1251,45 +1227,47 @@ export const InventoryPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Quick Horizontal Brand Chips */}
-            <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-              <button
-                type="button"
-                onClick={() => setSelectedBrand('ALL')}
-                className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-colors whitespace-nowrap cursor-pointer shrink-0 ${
-                  selectedBrand === 'ALL'
-                    ? 'bg-accent text-accent-fg border-accent shadow-xs'
-                    : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
-                }`}
-              >
-                Все бренды ({devicesInActiveLocation.length})
-              </button>
+            {/* Quick Horizontal Brand Chips - rendered only when multiple brands exist */}
+            {brandCountsMap.size > 1 && (
+              <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
+                <button
+                  type="button"
+                  onClick={() => setSelectedBrand('ALL')}
+                  className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-colors whitespace-nowrap cursor-pointer shrink-0 ${
+                    selectedBrand === 'ALL'
+                      ? 'bg-accent text-accent-fg border-accent shadow-xs'
+                      : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
+                  }`}
+                >
+                  Все бренды ({devicesInActiveLocation.length})
+                </button>
 
-              {Array.from(brandCountsMap.entries())
-                .sort((a, b) => b[1] - a[1])
-                .map(([bName, count]) => {
-                  const isSelected = selectedBrand === bName;
-                  return (
-                    <button
-                      key={bName}
-                      type="button"
-                      onClick={() => setSelectedBrand(isSelected ? 'ALL' : bName)}
-                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1.5 ${
-                        isSelected
-                          ? 'bg-accent text-accent-fg border-accent shadow-xs font-bold'
-                          : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
-                      }`}
-                    >
-                      <span>{bName}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                        isSelected ? 'bg-accent-fg/20 text-accent-fg' : 'bg-surface text-fg-subtle'
-                      }`}>
-                        {count}
-                      </span>
-                    </button>
-                  );
-                })}
-            </div>
+                {Array.from(brandCountsMap.entries())
+                  .sort((a, b) => b[1] - a[1])
+                  .map(([bName, count]) => {
+                    const isSelected = selectedBrand === bName;
+                    return (
+                      <button
+                        key={bName}
+                        type="button"
+                        onClick={() => setSelectedBrand(isSelected ? 'ALL' : bName)}
+                        className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                          isSelected
+                            ? 'bg-accent text-accent-fg border-accent shadow-xs font-bold'
+                            : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
+                        }`}
+                      >
+                        <span>{bName}</span>
+                        <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                          isSelected ? 'bg-accent-fg/20 text-accent-fg' : 'bg-surface text-fg-subtle'
+                        }`}>
+                          {count}
+                        </span>
+                      </button>
+                    );
+                  })}
+              </div>
+            )}
 
             {/* Advanced Filters Panel (Desktop Inline) */}
             {showAdvancedFilters && !isMobileLayout && (
@@ -1604,10 +1582,10 @@ export const InventoryPage: React.FC = () => {
           /* GROUPED BY BRAND VIEW */
           <div className="divide-y divide-border">
             {/* Header controls: Expand/Collapse All */}
-            <div className="py-2 px-3 sm:py-2.5 sm:px-4 bg-surface-raised/40 flex items-center justify-between gap-2 border-b border-border">
+            <div className="py-1.5 px-3 sm:py-2 sm:px-4 bg-surface-raised/40 flex items-center justify-between gap-2 border-b border-border">
               <span className="text-xs font-semibold text-fg-subtle flex items-center gap-1.5 flex-wrap">
                 <Sparkles className="w-3.5 h-3.5 text-accent" />
-                <span>Всего брендов: <strong className="text-fg">{brandGroups.length}</strong></span>
+                <span>Брендов: <strong className="text-fg">{brandGroups.length}</strong></span>
                 <span className="opacity-60">·</span>
                 <span>Телефонов: <strong className="text-accent">{filteredDevices.length}</strong> шт.</span>
                 {activeStore && (
@@ -1644,102 +1622,107 @@ export const InventoryPage: React.FC = () => {
                   {/* Brand Row Button */}
                   <div
                     onClick={() => setExpandedBrandKeys(prev => ({ ...prev, [bGroup.key]: !prev[bGroup.key] }))}
-                    className="w-full px-3.5 sm:px-4 py-3.5 flex items-center justify-between gap-3 active:bg-surface-raised transition-colors hover:bg-surface-raised/50 cursor-pointer select-none"
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 active:bg-surface-raised transition-colors hover:bg-surface-raised/50 cursor-pointer select-none"
                   >
                     {/* Left: Brand name, badge, and model count */}
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="w-10 h-10 rounded-2xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 font-black text-sm tracking-wider shadow-xs">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 font-black text-xs tracking-wider shadow-xs">
                         {bGroup.brand.substring(0, 2).toUpperCase()}
                       </div>
-                      <div className="min-w-0 text-left">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <h3 className="text-sm sm:text-base font-extrabold text-fg">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <h3 className="text-sm sm:text-base font-extrabold text-fg truncate">
                             {bGroup.brand}
                           </h3>
-                          <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-surface-raised text-fg-subtle border border-border">
+                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-surface-raised text-fg-subtle border border-border">
                             {bGroup.distinctModelsCount} {bGroup.distinctModelsCount === 1 ? 'модель' : bGroup.distinctModelsCount < 5 ? 'модели' : 'моделей'}
                           </span>
+                          {brandGroups.length > 1 && (
+                            <span className="text-[10px] font-semibold text-fg-subtle font-mono">
+                              · {percent}%
+                            </span>
+                          )}
                         </div>
-                        {/* Progress bar preview */}
-                        <div className="flex items-center gap-2 mt-1">
-                          <div className="w-24 sm:w-36 h-1.5 rounded-full bg-surface-raised overflow-hidden border border-border shrink-0">
-                            <div
-                              className="h-full bg-accent rounded-full transition-all duration-300"
-                              style={{ width: `${Math.max(percent, 4)}%` }}
-                            />
+                        {brandGroups.length > 1 && (
+                          <div className="flex items-center gap-2 mt-0.5 max-w-[120px] sm:max-w-[160px]">
+                            <div className="flex-1 h-1 rounded-full bg-surface-raised overflow-hidden border border-border">
+                              <div
+                                className="h-full bg-accent rounded-full transition-all duration-300"
+                                style={{ width: `${Math.max(percent, 4)}%` }}
+                              />
+                            </div>
                           </div>
-                        </div>
+                        )}
                       </div>
                     </div>
 
                     {/* Right: Phone count & financial value */}
-                    <div className="flex items-center gap-3 shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
                       <div className="text-right">
                         <div className="flex items-baseline justify-end gap-1">
-                          <span className="text-base sm:text-lg font-black text-accent font-mono">
+                          <span className="text-sm sm:text-base font-extrabold text-accent font-mono">
                             {bGroup.totalCount}
                           </span>
-                          <span className="text-xs text-fg-subtle font-semibold">
+                          <span className="text-[11px] text-fg-subtle font-medium">
                             {bGroup.totalCount === 1 ? 'телефон' : bGroup.totalCount < 5 ? 'телефона' : 'телефонов'}
                           </span>
                         </div>
                         {isAdmin && (
-                          <div className="text-[10px] text-fg-subtle font-mono mt-0.5">
+                          <div className="text-[10px] text-fg-subtle font-mono">
                             <span className="font-bold text-fg-muted">{formatUsd(bGroup.totalValueUsd)}</span>
                             {approxTjs(bGroup.totalValueUsd, rate) && <span className="hidden sm:inline"> · {approxTjs(bGroup.totalValueUsd, rate)}</span>}
                           </div>
                         )}
                       </div>
 
-                      <div className={`p-1.5 rounded-lg bg-surface-raised text-fg-subtle transition-transform duration-200 ${isBrandExpanded ? 'rotate-180 text-accent' : ''}`}>
-                        <ChevronDown className="w-4 h-4" />
+                      <div className={`p-1 rounded-md bg-surface-raised text-fg-subtle transition-transform duration-200 ${isBrandExpanded ? 'rotate-180 text-accent' : ''}`}>
+                        <ChevronDown className="w-3.5 h-3.5" />
                       </div>
                     </div>
                   </div>
 
                   {/* Brand Models Accordion Body */}
                   {isBrandExpanded && (
-                    <div className="bg-surface/50 border-t border-border divide-y divide-border/60 pl-3 sm:pl-6 pr-2 sm:pr-4 py-1">
+                    <div className="bg-surface/40 border-t border-border divide-y divide-border/60 pl-2.5 sm:pl-4 pr-1.5 sm:pr-3 py-0.5">
                       {bGroup.modelGroups.map((mGroup) => {
                         const isModelExpanded = !!expandedModelKeys[mGroup.key];
                         return (
-                          <div key={mGroup.key} className="py-1">
+                          <div key={mGroup.key} className="py-0.5">
                             <button
                               type="button"
                               onClick={() => setExpandedModelKeys(prev => ({ ...prev, [mGroup.key]: !prev[mGroup.key] }))}
-                              className="w-full py-2.5 px-3 rounded-xl flex items-center justify-between gap-2.5 hover:bg-surface-raised/70 active:bg-surface-raised transition-colors text-left"
+                              className="w-full py-1.5 sm:py-2 px-2.5 rounded-lg flex items-center justify-between gap-2 hover:bg-surface-raised/70 active:bg-surface-raised transition-colors text-left cursor-pointer"
                             >
-                              <div className="min-w-0">
-                                <div className="flex items-center gap-2 flex-wrap">
+                              <div className="min-w-0 flex-1">
+                                <div className="flex items-center gap-1.5 flex-wrap">
                                   <Smartphone className="w-3.5 h-3.5 text-accent shrink-0" />
                                   <span className="text-xs sm:text-sm font-bold text-fg-muted">
                                     {mGroup.model}
                                   </span>
                                   {mGroup.ramList.length > 0 && (
-                                    <span className="px-1.5 py-0.2 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/30 font-mono">
-                                      {mGroup.ramList.map(r => r.toUpperCase().includes('GB') ? r : `${r} GB`).join(' / ')}
+                                    <span className="px-1 py-0.2 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/25 font-mono">
+                                      {mGroup.ramList.map(r => r.toUpperCase().includes('GB') ? r : `${r} GB`).join('/')}
                                     </span>
                                   )}
-                                </div>
-
-                                {/* Storages breakdown chips */}
-                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  {/* Storages breakdown chips inline */}
                                   {mGroup.storageList.map((sg) => (
                                     <span
                                       key={sg.storage}
-                                      className="text-[10px] font-semibold px-1.5 py-0.5 rounded bg-surface-raised text-fg-subtle border border-border"
+                                      className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-surface-raised text-fg-subtle border border-border"
                                     >
-                                      {sg.storage}: <strong className="text-fg">{sg.count}</strong> шт.
+                                      {sg.storage}: <strong className="text-fg">{sg.count}</strong>
                                     </span>
                                   ))}
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-2 shrink-0">
+                              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
                                 <div className="text-right">
-                                  <Badge tone="accent">{mGroup.count} шт.</Badge>
+                                  <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono bg-accent/15 text-accent border border-accent/25">
+                                    {mGroup.count} шт.
+                                  </span>
                                   {isAdmin && (
-                                    <span className="block text-[10px] text-fg-subtle font-mono mt-0.5">
+                                    <span className="block text-[10px] text-fg-subtle font-mono leading-none mt-0.5">
                                       {formatUsd(mGroup.valueUsd)}
                                     </span>
                                   )}
@@ -1750,7 +1733,7 @@ export const InventoryPage: React.FC = () => {
 
                             {/* Specific Devices List for this Model */}
                             {isModelExpanded && (
-                              <div className="mt-1 mb-2 rounded-xl bg-surface border border-border divide-y divide-border overflow-hidden">
+                              <div className="mt-0.5 mb-1.5 rounded-lg bg-surface border border-border/70 divide-y divide-border/60 overflow-hidden">
                                 {mGroup.devices.map((dev) => {
                                   const store = stores.find(s => s.id === dev.locationId);
                                   const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
@@ -1763,6 +1746,7 @@ export const InventoryPage: React.FC = () => {
                                       storeName={selectedLocationId === 'ALL' ? storeName : undefined}
                                       isMainWarehouse={isWh}
                                       rate={rate}
+                                      hideModelName
                                       onClick={() => setSelectedDevice(dev)}
                                     />
                                   );
@@ -1788,48 +1772,51 @@ export const InventoryPage: React.FC = () => {
                 <div key={group.key}>
                   <button
                     onClick={() => setExpandedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
-                    className="w-full px-4 py-3 flex items-center justify-between gap-3 active:bg-surface-raised transition-colors hover:bg-surface-raised/40"
+                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 active:bg-surface-raised transition-colors hover:bg-surface-raised/40 cursor-pointer"
                   >
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <Smartphone className="w-4 h-4 text-accent shrink-0" />
-                      <div className="min-w-0 text-left">
-                        <p className="text-sm font-bold text-fg-muted truncate">{group.brand} {group.model}</p>
-                        <div className="flex items-center gap-1 flex-wrap mt-1">
-                          {group.storageGroups.map((sg) => (
-                            <span
-                              key={sg.key}
-                              className="text-[10px] font-medium px-1.5 py-0.5 rounded bg-surface-raised text-fg-subtle border border-border whitespace-nowrap"
-                            >
-                              {sg.storage}×{sg.count}
-                            </span>
-                          ))}
-                        </div>
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <Smartphone className="w-3.5 h-3.5 text-accent shrink-0" />
+                      <div className="min-w-0 text-left flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs sm:text-sm font-bold text-fg truncate">{group.brand} {group.model}</p>
+                        {group.storageGroups.map((sg) => (
+                          <span
+                            key={sg.key}
+                            className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-surface-raised text-fg-subtle border border-border whitespace-nowrap"
+                          >
+                            {sg.storage}: <strong className="text-fg">{sg.count}</strong>
+                          </span>
+                        ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <Badge tone="accent">{group.count} шт.</Badge>
-                      <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono bg-accent/15 text-accent border border-accent/25">
+                        {group.count} шт.
+                      </span>
+                      <ChevronDown className={`w-3.5 h-3.5 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
                     </div>
                   </button>
 
                   {isExpanded && (
-                    <div className="bg-surface/60 border-t border-border divide-y divide-border">
-                      {allDevices.map((dev) => {
-                        const store = stores.find(s => s.id === dev.locationId);
-                        const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
-                        const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
-                        return (
-                          <DeviceRow
-                            key={dev.id}
-                            device={dev}
-                            isAdmin={isAdmin}
-                            storeName={selectedLocationId === 'ALL' ? storeName : undefined}
-                            isMainWarehouse={isWh}
-                            rate={rate}
-                            onClick={() => setSelectedDevice(dev)}
-                          />
-                        );
-                      })}
+                    <div className="bg-surface/60 border-t border-border divide-y divide-border pl-2 sm:pl-4 pr-1 sm:pr-2 py-1">
+                      <div className="rounded-lg bg-surface border border-border/70 divide-y divide-border/60 overflow-hidden">
+                        {allDevices.map((dev) => {
+                          const store = stores.find(s => s.id === dev.locationId);
+                          const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
+                          const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
+                          return (
+                            <DeviceRow
+                              key={dev.id}
+                              device={dev}
+                              isAdmin={isAdmin}
+                              storeName={selectedLocationId === 'ALL' ? storeName : undefined}
+                              isMainWarehouse={isWh}
+                              rate={rate}
+                              hideModelName
+                              onClick={() => setSelectedDevice(dev)}
+                            />
+                          );
+                        })}
+                      </div>
                     </div>
                   )}
                 </div>

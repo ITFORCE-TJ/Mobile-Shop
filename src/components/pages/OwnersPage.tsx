@@ -1,5 +1,5 @@
 import { getBusinessDateKey } from '../../utils/businessDate';
-import { decimal, formatMoney, moneyNumber } from '../../utils/money';
+import { decimal, formatMoney, formatUsd, moneyNumber } from '../../utils/money';
 import { formatUserName } from '../../utils/formatUser';
 import { capitalByLocation } from '../../utils/ownerCapital';
 import React, { useState, useMemo, useEffect } from 'react';
@@ -10,6 +10,7 @@ import {
   PieChart,
   Percent,
   X,
+  Check,
   ArrowDownLeft,
   ArrowUpRight,
   Wallet,
@@ -538,12 +539,6 @@ export const OwnersPage: React.FC = () => {
   const handleConfirmCloseQuarter = async () => {
     if (isSubmitting) return;
     const quarterName = `${selectedQuarter} ${selectedQuarterYear}`;
-    const sweepNote = transferRemainingToCapital
-      ? 'Прибыль партнеров будет зачислена в их капитал.'
-      : 'Прибыль партнеров перейдет на следующий период.';
-    if (!window.confirm(`Закрыть период ${quarterName}? ${sweepNote}`)) {
-      return;
-    }
     setIsSubmitting(true);
     try {
       const res = await closeQuarterPeriod({
@@ -1687,120 +1682,175 @@ export const OwnersPage: React.FC = () => {
       {/* MODAL: Quarterly Report */}
       {isQuarterModalOpen && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-warning/40 p-4 sm:p-5 text-fg shadow-2xl space-y-3.5 text-xs">
-            <div className="flex items-center justify-between pb-2.5 border-b border-border">
+          <div className="w-full max-w-xl max-h-[92vh] overflow-y-auto rounded-2xl bg-surface border border-border p-3.5 sm:p-4 text-fg shadow-2xl space-y-3 text-xs">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-2 border-b border-border">
               <div className="flex items-center gap-2">
-                <FileText className="w-4 h-4 text-warning" />
-                <h4 className="text-sm font-bold text-warning uppercase tracking-wide">
-                  Квартальный отчет и закрытие периода
-                </h4>
+                <div className="w-7 h-7 rounded-lg bg-amber-500/15 border border-amber-500/30 flex items-center justify-center text-amber-500 shrink-0">
+                  <FileText className="w-3.5 h-3.5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-fg leading-tight">
+                    Закрытие периода ({selectedQuarter} {selectedQuarterYear})
+                  </h4>
+                  <p className="text-[10px] text-fg-subtle">
+                    Финансовая ведомость и распределение прибыли партнеров
+                  </p>
+                </div>
               </div>
               <button
                 type="button"
                 onClick={() => setIsQuarterModalOpen(false)}
-                className="text-fg-subtle hover:text-fg p-1 rounded-lg hover:bg-surface-raised transition-colors cursor-pointer"
+                className="text-fg-subtle hover:text-fg p-1.5 rounded-lg hover:bg-surface-raised transition-colors cursor-pointer"
               >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Quarter / Year */}
-            <div className="grid grid-cols-2 gap-2.5 bg-surface-raised p-2.5 rounded-xl border border-border">
-              <div>
-                <label className="block text-[11px] text-fg-subtle uppercase mb-1 font-semibold">Отчетный квартал</label>
-                <select
-                  value={selectedQuarter}
-                  onChange={(e) => setSelectedQuarter(e.target.value as any)}
-                  className="w-full rounded-xl bg-surface border border-border px-2.5 py-1.5 text-xs text-warning font-bold focus:border-warning focus:outline-none cursor-pointer"
-                >
-                  <option value="Q1">Q1 (1-й Квартал: Январь - Март)</option>
-                  <option value="Q2">Q2 (2-й Квартал: Апрель - Июнь)</option>
-                  <option value="Q3">Q3 (3-й Квартал: Июль - Сентябрь)</option>
-                  <option value="Q4">Q4 (4-й Квартал: Октябрь - Декабрь)</option>
-                </select>
+            {/* Quarter / Year Selector Toolbar */}
+            <div className="flex items-center justify-between gap-2 p-1 rounded-xl bg-surface-raised border border-border">
+              <div className="flex items-center gap-1 flex-1">
+                {(['Q1', 'Q2', 'Q3', 'Q4'] as const).map((q) => {
+                  const isSel = selectedQuarter === q;
+                  return (
+                    <button
+                      key={q}
+                      type="button"
+                      onClick={() => setSelectedQuarter(q)}
+                      className={`flex-1 py-1 px-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
+                        isSel
+                          ? 'bg-amber-500 text-black shadow-xs font-black'
+                          : 'text-fg-subtle hover:text-fg hover:bg-surface'
+                      }`}
+                    >
+                      {q}
+                    </button>
+                  );
+                })}
               </div>
 
-              <div>
-                <label className="block text-[11px] text-fg-subtle uppercase mb-1 font-semibold">Отчетный год</label>
-                <select
-                  value={selectedQuarterYear}
-                  onChange={(e) => setSelectedQuarterYear(parseInt(e.target.value))}
-                  className="w-full rounded-xl bg-surface border border-border px-2.5 py-1.5 text-xs text-fg font-bold focus:border-warning focus:outline-none cursor-pointer"
-                >
-                  <option value={2026}>2026 год</option>
-                  <option value={2025}>2025 год</option>
-                  <option value={2024}>2024 год</option>
-                </select>
-              </div>
+              <select
+                value={selectedQuarterYear}
+                onChange={(e) => setSelectedQuarterYear(parseInt(e.target.value))}
+                className="rounded-lg bg-surface border border-border px-2 py-1 text-xs text-fg font-bold focus:outline-none focus:border-amber-500 cursor-pointer shrink-0"
+              >
+                <option value={2026}>2026 г.</option>
+                <option value={2025}>2025 г.</option>
+                <option value={2024}>2024 г.</option>
+              </select>
             </div>
 
             {/* Breakdown Table */}
-            <div className="space-y-1.5">
-              <span className="font-bold text-fg uppercase text-xs">Сводная ведомость по партнерам ($ USD):</span>
-              <div className="overflow-x-auto rounded-xl border border-border bg-surface-raised">
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px] text-fg-subtle px-0.5">
+                <span className="font-semibold uppercase tracking-wider">Сводная ведомость ($ USD)</span>
+                <span className="font-mono">{displayOwners.length} {ownerCountLabel(displayOwners.length)}</span>
+              </div>
+
+              <div className="overflow-x-auto rounded-xl border border-border bg-surface-raised/40">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-surface text-[10px] text-fg-subtle uppercase border-b border-border">
                     <tr>
-                      <th className="p-2 sm:p-2.5">Партнер</th>
-                      <th className="p-2 sm:p-2.5 text-center">Доля</th>
-                      <th className="p-2 sm:p-2.5 text-right">Начислено ($)</th>
-                      <th className="p-2 sm:p-2.5 text-right">Выплачено ($)</th>
-                      <th className="p-2 sm:p-2.5 text-right">Реинвест ($)</th>
-                      <th className="p-2 sm:p-2.5 text-right text-warning">Остаток ($)</th>
-                      <th className="p-2 sm:p-2.5 text-right">Капитал ($)</th>
+                      <th className="py-2 px-2.5 font-semibold">Партнер / Доля</th>
+                      <th className="py-2 px-2 text-right font-semibold">Начислено</th>
+                      <th className="py-2 px-2 text-right font-semibold">Выплачено</th>
+                      <th className="py-2 px-2 text-right font-semibold text-amber-500">Остаток</th>
+                      <th className="py-2 px-2.5 text-right font-semibold">Капитал</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-border text-xs">
-                    {displayOwners.map((o) => (
-                      <tr key={o.id} className="hover:bg-surface/50 font-mono">
-                        <td className="p-2 sm:p-2.5 font-bold font-sans text-fg">{getOwnerDetails(o).name}</td>
-                        <td className="p-2 sm:p-2.5 text-center text-fg-subtle font-sans">{ownerShareLabel(o.id)}</td>
-                        <td className="p-2 sm:p-2.5 text-right font-semibold text-fg">${formatMoney(o.totalAccruedProfitUsd)}</td>
-                        <td className="p-2 sm:p-2.5 text-right text-info">${formatMoney(o.totalPaidProfitUsd)}</td>
-                        <td className="p-2 sm:p-2.5 text-right text-accent">${formatMoney(o.totalReinvestedUsd)}</td>
-                        <td className="p-2 sm:p-2.5 text-right font-bold text-warning">${formatMoney(o.availableProfitUsd)}</td>
-                        <td className="p-2 sm:p-2.5 text-right font-semibold text-fg">${formatMoney(o.capitalBalanceUsd)}</td>
-                      </tr>
-                    ))}
+                  <tbody className="divide-y divide-border/60 text-xs">
+                    {displayOwners.map((o) => {
+                      const isNegative = (o.availableProfitUsd || 0) < 0;
+                      return (
+                        <tr key={o.id} className="hover:bg-surface/50 font-mono transition-colors">
+                          <td className="py-1.5 px-2.5 font-sans">
+                            <span className="font-bold text-fg block text-xs truncate max-w-[130px] sm:max-w-none">
+                              {getOwnerDetails(o).name}
+                            </span>
+                            <span className="text-[10px] text-fg-subtle block truncate max-w-[150px] sm:max-w-none leading-tight">
+                              {ownerShareLabel(o.id)}
+                            </span>
+                          </td>
+                          <td className="py-1.5 px-2 text-right font-semibold text-fg">
+                            {formatUsd(o.totalAccruedProfitUsd)}
+                          </td>
+                          <td className="py-1.5 px-2 text-right text-fg-subtle">
+                            {formatUsd(o.totalPaidProfitUsd)}
+                          </td>
+                          <td className={`py-1.5 px-2 text-right font-bold ${
+                            isNegative ? 'text-rose-500' : (o.availableProfitUsd || 0) > 0 ? 'text-amber-500' : 'text-fg-subtle'
+                          }`}>
+                            {formatUsd(o.availableProfitUsd)}
+                          </td>
+                          <td className="py-1.5 px-2.5 text-right font-medium text-fg">
+                            {formatUsd(o.capitalBalanceUsd)}
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
-                  <tfoot className="bg-surface font-bold border-t border-border text-xs font-mono">
+                  <tfoot className="bg-surface/80 font-bold border-t border-border text-xs font-mono">
                     <tr>
-                      <td colSpan={2} className="p-2 sm:p-2.5 uppercase font-sans text-fg-subtle">ИТОГО:</td>
-                      <td className="p-2 sm:p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalAccruedProfitUsd || 0), 0))}</td>
-                      <td className="p-2 sm:p-2.5 text-right text-info">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalPaidProfitUsd || 0), 0))}</td>
-                      <td className="p-2 sm:p-2.5 text-right text-accent">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalReinvestedUsd || 0), 0))}</td>
-                      <td className="p-2 sm:p-2.5 text-right text-warning">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.availableProfitUsd || 0), 0))}</td>
-                      <td className="p-2 sm:p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.capitalBalanceUsd || 0), 0))}</td>
+                      <td className="py-2 px-2.5 uppercase font-sans text-fg-subtle text-[11px]">ИТОГО:</td>
+                      <td className="py-2 px-2 text-right text-fg">
+                        {formatUsd(displayOwners.reduce((sum, o) => sum + (o.totalAccruedProfitUsd || 0), 0))}
+                      </td>
+                      <td className="py-2 px-2 text-right text-fg-subtle">
+                        {formatUsd(displayOwners.reduce((sum, o) => sum + (o.totalPaidProfitUsd || 0), 0))}
+                      </td>
+                      <td className={`py-2 px-2 text-right font-bold ${
+                        displayOwners.reduce((sum, o) => sum + (o.availableProfitUsd || 0), 0) < 0
+                          ? 'text-rose-500'
+                          : 'text-amber-500'
+                      }`}>
+                        {formatUsd(displayOwners.reduce((sum, o) => sum + (o.availableProfitUsd || 0), 0))}
+                      </td>
+                      <td className="py-2 px-2.5 text-right text-fg">
+                        {formatUsd(displayOwners.reduce((sum, o) => sum + (o.capitalBalanceUsd || 0), 0))}
+                      </td>
                     </tr>
                   </tfoot>
                 </table>
               </div>
             </div>
 
-            {/* Sweep option */}
-            <div className="p-2.5 sm:p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5">
-              <label className="flex items-start space-x-2.5 cursor-pointer text-fg text-xs">
-                <input
-                  type="checkbox"
-                  checked={transferRemainingToCapital}
-                  onChange={(e) => setTransferRemainingToCapital(e.target.checked)}
-                  className="rounded bg-surface border-border text-warning focus:ring-0 mt-0.5"
-                />
-                <div>
-                  <strong className="block text-warning">Зачислить прибыль в капитал</strong>
-                  <span className="text-[11px] text-fg-subtle block mt-0.5">
-                    Прибыль партнеров будет перенесена в их оборотный капитал. Если снять галочку — прибыль останется до следующего закрытия квартала.
-                  </span>
+            {/* Sweep option interactive toggle card */}
+            <div
+              onClick={() => setTransferRemainingToCapital(prev => !prev)}
+              className={`p-2 sm:p-2.5 rounded-xl border transition-all cursor-pointer select-none flex items-start gap-2.5 ${
+                transferRemainingToCapital
+                  ? 'bg-amber-500/10 border-amber-500/30'
+                  : 'bg-surface-raised border-border hover:border-fg-subtle/30'
+              }`}
+            >
+              <div className="pt-0.5 shrink-0">
+                <div className={`w-4 h-4 rounded flex items-center justify-center transition-colors ${
+                  transferRemainingToCapital
+                    ? 'bg-amber-500 text-black'
+                    : 'border border-border bg-surface text-transparent'
+                }`}>
+                  <Check className="w-3 h-3 stroke-[3]" />
                 </div>
-              </label>
+              </div>
+              <div className="min-w-0 flex-1">
+                <span className="text-xs font-bold text-fg block leading-tight">
+                  Зачислить прибыль в оборотный капитал
+                </span>
+                <span className="text-[11px] text-fg-subtle block leading-tight mt-0.5">
+                  {transferRemainingToCapital
+                    ? 'Доступный остаток прибыли будет автоматически перенесен в капитал партнеров'
+                    : 'Прибыль останется на балансе партнеров до следующего периода'}
+                </span>
+              </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2 pt-2 border-t border-border">
+            {/* Action Buttons */}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-border">
               <button
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => setIsQuarterModalOpen(false)}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-surface-raised hover:bg-surface text-xs font-bold text-fg border border-border uppercase disabled:opacity-50 cursor-pointer"
+                className="px-3.5 py-2 rounded-xl text-xs font-semibold text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer disabled:opacity-50"
               >
                 Отмена
               </button>
@@ -1808,10 +1858,19 @@ export const OwnersPage: React.FC = () => {
                 type="button"
                 disabled={isSubmitting}
                 onClick={handleConfirmCloseQuarter}
-                className="flex-1 py-2.5 px-3 rounded-xl bg-warning hover:bg-warning/90 text-xs font-bold uppercase text-black shadow-xs transition-colors disabled:opacity-60 flex items-center justify-center gap-1.5 cursor-pointer"
+                className="px-4 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-black font-bold text-xs flex items-center justify-center gap-1.5 shadow-xs transition-all cursor-pointer disabled:opacity-60"
               >
-                {isSubmitting && <Loader2 className="w-4 h-4 animate-spin" />}
-                {isSubmitting ? 'Закрытие…' : 'Закрыть период'}
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                    <span>Закрытие…</span>
+                  </>
+                ) : (
+                  <>
+                    <CheckCircle2 className="w-3.5 h-3.5" />
+                    <span>Закрыть {selectedQuarter} {selectedQuarterYear}</span>
+                  </>
+                )}
               </button>
             </div>
           </div>

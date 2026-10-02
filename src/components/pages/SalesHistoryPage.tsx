@@ -305,7 +305,7 @@ export const SalesHistoryPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      <div className="p-3 border-b border-border bg-bg space-y-2.5 shrink-0">
+      <div className="p-2.5 sm:p-3 border-b border-border bg-surface space-y-2 shrink-0">
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
@@ -314,8 +314,8 @@ export const SalesHistoryPage: React.FC = () => {
           placeholder="Номер чека / IMEI / модель / продавец..."
         />
 
-        <div className="flex items-center justify-between gap-2 min-w-0 flex-wrap sm:flex-nowrap">
-          <div className="flex items-center gap-1.5 shrink-0">
+        <div className="flex items-center justify-between gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
+          <div className="flex items-center gap-1.5 flex-wrap shrink-0">
             {/* Сегодня */}
             <button
               type="button"
@@ -326,7 +326,7 @@ export const SalesHistoryPage: React.FC = () => {
                 setPeriodFilter('TODAY');
               }}
               className={cn(
-                'h-9 px-3 rounded-xl border text-xs font-semibold shrink-0 transition-all select-none shadow-xs cursor-pointer',
+                'h-8 px-2.5 rounded-xl border text-xs font-semibold shrink-0 transition-all select-none shadow-xs cursor-pointer',
                 periodFilter === 'TODAY'
                   ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
                   : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
@@ -364,13 +364,29 @@ export const SalesHistoryPage: React.FC = () => {
               onResetMonth={resetToCurrentMonth}
               className="shrink-0"
             />
+
+            {(searchQuery || periodFilter !== 'MONTH' || selectedMonth !== thisMonthStr || (selectedStoreFilter !== 'ALL' && !isStoreScoped && storeCtx.mode === 'CENTRAL')) && (
+              <button
+                type="button"
+                onClick={() => {
+                  setSearchQuery('');
+                  resetToCurrentMonth();
+                  if (!isStoreScoped) setSelectedStoreFilter('ALL');
+                }}
+                className="h-8 px-2 text-fg-subtle hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+                title="Сбросить фильтры"
+              >
+                <X className="w-3 h-3" />
+                <span className="text-[11px]">Сброс</span>
+              </button>
+            )}
           </div>
 
           {isAdmin && storeCtx.mode === 'CENTRAL' ? (
             <div className="relative inline-flex items-center shrink-0">
               <div
                 className={cn(
-                  'h-9 pl-3 pr-8 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-xs',
+                  'h-8 pl-2.5 pr-7 rounded-xl border text-xs font-semibold flex items-center gap-1.5 transition-all select-none shadow-xs',
                   selectedStoreFilter !== 'ALL'
                     ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
                     : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
@@ -378,12 +394,12 @@ export const SalesHistoryPage: React.FC = () => {
                 title={`Точка продаж: ${selectedStoreFilter === 'ALL' ? 'Все магазины' : formatStoreName(retailStores.find(s => s.id === selectedStoreFilter)?.name) || 'Магазин'}`}
               >
                 <Store className={cn('w-3.5 h-3.5 shrink-0', selectedStoreFilter !== 'ALL' ? 'text-accent' : 'text-fg-subtle')} />
-                <span className="truncate max-w-36 sm:max-w-48">
+                <span className="truncate max-w-32 sm:max-w-44">
                   {selectedStoreFilter === 'ALL'
                     ? 'Все магазины'
                     : formatStoreName(retailStores.find(s => s.id === selectedStoreFilter)?.name) || 'Магазин'}
                 </span>
-                <ChevronDown className="w-3.5 h-3.5 text-fg-subtle shrink-0 pointer-events-none absolute right-2.5" />
+                <ChevronDown className="w-3.5 h-3.5 text-fg-subtle shrink-0 pointer-events-none absolute right-2" />
               </div>
               <select
                 value={selectedStoreFilter}
@@ -401,30 +417,37 @@ export const SalesHistoryPage: React.FC = () => {
                   </option>
                 ))}
               </select>
-              {selectedStoreFilter !== 'ALL' && (
-                <button
-                  type="button"
-                  onClick={() => setSelectedStoreFilter('ALL')}
-                  className="ml-1 p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-surface-raised transition-colors cursor-pointer"
-                  title="Показать все магазины"
-                  aria-label="Сбросить фильтр магазина"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
           ) : null}
+        </div>
+
+        {filteredSales.length > 0 ? (
+          <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle overflow-x-auto pb-0.5 scrollbar-none" aria-label="Итоги за период">
+            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-fg-muted font-medium shrink-0">
+              Чеков: <strong className="text-fg font-semibold">{periodSummary.receipts}</strong>
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20 text-accent font-bold shrink-0">
+              {formatMoney(periodSummary.totalTjs)} TJS
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border shrink-0">
+              Нал: <strong className="text-fg-muted font-medium">{formatMoney(periodSummary.cashTjs)}</strong>
+            </span>
+            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border shrink-0">
+              Карта: <strong className="text-fg-muted font-medium">{formatMoney(periodSummary.cardTjs)}</strong>
+            </span>
+            {periodSummary.refunded > 0 && (
+              <span className="px-2 py-0.5 rounded-md bg-danger/10 border border-danger/20 text-danger font-medium shrink-0">
+                Возвратов: <strong>{periodSummary.refunded}</strong>
+              </span>
+            )}
           </div>
-        {filteredSales.length > 0 && (
-          <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1 text-xs text-fg-subtle tabular-nums" aria-label="Итоги за период">
-            <span>Чеков: <strong className="text-fg-muted">{periodSummary.receipts}</strong></span>
-            <span>Сумма: <strong className="text-accent">{formatMoney(periodSummary.totalTjs)} TJS</strong></span>
-            <span>Наличные: <strong className="text-fg-muted">{formatMoney(periodSummary.cashTjs)}</strong></span>
-            <span>Карта: <strong className="text-fg-muted">{formatMoney(periodSummary.cardTjs)}</strong></span>
-            {periodSummary.refunded > 0 && <span>Возвратов: <strong className="text-fg-muted">{periodSummary.refunded}</strong> (не в сумме)</span>}
+        ) : (
+          <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
+            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-fg-muted font-medium">0 чеков</span>
+            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border font-semibold text-fg">0.00 TJS</span>
           </div>
         )}
-        </div>
+      </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-border">
         {isSeller && !currentUser?.storeId ? (
@@ -447,7 +470,49 @@ export const SalesHistoryPage: React.FC = () => {
             action={<Button onClick={() => setPeriodLoadAttempt((n) => n + 1)}>Повторить</Button>}
           />
         ) : filteredSales.length === 0 ? (
-          <EmptyState icon={Receipt} title="Продажи не найдены" description="Попробуйте изменить период или поисковый запрос" />
+          <EmptyState
+            icon={Receipt}
+            title="Продажи не найдены"
+            description={
+              searchQuery
+                ? `По запросу «${searchQuery}» ничего не найдено`
+                : periodFilter === 'TODAY'
+                ? 'За сегодня еще нет оформленных продаж'
+                : `За ${selectedMonth ? selectedMonth : 'выбранный период'} продаж нет`
+            }
+            action={
+              searchQuery ? (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="!h-9 !px-3 text-xs"
+                  onClick={() => setSearchQuery('')}
+                >
+                  Сбросить поиск
+                </Button>
+              ) : periodFilter === 'TODAY' ? (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="!h-9 !px-3 text-xs"
+                  onClick={resetToCurrentMonth}
+                >
+                  Показать продажи за месяц
+                </Button>
+              ) : (
+                <Button
+                  size="md"
+                  className="!h-9 !px-3 text-xs"
+                  onClick={() => {
+                    setActivePage('SALE');
+                    navigate('/');
+                  }}
+                >
+                  Перейти к кассе (POS)
+                </Button>
+              )
+            }
+          />
         ) : (
           filteredSales.map((sale) => {
             const timeStr = new Date(sale.date).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });

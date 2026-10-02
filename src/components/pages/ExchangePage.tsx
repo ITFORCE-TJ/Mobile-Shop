@@ -10,7 +10,8 @@ import {
   X,
   Banknote,
   RotateCcw,
-  Loader2
+  Loader2,
+  Smartphone
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 
@@ -321,40 +322,49 @@ export const ExchangePage: React.FC = () => {
         {/* Main 2-column Layout */}
         <div className="flex-1 grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-border overflow-y-auto">
           {/* LEFT: Step 1 - Сдаваемое устройство (Incoming from customer) */}
-          <div className="p-4 space-y-4 bg-bg">
-            <div className="flex items-center space-x-2.5 border-b border-border pb-3">
-              <div className="w-6 h-6 rounded-lg bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
-                1
+          <div className="p-3 sm:p-4 space-y-3 bg-bg">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-md bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-[11px] font-bold shrink-0">
+                  1
+                </div>
+                <h3 className="text-xs sm:text-sm font-bold text-fg">Сдаваемое устройство</h3>
+                <span className="text-[11px] text-fg-subtle">(клиент)</span>
               </div>
-              <h3 className="text-xs md:text-sm font-bold tracking-wide text-fg-muted">Сдаваемое устройство (клиент)</h3>
+              {selectedOldDevice && (
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                  Выбрано
+                </span>
+              )}
             </div>
 
             {/* Receipt / IMEI search bar */}
             {!selectedOldDevice ? (
-              <div className="space-y-3">
-                <div className="flex space-x-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-fg-subtle" />
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
                     <input
                       type="text"
                       value={receiptSearch ?? ''}
                       onChange={(e) => setReceiptSearch(e.target.value)}
+                      onKeyDown={(e) => e.key === 'Enter' && handleFindSoldImei(receiptSearch)}
                       placeholder="Номер чека или IMEI..."
-                      className="w-full rounded-xl bg-surface border border-border pl-9 pr-3 py-2 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                      className="w-full h-10 rounded-xl bg-surface border border-border pl-9 pr-3 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={() => handleFindSoldImei(receiptSearch)}
                     disabled={!receiptSearch.trim()}
-                    className="px-4 py-2 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg transition-colors"
+                    className="h-10 px-3.5 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg transition-colors shrink-0 cursor-pointer"
                   >
                     Найти
                   </button>
                   <button
                     type="button"
                     onClick={handleScanOldDevice}
-                    className="px-3 py-2 bg-surface-raised hover:bg-surface text-accent rounded-xl border border-border transition-colors"
+                    className="h-10 w-10 flex items-center justify-center bg-surface-raised hover:bg-surface text-accent rounded-xl border border-border transition-colors shrink-0 cursor-pointer"
                     title="Сканировать"
                   >
                     <Scan className="w-4 h-4" />
@@ -431,23 +441,31 @@ export const ExchangePage: React.FC = () => {
           </div>
 
           {/* RIGHT: Step 2 - Выдаваемое устройство со склада */}
-          <div className="p-4 space-y-4 bg-bg">
-            <div className="flex items-center space-x-2.5 border-b border-border pb-3">
-              <div className="w-6 h-6 rounded-lg bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-xs font-bold shrink-0">
-                2
+          <div className="p-3 sm:p-4 space-y-3 bg-bg">
+            <div className="flex items-center justify-between border-b border-border pb-2.5">
+              <div className="flex items-center gap-2">
+                <div className="w-5 h-5 rounded-md bg-accent/15 text-accent border border-accent/30 flex items-center justify-center text-[11px] font-bold shrink-0">
+                  2
+                </div>
+                <h3 className="text-xs sm:text-sm font-bold text-fg">Выдаваемое устройство</h3>
+                <span className="text-[11px] text-fg-subtle">(со склада)</span>
               </div>
-              <h3 className="text-xs md:text-sm font-bold tracking-wide text-fg-muted">Выдаваемое устройство (со склада)</h3>
+              {replacementDevice && (
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                  Выбрано
+                </span>
+              )}
             </div>
 
             {replacementDevice ? (
-              <div className="p-4 rounded-xl bg-surface border border-border space-y-3.5 relative">
+              <div className="p-3 sm:p-4 rounded-xl bg-surface border border-border space-y-3 relative">
                 <button
                   type="button"
                   onClick={() => {
                     setReplacementDevice(null);
                     setNewPriceTjs(0);
                   }}
-                  className="absolute right-3.5 top-3.5 text-fg-subtle hover:text-fg-muted transition-colors"
+                  className="absolute right-3.5 top-3.5 text-fg-subtle hover:text-fg-muted transition-colors cursor-pointer"
                   title="Отменить выбор"
                 >
                   <X className="w-4 h-4" />
@@ -466,7 +484,7 @@ export const ExchangePage: React.FC = () => {
                   </p>
                 </div>
 
-                <div className="pt-3 border-t border-border space-y-2">
+                <div className="pt-2.5 border-t border-border space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="block text-xs font-bold text-accent">
                       Цена продажи (TJS):
@@ -486,22 +504,22 @@ export const ExchangePage: React.FC = () => {
                 </div>
               </div>
             ) : (
-              <div className="space-y-3">
-                <div className="flex space-x-2">
-                  <div className="relative flex-1">
-                    <Search className="absolute left-3 top-2.5 w-4 h-4 text-fg-subtle" />
+              <div className="space-y-2.5">
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 min-w-0">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle" />
                     <input
                       type="text"
                       value={deviceSearchQuery ?? ''}
                       onChange={(e) => setDeviceSearchQuery(e.target.value)}
                       placeholder="Поиск по наличию / IMEI..."
-                      className="w-full rounded-xl bg-surface border border-border pl-9 pr-3 py-2 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                      className="w-full h-10 rounded-xl bg-surface border border-border pl-9 pr-3 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                     />
                   </div>
                   <button
                     type="button"
                     onClick={handleScanReplacement}
-                    className="px-3 py-2 bg-surface-raised hover:bg-surface text-accent rounded-xl border border-border transition-colors"
+                    className="h-10 w-10 flex items-center justify-center bg-surface-raised hover:bg-surface text-accent rounded-xl border border-border transition-colors shrink-0 cursor-pointer"
                     title="Сканировать"
                   >
                     <Scan className="w-4 h-4" />
@@ -511,8 +529,9 @@ export const ExchangePage: React.FC = () => {
                 {/* List of in-stock devices */}
                 <div className="max-h-64 overflow-y-auto divide-y divide-border rounded-xl border border-border bg-surface">
                   {availableDevices.length === 0 ? (
-                    <div className="p-4 text-center text-fg-muted text-xs">
-                      Нет подходящих товаров в наличии{isStoreScoped ? '' : ` (${currentStoreName})`}
+                    <div className="py-5 px-4 text-center text-xs text-fg-subtle flex flex-col items-center justify-center gap-1.5 bg-surface-raised/30">
+                      <Smartphone className="w-5 h-5 text-fg-subtle/50" />
+                      <span>Нет подходящих товаров в наличии{isStoreScoped ? '' : ` (${currentStoreName})`}</span>
                     </div>
                   ) : (
                     availableDevices.slice(0, 8).map((d) => (
@@ -520,7 +539,7 @@ export const ExchangePage: React.FC = () => {
                         key={d.id}
                         type="button"
                         onClick={() => handleSelectReplacement(d)}
-                        className="w-full text-left p-3 hover:bg-surface-raised flex items-center justify-between text-xs transition-colors group"
+                        className="w-full text-left p-3 hover:bg-surface-raised flex items-center justify-between text-xs transition-colors group cursor-pointer"
                       >
                         <div>
                           <p className="font-bold text-fg-muted group-hover:text-accent transition-colors">{d.brand} {d.model}</p>
@@ -646,13 +665,19 @@ export const ExchangePage: React.FC = () => {
         )}
 
         {/* Action Bottom Bar */}
-        <div className="p-3.5 bg-surface border-t border-border flex flex-col sm:flex-row gap-3 sm:items-center justify-between shrink-0">
-          <div className="text-xs font-medium text-fg-muted flex flex-wrap items-center gap-2">
-            <span>Новый: <strong className="text-accent">{formatMoney(newPriceTjs)} TJS</strong></span>
-            <span>·</span>
-            <span>Зачет: <strong className="text-accent">{formatMoney(exchangeInValueTjs)} TJS</strong></span>
-            <span>·</span>
-            <span className="font-bold text-fg-muted">
+        <div className="p-2.5 sm:p-3.5 bg-surface border-t border-border flex flex-col sm:flex-row gap-2.5 sm:items-center justify-between shrink-0">
+          <div className="text-xs font-medium text-fg-muted flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span className="inline-flex items-center gap-1">
+              <span className="text-fg-subtle">Новый:</span>
+              <strong className="text-accent font-semibold">{formatMoney(newPriceTjs)} TJS</strong>
+            </span>
+            <span className="text-fg-subtle">·</span>
+            <span className="inline-flex items-center gap-1">
+              <span className="text-fg-subtle">Зачет:</span>
+              <strong className="text-accent font-semibold">{formatMoney(exchangeInValueTjs)} TJS</strong>
+            </span>
+            <span className="text-fg-subtle">·</span>
+            <span className={`font-bold ${differenceTjs > 0 ? 'text-accent' : differenceTjs < 0 ? 'text-warning' : 'text-fg'}`}>
               {differenceTjs > 0 ? `Доплата: +${formatMoney(differenceTjs)} TJS` : differenceTjs < 0 ? `Возврат: ${formatMoney(differenceTjs)} TJS` : 'Равный обмен'}
             </span>
           </div>
@@ -663,7 +688,7 @@ export const ExchangePage: React.FC = () => {
               !selectedOldDevice || !replacementDevice || exchangeInValueTjs <= 0 || newPriceTjs <= 0 || isSubmitting ||
               (differenceTjs > 0 && exchangePaymentMethod === 'CASH' && (parseFloat(givenCashTjs) || 0) < differenceTjs)
             }
-            className="px-5 py-2.5 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg tracking-wider flex items-center space-x-2 transition-all shadow-xs"
+            className="h-10 px-4 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-xl text-accent-fg tracking-wide flex items-center justify-center space-x-2 transition-all shadow-xs cursor-pointer disabled:cursor-not-allowed shrink-0"
           >
             {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <RotateCcw className="w-4 h-4" />}
             <span>{isSubmitting ? 'Проведение…' : 'Подтвердить обмен'}</span>

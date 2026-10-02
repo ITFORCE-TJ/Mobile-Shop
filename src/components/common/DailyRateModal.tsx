@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAppFields } from '../../context/AppContext';
-import { DollarSign, Clock } from 'lucide-react';
+import { DollarSign, Clock, AlertCircle } from 'lucide-react';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
-import { FormField } from '../ui/FormField';
 import { hasCurrentDailyRate } from '../../utils/dailyRatePrompt';
 import { formatRateOrInput } from '../../utils/money';
+import { cn } from '../../utils/cn';
 
 interface DailyRateModalProps {
   isOpen: boolean;
@@ -97,23 +97,59 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
       footer={
         <>
           {!isMandatory && onClose && (
-            <Button variant="secondary" disabled={isSaving} onClick={onClose}>
+            <Button variant="secondary" className="flex-1" disabled={isSaving} onClick={onClose}>
               Отмена
             </Button>
           )}
-          <Button variant="primary" fullWidth loading={isSaving} onClick={handleSubmit}>
+          <Button
+            variant="primary"
+            className={!isMandatory && onClose ? 'flex-1' : undefined}
+            fullWidth={isMandatory || !onClose}
+            loading={isSaving}
+            onClick={handleSubmit}
+          >
             Сохранить курс
           </Button>
         </>
       }
     >
-      <div className="space-y-4">
-        <div className="flex items-center gap-3 rounded-2xl border border-accent/20 bg-accent/5 p-4">
-          <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-accent/10 text-accent"><DollarSign className="h-6 w-6" /></div>
-          <div><p className="text-lg font-bold text-fg">1 USD → TJS</p><p className="text-xs text-fg-muted">Стоимость одного доллара в сомони</p></div>
-        </div>
-        <FormField label="Курс USD → TJS" required error={error ?? undefined}>
-          <div className="relative">
+      <div className="space-y-3">
+        {/* Compact Currency Exchange Card */}
+        <div
+          className={cn(
+            'rounded-2xl border transition-all duration-200 overflow-hidden bg-bg/60',
+            error
+              ? 'border-danger/60 ring-2 ring-danger/20'
+              : 'border-border focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/20 hover:border-border/80'
+          )}
+        >
+          {/* Card Header: Currency pair & optional current rate preset button */}
+          <div className="flex items-center justify-between px-3.5 pt-2.5 pb-1 text-xs">
+            <div className="flex items-center gap-1.5 font-semibold text-fg">
+              <span className="flex h-5 w-5 items-center justify-center rounded-md bg-accent/15 text-accent font-bold text-[11px]">
+                <DollarSign className="w-3.5 h-3.5" />
+              </span>
+              <span>1 USD =</span>
+            </div>
+            {todayRate?.rate ? (
+              <button
+                type="button"
+                onClick={() => {
+                  setRateInput(formatRateOrInput(todayRate.rate));
+                  setError(null);
+                }}
+                className="text-[11px] text-fg-subtle hover:text-accent font-medium transition-colors cursor-pointer select-none"
+                title="Подставить текущий курс"
+              >
+                Текущий: <span className="font-semibold text-fg-muted">{Number(todayRate.rate).toFixed(2)} TJS</span>
+              </button>
+            ) : (
+              <span className="text-[11px] text-fg-subtle font-medium">USD → TJS</span>
+            )}
+          </div>
+
+          {/* Rate Input Field */}
+          <div className="flex items-center px-3.5 pb-2.5 pt-0.5">
             <input
               type="text"
               inputMode="decimal"
@@ -129,14 +165,26 @@ export const DailyRateModal: React.FC<DailyRateModalProps> = ({ isOpen, onClose 
               autoFocus={typeof window !== 'undefined' && window.matchMedia('(pointer: fine)').matches}
               onBlur={handleBlur}
               placeholder="10.50"
-              className="w-full h-16 rounded-xl bg-bg border border-accent/50 pl-4 pr-16 text-3xl font-bold tabular-nums text-fg focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20 disabled:opacity-60"
+              className="w-full bg-transparent text-2xl sm:text-3xl font-bold tabular-nums text-fg focus:outline-none placeholder:text-fg-subtle/30"
             />
-            <span className="absolute right-4 top-1/2 -translate-y-1/2 text-xs font-bold text-fg-subtle uppercase">TJS</span>
+            <span className="shrink-0 text-xs font-bold text-fg-subtle uppercase px-2 py-1 rounded-md bg-surface border border-border select-none">
+              TJS
+            </span>
           </div>
-        </FormField>
-        <div className="flex items-start gap-2 rounded-xl bg-bg p-3 text-xs leading-relaxed text-fg-muted">
-          <Clock className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
-          <p>Курс на сегодня. После сохранения изменить его можно в настройках.</p>
+        </div>
+
+        {/* Error message */}
+        {error && (
+          <p className="text-xs text-danger font-medium px-1 flex items-center gap-1.5 animate-in fade-in slide-in-from-top-1 duration-150" role="alert">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{error}</span>
+          </p>
+        )}
+
+        {/* Subtle hint */}
+        <div className="flex items-center justify-center gap-1.5 text-[11px] text-fg-subtle text-center pt-0.5 select-none">
+          <Clock className="w-3.5 h-3.5 shrink-0 text-fg-subtle/70" />
+          <span>После сохранения курс можно изменить в Настройках</span>
         </div>
       </div>
     </Dialog>

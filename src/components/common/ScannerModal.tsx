@@ -2,11 +2,12 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Html5QrcodeShim } from 'html5-qrcode/esm/code-decoder';
 import { BaseLoggger } from 'html5-qrcode/esm/core';
-import { AlertCircle, Flashlight, FlashlightOff, Focus, ZoomIn } from 'lucide-react';
+import { AlertCircle, ArrowRight, Barcode, Flashlight, FlashlightOff, Focus, X, ZoomIn } from 'lucide-react';
 import { useAppFields } from '../../context/AppContext';
 import { Dialog } from '../ui/Dialog';
 import { soundEffects } from '../../utils/sound';
 import { extractImeis, SCAN_HINTS } from '../../services/scanner/imei';
+import { cn } from '../../utils/cn';
 
 const CONFIRMATION_WINDOW_MS = 800;
 const REQUIRED_MATCHING_FRAMES = 2;
@@ -302,53 +303,137 @@ export const ScannerModal: React.FC = () => {
     };
   }, [isScannerOpen]);
 
+  const isHolding = scanHint === SCAN_HINTS.hold;
+
   return (
     <Dialog
       open={isScannerOpen}
       onClose={closeScanner}
       title="Сканирование IMEI"
-      subtitle="Наведите на IMEI — после распознавания камера закроется"
+      subtitle="Наведите камеру на штрих-код устройства"
       maxWidth="sm"
+      compact
     >
-      <div className="space-y-3">
-        <div className="relative aspect-4/3 w-full overflow-hidden rounded-lg bg-black">
+      <div className="space-y-2.5">
+        {/* Camera Viewport */}
+        <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full max-h-[210px] overflow-hidden rounded-2xl bg-black border border-border shadow-inner">
           <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" playsInline muted autoPlay />
+
           {!cameraError && (
             <div
-              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-lg border-2 border-accent"
-              style={{ width: band.width, height: band.height }}
+              className="pointer-events-none absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-xl"
+              style={{
+                width: band.width,
+                height: band.height,
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.52)',
+              }}
               aria-hidden="true"
             >
-              <div className="absolute left-[6%] right-[6%] top-1/2 h-0.5 -translate-y-1/2 bg-red-500" />
+              {/* Subtle inner boundary */}
+              <div
+                className={cn(
+                  'absolute inset-0 rounded-xl border transition-colors duration-200',
+                  isHolding ? 'border-emerald-400 bg-emerald-500/10' : 'border-white/20'
+                )}
+              />
+
+              {/* 4 Precision Corner Guides / Reticles */}
+              <div
+                className={cn(
+                  'absolute -top-[1px] -left-[1px] w-4 h-4 border-t-2 border-l-2 rounded-tl-lg transition-all duration-200',
+                  isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
+                )}
+              />
+              <div
+                className={cn(
+                  'absolute -top-[1px] -right-[1px] w-4 h-4 border-t-2 border-r-2 rounded-tr-lg transition-all duration-200',
+                  isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
+                )}
+              />
+              <div
+                className={cn(
+                  'absolute -bottom-[1px] -left-[1px] w-4 h-4 border-b-2 border-l-2 rounded-bl-lg transition-all duration-200',
+                  isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
+                )}
+              />
+              <div
+                className={cn(
+                  'absolute -bottom-[1px] -right-[1px] w-4 h-4 border-b-2 border-r-2 rounded-br-lg transition-all duration-200',
+                  isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
+                )}
+              />
+
+              {/* High-tech Scanning Laser Beam */}
+              <div
+                className={cn(
+                  'scanner-laser-line rounded-full',
+                  isHolding
+                    ? 'bg-gradient-to-r from-transparent via-emerald-400 to-transparent shadow-[0_0_14px_3px_rgba(52,211,153,0.95)]'
+                    : 'bg-gradient-to-r from-transparent via-cyan-400 to-transparent shadow-[0_0_12px_2px_rgba(34,211,238,0.85)]'
+                )}
+              />
             </div>
           )}
+
+          {/* Torch toggle button */}
           {torchSupported && (
             <button
               type="button"
               onClick={toggleTorch}
               aria-label={torchOn ? 'Выключить фонарик' : 'Включить фонарик'}
-              className="absolute top-2 right-2 w-9 h-9 rounded-lg bg-black/60 text-white flex items-center justify-center backdrop-blur-sm active:scale-95 transition-transform"
+              className={cn(
+                'absolute top-2.5 right-2.5 z-20 h-8 w-8 rounded-full flex items-center justify-center backdrop-blur-md transition-all active:scale-90 shadow-md cursor-pointer',
+                torchOn
+                  ? 'bg-amber-400 text-black shadow-amber-500/40 font-bold scale-105'
+                  : 'bg-black/50 text-white border border-white/20 hover:bg-black/70'
+              )}
             >
-              {torchOn ? <FlashlightOff className="w-4.5 h-4.5" /> : <Flashlight className="w-4.5 h-4.5" />}
+              {torchOn ? <FlashlightOff className="w-4 h-4" /> : <Flashlight className="w-4 h-4" />}
             </button>
           )}
+
+          {/* Dynamic live status pill inside video */}
+          <div
+            className={cn(
+              'absolute bottom-2.5 left-1/2 -translate-x-1/2 z-10 px-3 py-1 rounded-full backdrop-blur-md text-[11px] font-medium transition-all duration-200 pointer-events-none flex items-center gap-1.5 shadow-lg border max-w-[92%] truncate',
+              isHolding
+                ? 'bg-emerald-600/90 text-white border-emerald-400/50 shadow-emerald-950/50 animate-pulse'
+                : scanHint === SCAN_HINTS.notImei
+                  ? 'bg-amber-600/90 text-white border-amber-400/50 shadow-amber-950/50'
+                  : 'bg-black/70 text-white/95 border-white/20'
+            )}
+          >
+            <span
+              className={cn(
+                'w-1.5 h-1.5 rounded-full shrink-0',
+                isHolding
+                  ? 'bg-white'
+                  : scanHint === SCAN_HINTS.notImei
+                    ? 'bg-amber-200'
+                    : 'bg-cyan-400 animate-ping'
+              )}
+            />
+            <span className="truncate">{scanHint}</span>
+          </div>
         </div>
+
+        {/* Focus / Zoom Controls if supported */}
         {(focusSupported || zoomRange) && (
-          <div className="flex items-center gap-3 rounded-lg border border-border bg-surface-raised px-3 py-2">
+          <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-raised px-2.5 py-1 text-xs">
             {focusSupported && (
               <button
                 type="button"
                 onClick={refocus}
                 disabled={isFocusing}
-                className="flex shrink-0 items-center gap-1.5 text-xs font-medium text-fg active:scale-95 disabled:opacity-50"
+                className="flex shrink-0 items-center gap-1 font-medium text-fg active:scale-95 disabled:opacity-50 cursor-pointer"
               >
-                <Focus className="h-4 w-4" />
-                {isFocusing ? 'Фокусирую…' : 'Фокус'}
+                <Focus className="h-3.5 w-3.5 text-accent" />
+                <span>{isFocusing ? 'Фокусирую…' : 'Фокус'}</span>
               </button>
             )}
             {zoomRange && (
-              <label className="flex min-w-0 flex-1 items-center gap-2 text-xs text-fg-muted">
-                <ZoomIn className="h-4 w-4 shrink-0" />
+              <label className="flex min-w-0 flex-1 items-center gap-1.5 text-fg-muted">
+                <ZoomIn className="h-3.5 w-3.5 shrink-0" />
                 <input
                   type="range"
                   min={zoomRange.min}
@@ -356,21 +441,20 @@ export const ScannerModal: React.FC = () => {
                   step={zoomRange.step}
                   value={zoomValue}
                   onChange={(event) => void changeZoom(Number(event.target.value))}
-                  className="min-w-0 flex-1 accent-accent"
+                  className="min-w-0 flex-1 accent-accent h-1 cursor-pointer"
                   aria-label="Масштаб камеры"
                 />
-                <span className="w-8 text-right tabular-nums">{zoomValue.toFixed(1)}×</span>
+                <span className="w-7 text-right tabular-nums text-[11px] font-mono">{zoomValue.toFixed(1)}×</span>
               </label>
             )}
           </div>
         )}
-        <p className="text-xs text-fg-subtle text-center" aria-live="polite">
-          {scanHint}
-        </p>
+
+        {/* Camera Error Message */}
         {cameraError && (
-          <div className="flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/30 p-2.5 rounded-lg">
+          <div className="flex items-center gap-2 text-xs text-danger bg-danger/10 border border-danger/30 p-2.5 rounded-xl">
             <AlertCircle className="w-4 h-4 shrink-0" />
-            <span>{cameraError}</span>
+            <span className="leading-tight">{cameraError}</span>
           </div>
         )}
 
@@ -382,21 +466,35 @@ export const ScannerModal: React.FC = () => {
               resolveScan(manualCode.trim());
             }
           }}
-          className="flex items-center gap-2 pt-2 border-t border-border"
+          className="flex items-center gap-2 pt-0.5"
         >
-          <input
-            type="text"
-            value={manualCode}
-            onChange={(e) => setManualCode(e.target.value)}
-            placeholder="Или введите IMEI / штрихкод вручную..."
-            className="flex-1 px-3 py-2 bg-surface-raised border border-border rounded-xl text-xs text-fg-muted placeholder-fg-subtle focus:outline-none focus:border-accent"
-          />
+          <div className="relative flex-1">
+            <Barcode className="w-4 h-4 text-fg-subtle absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={manualCode}
+              onChange={(e) => setManualCode(e.target.value)}
+              placeholder="Или введите IMEI вручную..."
+              className="w-full h-9 pl-8 pr-7 bg-surface-raised border border-border rounded-xl text-xs font-mono text-fg placeholder:font-sans placeholder:text-fg-subtle focus:outline-none focus:border-accent transition-colors"
+            />
+            {manualCode && (
+              <button
+                type="button"
+                onClick={() => setManualCode('')}
+                aria-label="Очистить ввод"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 active:scale-90 cursor-pointer"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
           <button
             type="submit"
             disabled={!manualCode.trim()}
-            className="px-3.5 py-2 bg-accent text-accent-fg font-bold text-xs rounded-xl hover:bg-accent-strong disabled:opacity-50 transition-colors shrink-0"
+            className="h-9 px-3.5 bg-accent hover:bg-accent-strong text-accent-fg font-bold text-xs rounded-xl disabled:opacity-40 transition-all shrink-0 shadow-xs active:scale-95 cursor-pointer flex items-center gap-1"
           >
-            Готово
+            <span>Ввести</span>
+            <ArrowRight className="w-3.5 h-3.5" />
           </button>
         </form>
       </div>

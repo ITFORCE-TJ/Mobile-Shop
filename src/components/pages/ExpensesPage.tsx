@@ -30,7 +30,8 @@ import {
   ArrowUpDown,
   RotateCcw,
   X,
-  User
+  User,
+  Search
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
 import { DateRangePicker } from '../ui/DateRangePicker';
@@ -513,367 +514,265 @@ export const ExpensesPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      <div className="border-b border-border bg-bg shrink-0">
-        <div className="p-2.5 sm:p-3 pb-2 sm:pb-2.5">
-          <div className="p-2.5 sm:p-3 rounded-xl bg-surface border border-border shadow-xs">
-            <div className="flex items-center justify-between gap-2.5">
-              <div className="flex items-center gap-2.5 min-w-0">
-                <div className="w-8 h-8 rounded-lg bg-danger/10 text-danger flex items-center justify-center shrink-0">
-                  <TrendingDown className="w-4 h-4" />
-                </div>
-                <div className="min-w-0">
-                  <div className="flex items-baseline gap-1.5 flex-wrap">
-                    <span className="text-base sm:text-lg font-black text-danger font-mono">
-                      -{formatMoney(totalExpensesTjs)} TJS
-                    </span>
-                    <span className="text-[11px] sm:text-xs text-fg-subtle font-mono">
-                      ≈ -${formatMoney(totalExpensesUsd)}
-                    </span>
-                  </div>
-                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-fg-subtle truncate">
-                    <span>{filteredExpenses.length} из {expenses.length} записей</span>
-                    {filteredExpenses.length > 0 && (
-                      <span className="hidden sm:inline">· ср. {formatMoney(totalExpensesTjs / filteredExpenses.length)} TJS</span>
-                    )}
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-1.5 shrink-0">
-                {hasActiveFilters && (
-                  <button
-                    type="button"
-                    onClick={handleResetFilters}
-                    className="h-8 px-2 sm:px-2.5 rounded-lg border border-border bg-surface-raised hover:bg-surface text-xs font-semibold text-fg-muted hover:text-fg transition-colors flex items-center gap-1 cursor-pointer"
-                    title="Сбросить фильтры"
-                  >
-                    <RotateCcw className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">Сбросить</span>
-                  </button>
-                )}
-                <Button
-                  variant="danger"
-                  leftIcon={Plus}
-                  onClick={() => setIsModalOpen(true)}
-                  className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold shrink-0"
-                >
-                  <span className="sm:hidden">Расход</span>
-                  <span className="hidden sm:inline">Добавить расход</span>
-                </Button>
-              </div>
+      <div className="border-b border-border bg-surface shrink-0 p-2 sm:p-2.5 space-y-2">
+        {/* Row 1: KPI Summary + Action Buttons */}
+        <div className="flex items-center justify-between gap-2 flex-wrap">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-lg bg-danger/10 text-danger flex items-center justify-center shrink-0">
+              <TrendingDown className="w-3.5 h-3.5" />
             </div>
+            <div className="flex items-baseline gap-1.5 flex-wrap min-w-0">
+              <span className="text-sm sm:text-base font-black text-danger font-mono tracking-tight">
+                -{formatMoney(totalExpensesTjs)} TJS
+              </span>
+              <span className="text-[11px] text-fg-subtle font-mono">
+                ≈ -${formatMoney(totalExpensesUsd)}
+              </span>
+              <span className="text-[10px] text-fg-subtle px-1.5 py-0.2 rounded-md bg-surface-raised border border-border/80">
+                {filteredExpenses.length} из {expenses.length}
+              </span>
+            </div>
+          </div>
 
-            {/* Unpaid Warning Notice (if any) */}
-            {unpaidTotalTjs > 0 && (
-              <div className="mt-2 pt-2 border-t border-border/60 flex items-center justify-between text-xs">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
-                  className="text-xs font-semibold text-warning hover:underline flex items-center gap-1.5 cursor-pointer"
-                  title="Нажмите для фильтрации"
-                >
-                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                  <span>Не оплачено: <strong>{formatMoney(unpaidTotalTjs)} TJS</strong> ({unpaidCount} шт.)</span>
-                  <span className="text-[10px] opacity-75">
-                    {statusFilter === 'UNPAID' ? '✕ сбросить' : '→ показать'}
-                  </span>
-                </button>
-              </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            {hasActiveFilters && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="h-7.5 px-2 rounded-lg border border-border bg-surface-raised hover:bg-surface text-[11px] font-semibold text-fg-muted hover:text-fg transition-colors flex items-center gap-1 cursor-pointer"
+                title="Сбросить все фильтры"
+              >
+                <RotateCcw className="w-3 h-3" />
+                <span className="hidden sm:inline">Сбросить</span>
+              </button>
             )}
+            <Button
+              variant="danger"
+              leftIcon={Plus}
+              onClick={() => setIsModalOpen(true)}
+              className="!h-7.5 !px-2.5 text-xs font-bold shrink-0 shadow-xs"
+            >
+              <span className="sm:hidden">Расход</span>
+              <span className="hidden sm:inline">Добавить расход</span>
+            </Button>
           </div>
         </div>
 
-        {/* Search, Status, and Filter toggle bar */}
-        <div className="px-2.5 sm:px-3 pb-2.5 sm:pb-3 space-y-2">
-          {/* Row A: SearchBar (full width on mobile, flex-1 on desktop) */}
-          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
-            <SearchBar
-              value={searchQuery}
-              onChange={setSearchQuery}
-              placeholder="Поиск по расходам, категории, автору..."
-              className="w-full sm:flex-1"
-            />
-
-            {/* Desktop: Status pills + Filter button alongside SearchBar */}
-            <div className="hidden sm:flex items-center gap-2 shrink-0">
-              <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('ALL')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                    statusFilter === 'ALL'
-                      ? 'bg-surface text-fg shadow-xs border border-border/80'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  Все
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('UNPAID')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
-                    statusFilter === 'UNPAID'
-                      ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
-                      : 'text-fg-subtle hover:text-warning'
-                  }`}
-                >
-                  <span>Не оплачено</span>
-                  {totalUnpaidInScope > 0 && (
-                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                      statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
-                    }`}>
-                      {totalUnpaidInScope}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('PAID')}
-                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
-                    statusFilter === 'PAID'
-                      ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  Оплачено
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(v => !v)}
-                className={`relative h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
-                  filtersOpen || hasActiveFilters
-                    ? 'border-accent bg-accent/10 text-accent shadow-xs'
-                    : 'border-border bg-surface text-fg-muted hover:border-accent/40'
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Фильтры</span>
-                {hasActiveFilters && (
-                  <span className="w-4 h-4 rounded-full bg-accent text-accent-fg font-bold text-[9px] flex items-center justify-center">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
-            </div>
-
-            {/* Mobile: Status pills on left + Filter button on right in ONE compact line */}
-            <div className="flex sm:hidden items-center justify-between gap-1.5">
-              <div className="flex items-center gap-0.5 bg-surface-raised p-0.5 rounded-xl border border-border text-xs shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('ALL')}
-                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-all cursor-pointer ${
-                    statusFilter === 'ALL'
-                      ? 'bg-surface text-fg shadow-xs border border-border/80'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  Все
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('UNPAID')}
-                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
-                    statusFilter === 'UNPAID'
-                      ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
-                      : 'text-fg-subtle hover:text-warning'
-                  }`}
-                >
-                  <span>Не оплачено</span>
-                  {totalUnpaidInScope > 0 && (
-                    <span className={`px-1 py-0.2 rounded-full text-[9px] font-bold ${
-                      statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
-                    }`}>
-                      {totalUnpaidInScope}
-                    </span>
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setStatusFilter('PAID')}
-                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-all cursor-pointer ${
-                    statusFilter === 'PAID'
-                      ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  Оплачено
-                </button>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setFiltersOpen(v => !v)}
-                className={`relative h-8 px-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
-                  filtersOpen || hasActiveFilters
-                    ? 'border-accent bg-accent/10 text-accent shadow-xs'
-                    : 'border-border bg-surface text-fg-muted hover:border-accent/40'
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Фильтры</span>
-                {hasActiveFilters && (
-                  <span className="w-4 h-4 rounded-full bg-accent text-accent-fg font-bold text-[9px] flex items-center justify-center">
-                    {activeFiltersCount}
-                  </span>
-                )}
-              </button>
-            </div>
-          </div>
-
-          {/* Quick Date Bar: Сегодня + Календарь (текущий месяц по умолчанию) */}
-          <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none py-0.5">
-            {/* Сегодня */}
+        {/* Unpaid Warning Notice (if any) */}
+        {unpaidTotalTjs > 0 && (
+          <div className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-warning/10 border border-warning/25 text-warning text-xs">
             <button
               type="button"
-              onClick={() => {
-                setSelectedStartDate(todayStr);
-                setSelectedEndDate(todayStr);
-                setSelectedMonth('');
-                setPeriodFilter('TODAY');
-              }}
-              className={cn(
-                'h-9 px-3 rounded-xl border text-xs font-semibold shrink-0 transition-all select-none shadow-xs cursor-pointer',
-                periodFilter === 'TODAY'
-                  ? 'border-accent/50 bg-accent/10 text-accent font-bold hover:bg-accent/15'
-                  : 'border-border/80 bg-surface text-fg-muted hover:text-fg hover:border-accent/40'
-              )}
+              onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
+              className="font-semibold hover:underline flex items-center gap-1.5 cursor-pointer text-left min-w-0 text-[11px]"
             >
-              Сегодня
+              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">Не оплачено: <strong>{formatMoney(unpaidTotalTjs)} TJS</strong> ({unpaidCount} шт.)</span>
             </button>
+            <span className="text-[10px] opacity-80 shrink-0 font-medium ml-2">
+              {statusFilter === 'UNPAID' ? '✕ сбросить' : '→ показать'}
+            </span>
+          </div>
+        )}
 
-            {/* Календарь: текущий месяц по умолчанию + выбор дня или диапазона */}
-            <DateRangePicker
-              startDate={periodFilter === 'CUSTOM' ? selectedStartDate : ''}
-              endDate={periodFilter === 'CUSTOM' ? selectedEndDate : ''}
-              selectedMonth={periodFilter === 'MONTH' ? selectedMonth : undefined}
-              currentMonthStr={thisMonthStr}
-              isToday={periodFilter === 'TODAY'}
-              isAllTime={periodFilter === 'ALL'}
-              onSelectAllTime={() => {
-                setSelectedMonth('');
-                setPeriodFilter('ALL');
-              }}
-              isActive={periodFilter === 'MONTH' || periodFilter === 'CUSTOM' || periodFilter === 'ALL'}
-              onChange={(start, end, monthStr) => {
-                if (monthStr) {
-                  setSelectedMonth(monthStr);
-                  setSelectedStartDate(start);
-                  setSelectedEndDate(end);
-                  setPeriodFilter('MONTH');
-                } else if (start === todayStr && end === todayStr) {
-                  setSelectedMonth('');
-                  setSelectedStartDate(start);
-                  setSelectedEndDate(end);
-                  setPeriodFilter('TODAY');
-                } else {
-                  setSelectedMonth('');
-                  setSelectedStartDate(start);
-                  setSelectedEndDate(end);
-                  setPeriodFilter('CUSTOM');
-                }
-              }}
-              onResetMonth={resetToCurrentMonth}
-              className="shrink-0"
+        {/* Row 2: Search + Quick Dates + Filter Toggle in one unified row */}
+        <div className="flex items-center gap-1.5">
+          {/* SearchBar Input */}
+          <div className="relative flex-1 min-w-[120px]">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle pointer-events-none" />
+            <input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder="Поиск по расходам..."
+              className="w-full h-8 rounded-lg bg-surface-raised border border-border pl-8 pr-7 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent [&::-webkit-search-cancel-button]:hidden"
             />
+            {searchQuery && (
+              <button
+                type="button"
+                onClick={() => setSearchQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
+              >
+                <X className="w-3 h-3" />
+              </button>
+            )}
           </div>
 
-          {/* Active Filter Chips Bar (one-click removable tags) */}
+          {/* Quick Date: Сегодня */}
+          <button
+            type="button"
+            onClick={() => {
+              setSelectedStartDate(todayStr);
+              setSelectedEndDate(todayStr);
+              setSelectedMonth('');
+              setPeriodFilter('TODAY');
+            }}
+            className={cn(
+              'h-8 px-2.5 rounded-lg border text-xs font-semibold shrink-0 transition-all select-none cursor-pointer',
+              periodFilter === 'TODAY'
+                ? 'border-accent/50 bg-accent/10 text-accent font-bold'
+                : 'border-border/80 bg-surface-raised text-fg-muted hover:text-fg'
+            )}
+          >
+            Сегодня
+          </button>
+
+          {/* Calendar Month Picker */}
+          <DateRangePicker
+            startDate={periodFilter === 'CUSTOM' ? selectedStartDate : ''}
+            endDate={periodFilter === 'CUSTOM' ? selectedEndDate : ''}
+            selectedMonth={periodFilter === 'MONTH' ? selectedMonth : undefined}
+            currentMonthStr={thisMonthStr}
+            isToday={periodFilter === 'TODAY'}
+            isAllTime={periodFilter === 'ALL'}
+            onSelectAllTime={() => {
+              setSelectedMonth('');
+              setPeriodFilter('ALL');
+            }}
+            isActive={periodFilter === 'MONTH' || periodFilter === 'CUSTOM' || periodFilter === 'ALL'}
+            onChange={(start, end, monthStr) => {
+              if (monthStr) {
+                setSelectedMonth(monthStr);
+                setSelectedStartDate(start);
+                setSelectedEndDate(end);
+                setPeriodFilter('MONTH');
+              } else if (start === todayStr && end === todayStr) {
+                setSelectedMonth('');
+                setSelectedStartDate(start);
+                setSelectedEndDate(end);
+                setPeriodFilter('TODAY');
+              } else {
+                setSelectedMonth('');
+                setSelectedStartDate(start);
+                setSelectedEndDate(end);
+                setPeriodFilter('CUSTOM');
+              }
+            }}
+            onResetMonth={resetToCurrentMonth}
+            className="shrink-0 [&_button]:!h-8 [&_button]:!px-2.5 [&_button]:!rounded-lg"
+          />
+
+          {/* Advanced Filter Toggle Button */}
+          <button
+            type="button"
+            onClick={() => setFiltersOpen(v => !v)}
+            className={`relative h-8 px-2.5 rounded-lg border text-xs font-semibold flex items-center gap-1 shrink-0 transition-all cursor-pointer ${
+              filtersOpen || hasActiveFilters
+                ? 'border-accent bg-accent/10 text-accent shadow-2xs'
+                : 'border-border/80 bg-surface-raised text-fg-muted hover:border-accent/40'
+            }`}
+            title="Дополнительные фильтры"
+          >
+            <SlidersHorizontal className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Фильтры</span>
+            {hasActiveFilters && (
+              <span className="w-4 h-4 rounded-full bg-accent text-accent-fg font-bold text-[9px] flex items-center justify-center">
+                {activeFiltersCount}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Row 3: Status pills + Active filter chips inline */}
+        <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar py-0.5 text-xs">
+          {/* Status pills */}
+          <div className="flex items-center gap-0.5 bg-surface-raised p-0.5 rounded-lg border border-border/80 text-xs shrink-0">
+            <button
+              type="button"
+              onClick={() => setStatusFilter('ALL')}
+              className={`px-2 py-0.8 rounded-md font-semibold text-[11px] transition-all cursor-pointer ${
+                statusFilter === 'ALL'
+                  ? 'bg-surface text-fg shadow-xs border border-border/80'
+                  : 'text-fg-subtle hover:text-fg'
+              }`}
+            >
+              Все
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('UNPAID')}
+              className={`px-2 py-0.8 rounded-md font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
+                statusFilter === 'UNPAID'
+                  ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
+                  : 'text-fg-subtle hover:text-warning'
+              }`}
+            >
+              <span>Не оплачено</span>
+              {totalUnpaidInScope > 0 && (
+                <span className={`px-1 py-0.1 rounded-full text-[9px] font-bold ${
+                  statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
+                }`}>
+                  {totalUnpaidInScope}
+                </span>
+              )}
+            </button>
+            <button
+              type="button"
+              onClick={() => setStatusFilter('PAID')}
+              className={`px-2 py-0.8 rounded-md font-semibold text-[11px] transition-all cursor-pointer ${
+                statusFilter === 'PAID'
+                  ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
+                  : 'text-fg-subtle hover:text-fg'
+              }`}
+            >
+              Оплачено
+            </button>
+          </div>
+
+          {/* Active filter chips inline */}
           {hasActiveFilters && (
-            <div className="flex flex-wrap items-center gap-1.5 pt-1 text-xs">
-              <span className="text-[11px] text-fg-subtle font-medium">Активно:</span>
-              {isPeriodCustomized && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
-                  <Calendar className="w-3 h-3 text-accent" />
-                  <span>
-                    {periodFilter === 'TODAY'
-                      ? 'Сегодня'
-                      : periodFilter === 'ALL'
-                      ? 'Всё время'
-                      : periodFilter === 'MONTH' && selectedMonth
-                      ? `Месяц: ${selectedMonth}`
-                      : selectedStartDate === selectedEndDate || !selectedEndDate
-                      ? `Дата: ${selectedStartDate}`
-                      : `${selectedStartDate} — ${selectedEndDate}`}
-                  </span>
-                  <button
-                    onClick={resetToCurrentMonth}
-                    className="hover:text-danger ml-0.5"
-                    title="Сбросить на текущий месяц"
-                  >
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {statusFilter !== 'ALL' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
-                  <span>Статус: {statusFilter === 'UNPAID' ? 'Не оплачено' : 'Оплачено'}</span>
-                  <button onClick={() => setStatusFilter('ALL')} className="hover:text-danger ml-0.5">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
+            <div className="flex items-center gap-1 shrink-0">
               {isAdmin && selectedStoreFilter !== 'ALL' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-raised border border-border text-fg-muted shrink-0">
                   <StoreIcon className="w-3 h-3 text-accent" />
                   <span>{formatStoreName(stores.find(s => s.id === selectedStoreFilter)?.name) || selectedStoreFilter}</span>
-                  <button onClick={() => setSelectedStoreFilter('ALL')} className="hover:text-danger ml-0.5">
+                  <button onClick={() => setSelectedStoreFilter('ALL')} className="hover:text-danger ml-0.5 cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
               {selectedCategoryTab !== 'ALL' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-raised border border-border text-fg-muted shrink-0">
                   <Tag className="w-3 h-3 text-accent" />
                   <span>{getCategoryLabel(selectedCategoryTab, customCategories)}</span>
-                  <button onClick={() => setSelectedCategoryTab('ALL')} className="hover:text-danger ml-0.5">
+                  <button onClick={() => setSelectedCategoryTab('ALL')} className="hover:text-danger ml-0.5 cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
               {selectedEmployeeFilter !== 'ALL' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-raised border border-border text-fg-muted shrink-0">
                   <User className="w-3 h-3 text-accent" />
                   <span>
                     {selectedEmployeeFilter === 'ANY_EMPLOYEE'
                       ? 'Все сотрудники'
                       : users.find(u => u.id === selectedEmployeeFilter)?.name || selectedEmployeeFilter}
                   </span>
-                  <button onClick={() => setSelectedEmployeeFilter('ALL')} className="hover:text-danger ml-0.5">
+                  <button onClick={() => setSelectedEmployeeFilter('ALL')} className="hover:text-danger ml-0.5 cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
               {sortBy !== 'DATE_DESC' && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
+                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-medium bg-surface-raised border border-border text-fg-muted shrink-0">
                   <ArrowUpDown className="w-3 h-3 text-accent" />
                   <span>
                     {sortBy === 'DATE_ASC'
-                      ? 'Сначала старые'
+                      ? 'Старые'
                       : sortBy === 'AMOUNT_DESC'
-                      ? 'Сумма: макс'
-                      : 'Сумма: мин'}
+                      ? 'Макс. сумма'
+                      : 'Мин. сумма'}
                   </span>
-                  <button onClick={() => setSortBy('DATE_DESC')} className="hover:text-danger ml-0.5">
-                    <X className="w-3 h-3" />
-                  </button>
-                </span>
-              )}
-              {searchQuery.trim() && (
-                <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-medium bg-surface border border-border text-fg-muted shadow-2xs">
-                  <span>Поиск: «{searchQuery}»</span>
-                  <button onClick={() => setSearchQuery('')} className="hover:text-danger ml-0.5">
+                  <button onClick={() => setSortBy('DATE_DESC')} className="hover:text-danger ml-0.5 cursor-pointer">
                     <X className="w-3 h-3" />
                   </button>
                 </span>
               )}
               <button
                 onClick={handleResetFilters}
-                className="text-[11px] text-accent hover:underline font-bold ml-1"
+                className="text-[11px] text-accent hover:underline font-bold px-1 shrink-0 cursor-pointer"
               >
-                Сбросить все
+                Сбросить
               </button>
             </div>
           )}
@@ -881,8 +780,8 @@ export const ExpensesPage: React.FC = () => {
 
         {/* Collapsible Advanced Filters Panel */}
         {filtersOpen && (
-          <div className="px-3 pb-3 border-t border-border pt-3 bg-surface-raised/40">
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 text-xs">
+          <div className="pt-2.5 border-t border-border mt-1">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 text-xs">
               {/* Store Filter */}
               {isAdmin && storeCtx.mode === 'CENTRAL' && (
                 <div>
@@ -890,7 +789,7 @@ export const ExpensesPage: React.FC = () => {
                   <Select
                     value={selectedStoreFilter}
                     onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                    className="w-full h-9 px-3 text-xs font-semibold"
+                    className="w-full !h-8 px-2.5 text-xs font-semibold"
                   >
                     <option value="ALL">Все филиалы и склады</option>
                     {stores.map(s => (
@@ -910,7 +809,7 @@ export const ExpensesPage: React.FC = () => {
                     <button
                       type="button"
                       onClick={() => setIsAddCategoryModalOpen(true)}
-                      className="text-[10px] text-accent hover:underline font-bold flex items-center gap-0.5"
+                      className="text-[10px] text-accent hover:underline font-bold flex items-center gap-0.5 cursor-pointer"
                     >
                       <Plus className="w-3 h-3" />
                       <span>Новая</span>
@@ -920,7 +819,7 @@ export const ExpensesPage: React.FC = () => {
                 <Select
                   value={selectedCategoryTab}
                   onChange={(e) => setSelectedCategoryTab(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-semibold"
+                  className="w-full !h-8 px-2.5 text-xs font-semibold"
                 >
                   <option value="ALL">Все категории ({expenses.length})</option>
                   {allCategoryOptions.map(c => {
@@ -940,7 +839,7 @@ export const ExpensesPage: React.FC = () => {
                 <Select
                   value={selectedEmployeeFilter}
                   onChange={(e) => setSelectedEmployeeFilter(e.target.value)}
-                  className="w-full h-9 px-3 text-xs font-semibold"
+                  className="w-full !h-8 px-2.5 text-xs font-semibold"
                 >
                   <option value="ALL">Все расходы</option>
                   <option value="ANY_EMPLOYEE">Только сотрудники (авансы/ЗП)</option>
@@ -958,7 +857,7 @@ export const ExpensesPage: React.FC = () => {
                 <Select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as typeof sortBy)}
-                  className="w-full h-9 px-3 text-xs font-semibold"
+                  className="w-full !h-8 px-2.5 text-xs font-semibold"
                 >
                   <option value="DATE_DESC">Сначала новые (по дате)</option>
                   <option value="DATE_ASC">Сначала старые (по дате)</option>
@@ -968,7 +867,7 @@ export const ExpensesPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex items-center justify-between pt-2.5 mt-2 border-t border-border/60">
+            <div className="flex items-center justify-between pt-2 mt-2 border-t border-border/60">
               <span className="text-[11px] text-fg-subtle">
                 Найдено <strong className="text-fg">{filteredExpenses.length}</strong> из {expenses.length} расходов
               </span>
@@ -977,16 +876,16 @@ export const ExpensesPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={handleResetFilters}
-                    className="text-xs text-danger hover:underline font-semibold flex items-center gap-1"
+                    className="text-xs text-danger hover:underline font-semibold flex items-center gap-1 cursor-pointer"
                   >
                     <RotateCcw className="w-3.5 h-3.5" />
-                    <span>Сбросить фильтры</span>
+                    <span>Сбросить</span>
                   </button>
                 )}
                 <button
                   type="button"
                   onClick={() => setFiltersOpen(false)}
-                  className="px-3 py-1 rounded-lg bg-surface border border-border text-xs font-semibold text-fg-muted hover:text-fg"
+                  className="px-2.5 py-0.5 rounded-lg bg-surface-raised border border-border text-xs font-semibold text-fg-muted hover:text-fg cursor-pointer"
                 >
                   Свернуть
                 </button>
@@ -996,70 +895,139 @@ export const ExpensesPage: React.FC = () => {
         )}
       </div>
 
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 max-w-4xl mx-auto w-full">
         {isInitialLoading ? (
           <LoadingState label="Загрузка расходов…" />
         ) : filteredExpenses.length === 0 ? (
-          <EmptyState icon={Receipt} title="Операционные расходы не найдены" />
+          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[220px]">
+            <div className="w-12 h-12 rounded-2xl bg-danger/10 border border-danger/20 flex items-center justify-center text-danger mb-3 shadow-xs">
+              <Receipt className="w-6 h-6" />
+            </div>
+            <h3 className="text-sm font-bold text-fg">Расходов не найдено</h3>
+            <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+              {searchQuery
+                ? `По запросу «${searchQuery}» ничего не найдено.`
+                : 'За выбранный период или фильтры расходы отсутствуют.'}
+            </p>
+            <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+              {hasActiveFilters && (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="!h-8 !px-3 text-xs"
+                  onClick={handleResetFilters}
+                >
+                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                  Сбросить фильтры
+                </Button>
+              )}
+              <Button
+                variant="danger"
+                size="md"
+                className="!h-8 !px-3 text-xs"
+                onClick={() => setIsModalOpen(true)}
+              >
+                <Plus className="w-3.5 h-3.5 mr-1" />
+                Добавить расход
+              </Button>
+            </div>
+          </div>
         ) : (
-          <div className="divide-y divide-border">
-            {filteredExpenses.map((exp) => {
-              const Icon = getCategoryIcon(exp.category);
-              const label = getCategoryLabel(exp.category, customCategories);
-              const formattedDate = exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—';
-              const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
+          <div className="space-y-2">
+            <div className="rounded-xl border border-border bg-surface divide-y divide-border/80 shadow-2xs overflow-hidden">
+              {filteredExpenses.map((exp) => {
+                const Icon = getCategoryIcon(exp.category);
+                const label = getCategoryLabel(exp.category, customCategories);
+                const formattedDate = exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—';
+                const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
+                const storeCleanName = formatStoreName(exp.storeName);
 
-              return (
-                <div key={exp.id} className="p-3 sm:p-3.5 flex items-start gap-2.5 sm:gap-3 hover:bg-surface-raised/40 transition-colors">
-                  <div className="p-2 rounded-xl bg-surface-raised border border-border/60 text-fg-subtle shrink-0">
-                    <Icon className="w-4 h-4" />
-                  </div>
+                return (
+                  <div key={exp.id} className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 hover:bg-surface-raised/40 transition-colors">
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border/80 text-fg-subtle flex items-center justify-center shrink-0">
+                        <Icon className="w-4 h-4" />
+                      </div>
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs sm:text-sm font-bold text-fg truncate">{label}</span>
-                      {exp.status === 'UNPAID'
-                        ? <Badge tone="warning">Не оплачено</Badge>
-                        : <Badge tone="success">Оплачено</Badge>}
-                      {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && (
-                        <Badge tone="neutral">{exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}</Badge>
-                      )}
-                      {exp.employeeName && <Badge tone="accent">{exp.employeeName}</Badge>}
-                    </div>
-                    <p className="text-xs sm:text-sm text-fg-muted mt-0.5 line-clamp-1">{exp.comment || exp.description || 'Операционный расход'}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs text-fg-subtle mt-1">
-                      {!isStoreScoped && (
-                        <>
-                          <StoreIcon className="w-3 h-3 text-fg-subtle/70" />
-                          <span>{exp.storeName || 'Магазин'}</span>
-                          <span>·</span>
-                        </>
-                      )}
-                      <Calendar className="w-3 h-3 text-fg-subtle/70" />
-                      <span>{formattedDate}</span>
-                      <span>·</span>
-                      <span>{exp.createdByName || 'Администратор'}</span>
-                    </div>
-                  </div>
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs sm:text-sm font-bold text-fg truncate">{label}</span>
+                          {exp.status === 'UNPAID' ? (
+                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-warning/15 text-warning border border-warning/30">
+                              Не оплачено
+                            </span>
+                          ) : (
+                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-accent/15 text-accent border border-accent/25">
+                              Оплачено
+                            </span>
+                          )}
+                          {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && (
+                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-medium bg-surface-raised text-fg-muted border border-border/80">
+                              {exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}
+                            </span>
+                          )}
+                          {exp.employeeName && (
+                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-accent/10 text-accent border border-accent/20">
+                              {exp.employeeName}
+                            </span>
+                          )}
+                        </div>
 
-                  <div className="text-right shrink-0">
-                    <p className="text-sm sm:text-base font-black text-danger font-mono">-{formatMoney(exp.amountTjs)} TJS</p>
-                    <p className="text-[10px] sm:text-xs text-fg-subtle font-mono">≈ -${formatMoney(costUsd)}</p>
-                    <div className="flex items-center gap-1 mt-1 justify-end">
-                      {isAdmin && exp.status === 'UNPAID' && (
-                        <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
-                      )}
-                      {(isAdmin || isPartner) && (
-                        <ActionMenu label="Действия с расходом" actions={[
-                          { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
-                          { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
-                        ]} />
-                      )}
+                        <p className="text-[11px] sm:text-xs text-fg-muted mt-0.5 line-clamp-1">
+                          {exp.comment || exp.description || 'Операционный расход'}
+                        </p>
+
+                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-fg-subtle mt-0.5">
+                          {!isStoreScoped && storeCleanName && (
+                            <>
+                              <StoreIcon className="w-2.5 h-2.5 opacity-70" />
+                              <span>{storeCleanName}</span>
+                              <span>•</span>
+                            </>
+                          )}
+                          <Calendar className="w-2.5 h-2.5 opacity-70" />
+                          <span>{formattedDate}</span>
+                          {exp.createdByName && (
+                            <>
+                              <span>•</span>
+                              <span>{exp.createdByName}</span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        <p className="text-xs sm:text-sm font-black text-danger font-mono tracking-tight">
+                          -{formatMoney(exp.amountTjs)} TJS
+                        </p>
+                        <p className="text-[10px] text-fg-subtle font-mono">
+                          ≈ -${formatMoney(costUsd)}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center gap-0.5">
+                        {isAdmin && exp.status === 'UNPAID' && (
+                          <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
+                        )}
+                        {(isAdmin || isPartner) && (
+                          <ActionMenu label="Действия с расходом" actions={[
+                            { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                            { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                          ]} />
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })}
+                );
+              })}
+            </div>
+            {filteredExpenses.length > 0 && (
+              <p className="text-center text-[10px] text-fg-subtle pt-1 pb-1">
+                Показано {filteredExpenses.length} из {expenses.length} записей
+              </p>
+            )}
           </div>
         )}
       </div>

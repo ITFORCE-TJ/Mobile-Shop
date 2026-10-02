@@ -43,6 +43,26 @@ interface NavGroup {
   }[];
 }
 
+const ITEM_STYLES: Record<string, { bg: string; text: string }> = {
+  SALE: { bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400' },
+  SALES_HISTORY: { bg: 'bg-amber-500/10 dark:bg-amber-500/20', text: 'text-amber-600 dark:text-amber-400' },
+  EXCHANGE: { bg: 'bg-violet-500/10 dark:bg-violet-500/20', text: 'text-violet-600 dark:text-violet-400' },
+  REPAIR: { bg: 'bg-orange-500/10 dark:bg-orange-500/20', text: 'text-orange-600 dark:text-orange-400' },
+  INVENTORY: { bg: 'bg-blue-500/10 dark:bg-blue-500/20', text: 'text-blue-600 dark:text-blue-400' },
+  RECEIPTS: { bg: 'bg-teal-500/10 dark:bg-teal-500/20', text: 'text-teal-600 dark:text-teal-400' },
+  TRANSFER: { bg: 'bg-sky-500/10 dark:bg-sky-500/20', text: 'text-sky-600 dark:text-sky-400' },
+  PURCHASE: { bg: 'bg-cyan-500/10 dark:bg-cyan-500/20', text: 'text-cyan-600 dark:text-cyan-400' },
+  EXPENSES: { bg: 'bg-rose-500/10 dark:bg-rose-500/20', text: 'text-rose-600 dark:text-rose-400' },
+  FINANCE: { bg: 'bg-emerald-500/10 dark:bg-emerald-500/20', text: 'text-emerald-600 dark:text-emerald-400' },
+  BONUSES: { bg: 'bg-fuchsia-500/10 dark:bg-fuchsia-500/20', text: 'text-fuchsia-600 dark:text-fuchsia-400' },
+  OWNERS: { bg: 'bg-indigo-500/10 dark:bg-indigo-500/20', text: 'text-indigo-600 dark:text-indigo-400' },
+  SUPPLIERS: { bg: 'bg-sky-500/10 dark:bg-sky-500/20', text: 'text-sky-600 dark:text-sky-400' },
+  EMPLOYEES: { bg: 'bg-blue-500/10 dark:bg-blue-500/20', text: 'text-blue-600 dark:text-blue-400' },
+  AUDIT_LOG: { bg: 'bg-slate-500/10 dark:bg-slate-500/20', text: 'text-slate-600 dark:text-slate-400' },
+  NOTIFICATIONS: { bg: 'bg-amber-500/10 dark:bg-amber-500/20', text: 'text-amber-600 dark:text-amber-400' },
+  SETTINGS: { bg: 'bg-zinc-500/10 dark:bg-zinc-500/20', text: 'text-zinc-600 dark:text-zinc-400' },
+};
+
 export const Drawer: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
@@ -231,25 +251,43 @@ export const Drawer: React.FC = () => {
 
       <div className="app-safe-area fixed inset-0 z-50 flex md:hidden flex-col bg-bg text-fg-muted w-full h-full overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200">
         {/* Header */}
-        <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shrink-0">
-              {cleanDisplayName.substring(0, 2).toUpperCase()}
+        <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0 shadow-2xs">
+          <div className="flex items-center gap-3 min-w-0">
+            <div className="relative shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-accent/15 border border-accent/30 text-accent font-bold text-xs flex items-center justify-center shadow-xs">
+                {cleanDisplayName.substring(0, 2).toUpperCase()}
+              </div>
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full bg-emerald-500 border-2 border-surface" />
             </div>
             <div className="min-w-0">
-              <h2 className="text-sm font-bold text-fg truncate">
-                {cleanDisplayName}
-              </h2>
+              <div className="flex items-center gap-1.5">
+                <h2 className="text-sm font-bold text-fg truncate leading-tight">
+                  {cleanDisplayName}
+                </h2>
+                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-surface-raised border border-border text-fg-subtle shrink-0">
+                  {isAdmin ? 'Админ' : isPartner ? 'Партнер' : 'Продавец'}
+                </span>
+              </div>
               {isStoreScoped ? (
                 userStoreName ? (
-                  <p className="text-[11px] font-medium text-fg-subtle truncate flex items-center gap-1">
+                  <p className="text-[11px] font-medium text-fg-subtle truncate flex items-center gap-1 mt-0.5">
                     <Store className="w-3 h-3 text-accent shrink-0" />
                     <span>{userStoreName}</span>
                   </p>
                 ) : null
               ) : (
-                <p className="text-[11px] font-medium text-accent truncate">
-                  {isCentralCashMode ? 'Центральная касса' : (activeRetailStore?.name || 'Магазин')}
+                <p className="text-[11px] font-medium text-accent truncate flex items-center gap-1 mt-0.5">
+                  {isCentralCashMode ? (
+                    <>
+                      <Landmark className="w-3 h-3 shrink-0" />
+                      <span>Центральная касса</span>
+                    </>
+                  ) : (
+                    <>
+                      <Store className="w-3 h-3 shrink-0" />
+                      <span>{activeRetailStore?.name || 'Магазин'}</span>
+                    </>
+                  )}
                 </p>
               )}
             </div>
@@ -258,17 +296,16 @@ export const Drawer: React.FC = () => {
           <button
             type="button"
             onClick={() => setDrawerOpen(false)}
-            aria-label="Свернуть меню"
-            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg-muted hover:text-fg transition-all active:scale-95 cursor-pointer shadow-2xs"
+            aria-label="Закрыть меню"
+            className="w-8.5 h-8.5 rounded-full flex items-center justify-center bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg transition-all active:scale-90 cursor-pointer shadow-xs"
           >
             <X className="w-4 h-4" />
-            <span>Свернуть</span>
           </button>
         </div>
 
         {/* Mode Switcher Banner for Admin only */}
         {isAdmin && (
-          <div className="p-3 border-b border-border bg-surface-raised/40 shrink-0">
+          <div className="p-3 border-b border-border/80 bg-surface-raised/30 shrink-0">
             {isCentralCashMode ? (
               <div
                 onClick={() => {
@@ -282,19 +319,23 @@ export const Drawer: React.FC = () => {
                   setActivePage('FINANCE');
                   navigate('/finance');
                 }}
-                className="p-3 rounded-xl bg-accent/5 hover:bg-accent/10 border border-accent/25 space-y-1.5 cursor-pointer transition-colors"
+                className="p-3 rounded-xl bg-surface border border-accent/25 hover:border-accent/40 space-y-2 cursor-pointer transition-colors shadow-xs"
                 title="Перейти в Центральную кассу (Финансы)"
               >
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-accent flex items-center gap-1">
-                    <Landmark className="w-3.5 h-3.5" />
-                    Центральная касса
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-accent animate-pulse" />
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                      <Landmark className="w-3.5 h-3.5" />
+                    </div>
+                    <div>
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-accent">Центральная касса</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-accent animate-pulse" />
+                      </div>
+                      <p className="text-[11px] text-fg-subtle">Главный офис и финансовый учёт</p>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xs text-fg-subtle">
-                  Режим главного офиса и финансового учёта
-                </p>
                 <button
                   type="button"
                   onClick={(e) => {
@@ -302,35 +343,44 @@ export const Drawer: React.FC = () => {
                     setDrawerOpen(false);
                     setStoreSwitchModalOpen(true);
                   }}
-                  className="w-full mt-1 px-3 py-2 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg flex items-center justify-center gap-1.5 transition-all shadow-xs"
+                  className="w-full h-8 px-2.5 rounded-lg bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg flex items-center justify-between transition-all shadow-xs active:scale-[0.98] cursor-pointer"
                 >
-                  <Store className="w-3.5 h-3.5" />
-                  <span>Выбрать магазин для продаж</span>
-                  <ArrowRight className="w-3.5 h-3.5 ml-auto opacity-70" />
+                  <span className="flex items-center gap-1.5">
+                    <Store className="w-3.5 h-3.5 text-accent" />
+                    <span>Выбрать магазин для продаж</span>
+                  </span>
+                  <ArrowRight className="w-3.5 h-3.5 opacity-60" />
                 </button>
               </div>
             ) : (
-              <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5">
+              <div className="p-3 rounded-xl bg-surface border border-border shadow-xs space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold uppercase tracking-wider text-warning flex items-center gap-1">
-                    <Store className="w-3.5 h-3.5" />
-                    Режим продаж
-                  </span>
-                  <span className="w-2 h-2 rounded-full bg-warning animate-pulse" />
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                      <Store className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600 dark:text-amber-400">Режим продаж</span>
+                        <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                      </div>
+                      <p className="text-xs font-bold text-fg truncate leading-tight">
+                        {activeRetailStore?.name || 'Магазин'}
+                      </p>
+                    </div>
+                  </div>
                 </div>
-                <p className="text-xs font-bold text-fg truncate">
-                  {activeRetailStore?.name || 'Магазин'}
-                </p>
-                <div className="grid grid-cols-2 gap-2 pt-0.5">
+
+                <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
                     onClick={() => {
                       setDrawerOpen(false);
                       setStoreSwitchModalOpen(true);
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg flex items-center justify-center gap-1 transition-all"
+                    className="h-8.5 px-2.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-xs font-medium text-fg flex items-center justify-center gap-1.5 transition-all active:scale-95 cursor-pointer shadow-2xs"
                   >
-                    <Store className="w-3 h-3 text-fg-subtle" />
+                    <Store className="w-3.5 h-3.5 text-fg-subtle" />
                     <span>Сменить</span>
                   </button>
                   <button
@@ -346,10 +396,9 @@ export const Drawer: React.FC = () => {
                       setActivePage('FINANCE');
                       navigate('/finance');
                     }}
-                    className="px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center justify-center gap-1 transition-all shadow-xs cursor-pointer active:scale-95"
-                    title="Автоматически перейти в Центральную кассу"
+                    className="h-8.5 px-2.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-semibold flex items-center justify-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer"
                   >
-                    <Landmark className="w-3 h-3" />
+                    <Landmark className="w-3.5 h-3.5" />
                     <span>В Центр</span>
                   </button>
                 </div>
@@ -359,7 +408,7 @@ export const Drawer: React.FC = () => {
         )}
 
         {/* Vertical List of Menu Items with Collapsible/Expandable Sections */}
-        <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-3 space-y-3">
           {navGroups.map((group, gIdx) => {
             const visibleItems = group.items.filter(item => item.roles.includes(userRole));
             if (visibleItems.length === 0) return null;
@@ -371,7 +420,7 @@ export const Drawer: React.FC = () => {
                   type="button"
                   onClick={() => toggleGroup(group.title)}
                   aria-expanded={!isCollapsed}
-                  className="w-full flex items-center justify-between px-1 py-1 text-[11px] font-bold text-fg-subtle uppercase tracking-wider hover:text-fg transition-colors select-none group"
+                  className="w-full flex items-center justify-between px-1.5 py-1 text-[11px] font-bold text-fg-subtle uppercase tracking-wider hover:text-fg transition-colors select-none group"
                 >
                   <span className="group-hover:text-fg transition-colors">{group.title}</span>
                   <span className="flex items-center gap-1 text-[10px] lowercase font-normal opacity-70 group-hover:opacity-100 transition-opacity">
@@ -381,12 +430,13 @@ export const Drawer: React.FC = () => {
                 </button>
 
                 {!isCollapsed && (
-                  <div className="space-y-1.5 pt-0.5 animate-in fade-in-50 duration-150">
+                  <div className="rounded-2xl bg-surface border border-border shadow-xs divide-y divide-border/60 overflow-hidden">
                     {visibleItems.map(item => {
                       const Icon = item.icon;
                       const routePath = NAV_PAGE_ROUTES[item.id] || '/sale';
                       const isActive = location.pathname === routePath || (location.pathname === '/' && item.id === (isStoreScoped ? 'SALE' : 'FINANCE'));
                       const isNotif = item.id === 'NOTIFICATIONS';
+                      const style = ITEM_STYLES[item.id] || { bg: 'bg-surface-raised', text: 'text-fg-subtle' };
 
                       return (
                         <button
@@ -396,24 +446,30 @@ export const Drawer: React.FC = () => {
                             navigate(routePath);
                             setDrawerOpen(false);
                           }}
-                          className={`w-full flex items-center justify-between px-3.5 py-3 rounded-xl border text-left transition-all active:scale-[0.99] cursor-pointer ${
+                          className={`w-full flex items-center justify-between px-3.5 py-2.5 text-left transition-colors active:bg-surface-raised cursor-pointer ${
                             isActive
-                              ? 'bg-accent/15 border-accent/40 text-accent font-semibold shadow-xs'
-                              : 'bg-surface hover:bg-surface-raised border-border text-fg-muted hover:text-fg'
+                              ? 'bg-accent/10 text-accent font-semibold'
+                              : 'hover:bg-surface-raised/70 text-fg'
                           }`}
                         >
-                          <div className="flex items-center gap-3 truncate">
-                            <Icon className={`w-5 h-5 shrink-0 ${isActive ? 'text-accent' : 'text-fg-subtle'}`} />
-                            <span className="text-xs">{item.label}</span>
+                          <div className="flex items-center gap-3 truncate min-w-0">
+                            <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-all ${
+                              isActive
+                                ? 'bg-accent text-accent-fg shadow-xs scale-105'
+                                : `${style.bg} ${style.text}`
+                            }`}>
+                              <Icon className="w-4.5 h-4.5" />
+                            </div>
+                            <span className="text-[13px] font-medium truncate leading-tight">{item.label}</span>
                           </div>
 
-                          <div className="flex items-center gap-2">
+                          <div className="flex items-center gap-1.5 shrink-0">
                             {isNotif && unreadNotifs > 0 && (
-                              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white">
+                              <span className="flex h-5 min-w-5 items-center justify-center rounded-full bg-danger px-1.5 text-[10px] font-bold text-white shadow-xs">
                                 {unreadNotifs}
                               </span>
                             )}
-                            <ChevronRight className="w-4 h-4 text-fg-subtle shrink-0" />
+                            <ChevronRight className={`w-4 h-4 transition-transform ${isActive ? 'text-accent' : 'text-fg-subtle/40'}`} />
                           </div>
                         </button>
                       );
@@ -426,22 +482,15 @@ export const Drawer: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 pb-[calc(1rem+var(--bottom-nav-pb))] border-t border-border bg-surface shrink-0 space-y-2">
+        <div className="p-3 pb-[calc(1rem+var(--bottom-nav-pb))] border-t border-border bg-surface shrink-0">
           <button
             type="button"
             onClick={logout}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/30 text-fg-muted hover:text-danger text-xs font-semibold transition-colors"
+            className="w-full flex items-center justify-center gap-2 h-10 rounded-xl bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/30 text-fg-muted hover:text-danger text-xs font-semibold transition-all active:scale-[0.98] cursor-pointer shadow-2xs"
           >
             <LogOut className="w-4 h-4" />
             <span>Выйти из аккаунта</span>
           </button>
-
-          <div className="flex items-center justify-between text-[11px] text-fg-subtle px-1">
-            <span>Версия {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</span>
-            <span className="font-mono text-[10px] bg-surface-raised px-1.5 py-0.5 rounded border border-border">
-              {typeof __COMMIT_SHA__ !== 'undefined' ? __COMMIT_SHA__ : 'dev'}
-            </span>
-          </div>
         </div>
       </div>
     </>

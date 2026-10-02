@@ -16,7 +16,6 @@ import {
   ShoppingCart,
   Store as StoreIcon,
   Plus,
-  Flame,
   Share2,
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
@@ -335,14 +334,7 @@ export const SalePage: React.FC = () => {
 
       {!isCentralCashMode && (<>
       {/* Filter bar */}
-      <div className="p-2.5 md:p-3 border-b border-border bg-bg space-y-2 shrink-0">
-        {/* The current store is shown (and switched) in the top bar, so it isn't repeated here. */}
-        <div className="flex items-center justify-end gap-2">
-          <span className="text-[11px] text-fg-subtle tabular-nums font-medium">
-            В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
-          </span>
-        </div>
-
+      <div className="p-2 sm:p-2.5 border-b border-border bg-surface shrink-0 space-y-2">
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
@@ -351,7 +343,16 @@ export const SalePage: React.FC = () => {
           placeholder="Поиск по IMEI / штрихкоду / модели..."
         />
 
-        <FilterPillGroup options={brands} value={selectedBrand} onChange={setSelectedBrand} scrollable />
+        {brands.length > 2 && (
+          <div className="flex items-center justify-between gap-2 overflow-hidden pt-0.5">
+            <div className="flex-1 min-w-0">
+              <FilterPillGroup options={brands} value={selectedBrand} onChange={setSelectedBrand} scrollable />
+            </div>
+            <span className="text-[11px] text-fg-subtle tabular-nums font-medium shrink-0 hidden sm:inline">
+              В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Catalog */}
@@ -365,19 +366,36 @@ export const SalePage: React.FC = () => {
           <EmptyState
             icon={Smartphone}
             title="Товары не найдены"
-            description={`В наличии нет устройств по текущим фильтрам${isStoreScoped ? '' : ` (${activeStoreName})`}`}
+            description={`В наличии нет устройств${searchQuery ? ' по вашему запросу' : ''}${isStoreScoped ? '' : ` (${activeStoreName})`}`}
             action={
-              selectedBrand !== 'ALL' ? (
-                <Button variant="secondary" onClick={() => setSelectedBrand('ALL')}>Сбросить фильтр бренда</Button>
+              selectedBrand !== 'ALL' || searchQuery ? (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  onClick={() => {
+                    setSelectedBrand('ALL');
+                    setSearchQuery('');
+                  }}
+                >
+                  Сбросить фильтры
+                </Button>
               ) : undefined
             }
           />
         ) : (
-          groupedVariants.map((variant) => {
+          <>
+            <div className="px-3.5 py-1.5 bg-surface-raised/40 border-b border-border text-[11px] text-fg-subtle flex items-center justify-between sticky top-0 backdrop-blur-xs z-10">
+              <span className="font-semibold text-fg-muted">В наличии: <strong className="text-accent font-bold">{availableDevices.length}</strong> шт.</span>
+              {selectedBrand !== 'ALL' && (
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                  {selectedBrand}
+                </span>
+              )}
+            </div>
+            {groupedVariants.map((variant) => {
             const costs = variant.devices.map(d => d.purchaseCostUsd ?? d.costBasisUsd ?? 0);
-            const maxCost = Math.max(...costs);
-            const minCost = Math.min(...costs);
-            const hasCostVariance = maxCost > minCost;
+            const maxCost = costs.length ? Math.max(...costs) : 0;
+            const hasCostVariance = costs.length > 1 && maxCost > Math.min(...costs);
             const isExpanded = expandedVariantKey === variant.variantKey;
             const sortedDevices = [...variant.devices].sort((a, b) => (b.purchaseCostUsd ?? b.costBasisUsd ?? 0) - (a.purchaseCostUsd ?? a.costBasisUsd ?? 0));
             const retailPrices = variant.devices.map(defaultPriceFor).filter((p): p is number => p !== undefined);
@@ -391,14 +409,7 @@ export const SalePage: React.FC = () => {
                   className="w-full text-left px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors"
                 >
                   <div className="min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-semibold text-fg-muted truncate">{variant.brand} {variant.model}</p>
-                      {hasCostVariance && (
-                        <Badge tone="warning">
-                          <Flame className="w-3 h-3 mr-1 inline" />${minCost}–${maxCost}
-                        </Badge>
-                      )}
-                    </div>
+                    <p className="text-sm font-semibold text-fg-muted truncate">{variant.brand} {variant.model}</p>
                     <p className="text-xs text-fg-subtle mt-0.5">
                       {variant.ram ? `${variant.ram} · ` : ''}{variant.storage} · {variant.color}
                     </p>
@@ -460,9 +471,10 @@ export const SalePage: React.FC = () => {
                 )}
               </div>
             );
-          })
-        )}
-      </div>
+          })}
+        </>
+      )}
+    </div>
 
       </>)}
 

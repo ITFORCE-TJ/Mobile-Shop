@@ -5,6 +5,7 @@ import { FALLBACK_EXCHANGE_RATE } from '../../utils/exchangeRate';
 import { BonusQuarterCard } from '../finance/BonusQuarterCard';
 import { BonusAccountCard } from '../finance/BonusAccountCard';
 import { LegacyBonusAccrualsCard } from '../finance/LegacyBonusAccrualsCard';
+import { cn } from '../../utils/cn';
 import {
   Gift,
   Plus,
@@ -19,6 +20,12 @@ import {
   Trash2,
   Loader2
 } from 'lucide-react';
+
+const formatBonusDate = (d?: string | null) => {
+  if (!d) return '';
+  const parsed = new Date(d);
+  return isNaN(parsed.getTime()) ? d : parsed.toLocaleDateString('ru-RU');
+};
 
 export const BonusesPage: React.FC = () => {
   const {
@@ -326,7 +333,7 @@ export const BonusesPage: React.FC = () => {
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       {/* Header */}
-      <div className="px-3 py-2 sm:px-4 sm:py-2.5 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
+      <div className="px-3 py-2 sm:px-4 sm:py-2 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
         <span className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
           <Gift className="w-4 h-4 text-accent" />
           <span>Кампании поставщиков</span>
@@ -336,7 +343,7 @@ export const BonusesPage: React.FC = () => {
         </span>
         <button
           onClick={() => setIsModalOpen(true)}
-          className="h-8 px-2.5 sm:px-3 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg flex items-center gap-1.5 shrink-0 transition-colors shadow-xs cursor-pointer"
+          className="!h-7.5 !px-2.5 rounded-lg bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg flex items-center gap-1.5 shrink-0 transition-colors shadow-xs cursor-pointer"
         >
           <Plus className="w-3.5 h-3.5" />
           <span className="sm:hidden">Бонус</span>
@@ -345,7 +352,7 @@ export const BonusesPage: React.FC = () => {
       </div>
 
       {statusMessage && (
-        <div className={`mx-3 sm:mx-4 mt-2.5 p-2 rounded-lg text-xs flex items-center space-x-2 shrink-0 ${
+        <div className={`mx-3 sm:mx-4 mt-2 p-2 rounded-lg text-xs flex items-center space-x-2 shrink-0 ${
           statusMessage.type === 'success' ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-danger/10 text-danger border border-danger/30'
         }`}>
           {statusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <AlertCircle className="w-4 h-4" />}
@@ -354,71 +361,86 @@ export const BonusesPage: React.FC = () => {
       )}
 
       {/* List of Bonuses */}
-      <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 sm:space-y-3 bg-bg">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2 max-w-4xl mx-auto w-full">
         {/* Bonuses are managed only here: the quarterly close zeroes them (admin) */}
         {currentUser?.role === 'ADMIN' && (
-          <>
+          <div className="space-y-2">
             <LegacyBonusAccrualsCard />
             <BonusAccountCard />
             <BonusQuarterCard />
-          </>
+          </div>
         )}
         {supplierBonuses.length === 0 ? (
-          <div className="p-8 text-center text-fg-subtle text-xs">
+          <div className="p-8 text-center text-fg-subtle text-xs rounded-xl bg-surface border border-border">
             Нет активных бонусных кампаний
           </div>
         ) : (
-          [...supplierBonuses]
-            .sort((a, b) => new Date(b.dateReceived || b.date || 0).getTime() - new Date(a.dateReceived || a.date || 0).getTime())
-            .map((bonus) => (
-            <div
-              key={bonus.id}
-              onClick={() => setSelectedBonus(bonus)}
-              className="p-3 sm:p-3.5 rounded-xl bg-surface border border-border hover:border-accent/50 hover:bg-surface-raised cursor-pointer transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 sm:gap-3 group"
-            >
-              <div className="space-y-1 min-w-0">
-                <div className="flex items-center space-x-2">
-                  <span className="text-xs font-semibold text-fg-muted">{bonus.campaignTitle || bonus.campaignName || `Бонус от ${bonus.supplierName}`}</span>
-                  <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
-                    bonus.bonusType === 'FREE_DEVICES' || bonus.deviceId
-                      ? 'bg-warning/15 text-warning border border-warning/30'
-                      : 'bg-accent/20 text-accent border border-accent/30'
-                  }`}>
-                    {bonus.bonusType === 'FREE_DEVICES' || bonus.deviceId ? 'Подарочные телефоны ($0)' : 'Денежная скидка'}
-                  </span>
-                </div>
-                <p className="text-xs text-fg-muted">
-                  Поставщик: <strong className="text-fg-muted">{bonus.supplierName}</strong> • {bonus.date || bonus.dateReceived || ''}
-                </p>
+          <div className="space-y-1.5">
+            {[...supplierBonuses]
+              .sort((a, b) => new Date(b.dateReceived || b.date || 0).getTime() - new Date(a.dateReceived || a.date || 0).getTime())
+              .map((bonus) => {
+                const bonusDate = formatBonusDate(bonus.date || bonus.dateReceived);
+                const hasFreeDevices = Boolean(bonus.freeDevices && bonus.freeDevices.length > 0);
 
-                {bonus.freeDevices && (
-                  <div className="pt-1 text-[11px] text-fg-muted flex items-center space-x-2">
-                    <Smartphone className="w-3.5 h-3.5 text-warning shrink-0" />
-                    <span className="truncate">
-                      {bonus.freeDevices.map(d => `${d.brand} ${d.model} (${d.imei})${currentUser?.role === 'ADMIN' ? ` [Себестоимость: $${d.costBasisUsd}]` : ''}`).join(', ')}
-                    </span>
-                  </div>
-                )}
-              </div>
+                return (
+                  <div
+                    key={bonus.id}
+                    onClick={() => setSelectedBonus(bonus)}
+                    className="p-2.5 sm:p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/50 hover:bg-surface-raised cursor-pointer transition-all flex items-center justify-between gap-2.5 group shadow-2xs"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <span className="text-xs sm:text-sm font-bold text-fg truncate">
+                          {bonus.campaignTitle || bonus.campaignName || `Бонус от ${bonus.supplierName}`}
+                        </span>
+                        <span className={cn(
+                          'text-[10px] px-1.5 py-0.2 rounded-md font-bold shrink-0',
+                          bonus.bonusType === 'FREE_DEVICES' || bonus.deviceId
+                            ? 'bg-warning/15 text-warning border border-warning/30'
+                            : 'bg-accent/15 text-accent border border-accent/25'
+                        )}>
+                          {bonus.bonusType === 'FREE_DEVICES' || bonus.deviceId ? 'Подарочные телефоны ($0)' : 'Денежная скидка'}
+                        </span>
+                      </div>
 
-              <div className="flex items-center space-x-3 text-right shrink-0">
-                <div>
-                  {bonus.bonusType === 'CASH_DISCOUNT' ? (
-                    <div>
-                      <span className="text-sm font-bold text-accent block">+${bonus.amountUsd} USD</span>
-                      <span className="text-[11px] text-accent font-bold block">≈ {Math.round((bonus.amountUsd || 0) * bonus.exchangeRate)} TJS · курс {bonus.exchangeRate}</span>
+                      <p className="text-[11px] text-fg-subtle truncate mt-0.5">
+                        Поставщик: <strong className="text-fg-muted font-medium">{bonus.supplierName}</strong>
+                        {bonusDate && <span> • {bonusDate}</span>}
+                      </p>
+
+                      {hasFreeDevices && (
+                        <div className="mt-1 text-[11px] text-fg-muted flex items-center gap-1.5">
+                          <Smartphone className="w-3.5 h-3.5 text-warning shrink-0" />
+                          <span className="truncate">
+                            {bonus.freeDevices!.map(d => `${d.brand} ${d.model} (${d.imei})`).join(', ')}
+                          </span>
+                        </div>
+                      )}
                     </div>
-                  ) : (
-                    <span className="text-xs font-semibold text-warning block">
-                      +{bonus.freeDevices?.length || 1} шт. бесплатно
-                    </span>
-                  )}
-                  <span className="text-[10px] text-fg-subtle block mt-0.5">Нажмите для просмотра</span>
-                </div>
-                <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-accent transition-colors" />
-              </div>
-            </div>
-          ))
+
+                    <div className="flex items-center gap-2 text-right shrink-0">
+                      <div>
+                        {bonus.bonusType === 'CASH_DISCOUNT' ? (
+                          <>
+                            <span className="text-xs sm:text-sm font-black text-accent font-mono block">
+                              +${Number(bonus.amountUsd || 0).toLocaleString('en-US')} USD
+                            </span>
+                            <span className="text-[10px] text-fg-subtle font-mono block">
+                              ≈ {Math.round((bonus.amountUsd || 0) * (bonus.exchangeRate || rate)).toLocaleString('ru-RU')} TJS · курс {bonus.exchangeRate || rate}
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-xs font-bold text-warning font-mono block">
+                            +{bonus.freeDevices?.length || 1} шт. бесплатно
+                          </span>
+                        )}
+                      </div>
+                      <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-accent transition-colors" />
+                    </div>
+                  </div>
+                );
+              })}
+          </div>
         )}
       </div>
 

@@ -84,20 +84,20 @@ export const BonusQuarterCard: React.FC = () => {
   };
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-3 sm:p-4 space-y-2.5 sm:space-y-3" aria-labelledby="bonus-quarter-title">
+    <section className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 space-y-2" aria-labelledby="bonus-quarter-title">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
-      <div className="flex items-center justify-between gap-2.5">
+      <div className="flex items-center justify-between gap-2">
         <div className="space-y-0.5 min-w-0">
           <h2 id="bonus-quarter-title" className="text-xs sm:text-sm font-bold text-fg truncate">Бонусы квартала</h2>
           {quarter?.since && (
-            <p className="text-[10px] sm:text-xs text-fg-subtle truncate">
+            <p className="text-[10px] text-fg-subtle truncate">
               С последнего закрытия ({dateRu(quarter.since)})
             </p>
           )}
         </div>
         <Button
           variant="primary"
-          className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold shrink-0"
+          className="!h-7.5 !px-2.5 text-xs font-bold shrink-0 shadow-xs"
           disabled={!quarter || isEmpty}
           leftIcon={CalendarCheck}
           onClick={() => { setPeriodName(currentQuarterName()); setConfirmOpen(true); }}
@@ -108,26 +108,26 @@ export const BonusQuarterCard: React.FC = () => {
       </div>
 
       {error ? (
-        <div className="flex items-center justify-between gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-xl p-3">
+        <div className="flex items-center justify-between gap-2 text-xs text-danger bg-danger/10 border border-danger/30 rounded-xl p-2.5">
           <span>{error}</span>
           <Button variant="secondary" onClick={() => void load()}>Повторить</Button>
         </div>
       ) : (
-        <dl className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-          <div className="rounded-xl bg-surface-raised border border-border p-2.5">
+        <dl className="grid grid-cols-3 gap-1.5 sm:gap-2">
+          <div className="rounded-xl bg-surface-raised border border-border/80 p-2 sm:p-2.5">
             <dt className="text-[10px] font-semibold text-fg-subtle truncate">Денежные бонусы</dt>
-            <dd className="text-base sm:text-lg font-black text-accent tabular-nums mt-0.5">{quarter ? usd(Number(quarter.cashBonusesUsd)) : '—'}</dd>
-            <dd className="text-[10px] text-fg-subtle tabular-nums truncate">{quarter ? `≈ ${tjs(Number(quarter.cashBonusesTjs))} · ${quarter.cashBonusesCount} шт.` : ''}</dd>
+            <dd className="text-xs sm:text-base font-black text-accent tabular-nums mt-0.5">{quarter ? usd(Number(quarter.cashBonusesUsd)) : '—'}</dd>
+            <dd className="text-[9px] sm:text-[10px] text-fg-subtle tabular-nums truncate">{quarter ? `≈ ${tjs(Number(quarter.cashBonusesTjs))} · ${quarter.cashBonusesCount} шт.` : ''}</dd>
           </div>
-          <div className="rounded-xl bg-surface-raised border border-border p-2.5">
+          <div className="rounded-xl bg-surface-raised border border-border/80 p-2 sm:p-2.5">
             <dt className="text-[10px] font-semibold text-fg-subtle truncate">Прибыль телефонов</dt>
-            <dd className="text-base sm:text-lg font-black text-fg tabular-nums mt-0.5">{quarter ? usd(Number(quarter.bonusDeviceProfitUsd)) : '—'}</dd>
-            <dd className="text-[10px] text-fg-subtle tabular-nums truncate">{quarter ? `≈ ${tjs(Number(quarter.bonusDeviceProfitTjs))} · прод. ${quarter.bonusDevicesSold} шт.` : ''}</dd>
+            <dd className="text-xs sm:text-base font-black text-fg tabular-nums mt-0.5">{quarter ? usd(Number(quarter.bonusDeviceProfitUsd)) : '—'}</dd>
+            <dd className="text-[9px] sm:text-[10px] text-fg-subtle tabular-nums truncate">{quarter ? `≈ ${tjs(Number(quarter.bonusDeviceProfitTjs))} · прод. ${quarter.bonusDevicesSold} шт.` : ''}</dd>
           </div>
-          <div className="rounded-xl bg-surface-raised border border-border p-2.5 col-span-2 sm:col-span-1">
+          <div className="rounded-xl bg-surface-raised border border-border/80 p-2 sm:p-2.5">
             <dt className="text-[10px] font-semibold text-fg-subtle truncate">Бонусные телефоны</dt>
-            <dd className="text-base sm:text-lg font-black text-fg tabular-nums mt-0.5">{quarter ? `${quarter.bonusDevicesReceived} шт.` : '—'}</dd>
-            <dd className="text-[10px] text-fg-subtle truncate">От поставщиков</dd>
+            <dd className="text-xs sm:text-base font-black text-fg tabular-nums mt-0.5">{quarter ? `${quarter.bonusDevicesReceived} шт.` : '—'}</dd>
+            <dd className="text-[9px] sm:text-[10px] text-fg-subtle truncate">От поставщиков</dd>
           </div>
         </dl>
       )}

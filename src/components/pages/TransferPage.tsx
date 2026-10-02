@@ -11,14 +11,17 @@ import {
   Send,
   Check,
   Loader2,
-  Clock
+  Clock,
+  Search,
+  X,
+  Scan
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { ConfirmDialog } from '../ui/ConfirmDialog';
-import { SearchBar } from '../ui/SearchBar';
 import { LoadingState } from '../ui/Skeleton';
 import { DEVICE_STATUS_LABELS, findDeviceByCode, looksLikeDeviceCode, normalizeScanCode } from '../../utils/scanLookup';
 import { useStoreContext, formatStoreName } from '../../utils/storeContext';
+import { cn } from '../../utils/cn';
 
 export const TransferPage: React.FC = () => {
   const {
@@ -297,29 +300,35 @@ export const TransferPage: React.FC = () => {
 
 
       {/* Tabs */}
-      <div className="flex border-b border-border bg-surface px-3 sm:px-4 pt-2 text-xs shrink-0">
+      <div className="flex items-center gap-1.5 border-b border-border bg-surface px-2.5 sm:px-3 py-1.5 text-xs shrink-0">
         <button
+          type="button"
           onClick={() => setActiveTab('create')}
-          className={`pb-2.5 px-3 transition-colors border-b-2 font-bold tracking-wider bg-transparent ${
+          className={cn(
+            'h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5',
             activeTab === 'create'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-fg-muted hover:text-fg'
-          }`}
+              ? 'bg-accent text-accent-fg shadow-xs font-bold'
+              : 'bg-surface-raised border border-border/80 text-fg-muted hover:text-fg hover:bg-surface'
+          )}
         >
-          {isStoreScoped ? 'Новая отправка' : 'Новое перемещение'}
+          <ArrowLeftRight className="w-3.5 h-3.5" />
+          <span>{isStoreScoped ? 'Новая отправка' : 'Новое перемещение'}</span>
         </button>
 
         <button
+          type="button"
           onClick={() => setActiveTab('list')}
-          className={`pb-2.5 px-3 transition-colors border-b-2 flex items-center space-x-2 font-bold tracking-wider ${
+          className={cn(
+            'h-8 px-3 rounded-lg text-xs font-semibold transition-all cursor-pointer flex items-center gap-1.5',
             activeTab === 'list'
-              ? 'border-accent text-accent'
-              : 'border-transparent text-fg-muted hover:text-fg'
-          }`}
+              ? 'bg-accent text-accent-fg shadow-xs font-bold'
+              : 'bg-surface-raised border border-border/80 text-fg-muted hover:text-fg hover:bg-surface'
+          )}
         >
-          <span>{isStoreScoped ? 'История отправок' : 'История и подтверждения'}</span>
+          <Clock className="w-3.5 h-3.5" />
+          <span>{isStoreScoped ? 'История отправок' : 'История и заявки'}</span>
           {pendingCount > 0 && (
-            <span className="bg-warning text-black px-1.5 py-0.2 rounded-full font-bold text-[10px]">
+            <span className="bg-warning text-black px-1.5 py-0.2 rounded-full font-bold text-[10px] leading-tight">
               {pendingCount}
             </span>
           )}
@@ -331,18 +340,21 @@ export const TransferPage: React.FC = () => {
         {activeTab === 'create' ? (
           <div className="flex-1 flex flex-col overflow-hidden">
             {/* Origin & Destination Selector Bar */}
-            <div className="p-3 sm:p-4 border-b border-border bg-surface shrink-0">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
-                <div>
-                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">Откуда (Отправитель):</label>
+            <div className="p-2 sm:p-2.5 border-b border-border bg-surface shrink-0">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                {/* Откуда */}
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-fg-subtle flex items-center gap-1">
+                      <StoreIcon className="w-3 h-3 text-accent" />
+                      Откуда (Отправитель):
+                    </span>
+                  </div>
                   {isStoreScoped ? (
-                    <>
-                      <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
-                        <StoreIcon className="w-4 h-4 text-accent" />
-                        <span>{formatStoreName(sellerStoreName)}</span>
-                      </div>
-                      <p className="text-[11px] text-fg-subtle mt-1">Отправка товаров на центральный склад. Новые поступления принимаются в «Приход товара».</p>
-                    </>
+                    <div className="h-8.5 px-2.5 rounded-lg bg-surface-raised border border-border text-fg font-semibold text-xs flex items-center gap-2 truncate">
+                      <StoreIcon className="w-3.5 h-3.5 text-accent shrink-0" />
+                      <span className="truncate">{formatStoreName(sellerStoreName)}</span>
+                    </div>
                   ) : (
                     <select
                       value={fromLocationId ?? ''}
@@ -351,7 +363,7 @@ export const TransferPage: React.FC = () => {
                         setSelectedDeviceIds([]);
                         setToLocationId('');
                       }}
-                      className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
+                      className="w-full h-8.5 rounded-lg bg-surface-raised border border-border px-2.5 text-xs font-semibold text-fg focus:border-accent focus:outline-none cursor-pointer truncate"
                     >
                       {stores.map(s => (
                         <option key={s.id} value={s.id}>
@@ -362,82 +374,163 @@ export const TransferPage: React.FC = () => {
                   )}
                 </div>
 
-                <div>
-                  <label className="block text-fg-subtle mb-1 text-[11px] font-bold">
-                    Куда (Получатель):
-                    {!isStoreScoped && <span className="text-warning font-normal ml-1">* обязательно</span>}
-                  </label>
+                {/* Куда */}
+                <div className="min-w-0">
+                  <div className="flex items-center justify-between mb-1">
+                    <span className="text-[11px] font-semibold text-fg-subtle flex items-center gap-1">
+                      <Warehouse className="w-3 h-3 text-accent" />
+                      Куда (Получатель):
+                    </span>
+                    {!isStoreScoped && !toLocationId && (
+                      <span className="text-[10px] text-warning font-medium">выберите склад</span>
+                    )}
+                  </div>
                   {isStoreScoped ? (
-                    <>
-                      <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-fg-muted font-bold flex items-center space-x-2">
-                        <Warehouse className="w-4 h-4 text-accent" />
-                        <span>
-                          {mainWarehouse
-                            ? (mainWarehouse.isMainWarehouse && !mainWarehouse.name.toLowerCase().includes('центральн')
-                                ? `Центральный склад (${formatStoreName(mainWarehouse.name)})`
-                                : formatStoreName(mainWarehouse.name))
-                            : 'Центральный склад'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-fg-subtle mt-1">Товары поступят на баланс склада после проверки администратором.</p>
-                    </>
+                    <div className="h-8.5 px-2.5 rounded-lg bg-surface-raised border border-border text-fg font-semibold text-xs flex items-center gap-2 truncate">
+                      <Warehouse className="w-3.5 h-3.5 text-accent shrink-0" />
+                      <span className="truncate">
+                        {mainWarehouse
+                          ? (mainWarehouse.isMainWarehouse && !mainWarehouse.name.toLowerCase().includes('центральн')
+                              ? `Центральный склад (${formatStoreName(mainWarehouse.name)})`
+                              : formatStoreName(mainWarehouse.name))
+                          : 'Центральный склад'}
+                      </span>
+                    </div>
                   ) : (
-                    <>
-                      <select
-                        value={toLocationId ?? ''}
-                        onChange={(e) => setToLocationId(e.target.value)}
-                        className={`w-full rounded-xl bg-surface-raised border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none transition-colors ${
-                          !toLocationId ? 'border-warning/70 ring-1 ring-warning/30' : 'border-border'
-                        }`}
-                      >
-                        <option value="">-- Выберите получателя (куда) * --</option>
-                        {stores.filter(s => s.id !== fromLocationId).map(s => (
-                          <option key={s.id} value={s.id}>
-                            {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
-                          </option>
-                        ))}
-                      </select>
-                      {!toLocationId && (
-                        <p className="text-[10px] text-warning mt-1 flex items-center gap-1 font-medium">
-                          <AlertCircle className="w-3 h-3 shrink-0" />
-                          Необходимо выбрать получателя
-                        </p>
+                    <select
+                      value={toLocationId ?? ''}
+                      onChange={(e) => setToLocationId(e.target.value)}
+                      className={cn(
+                        'w-full h-8.5 rounded-lg bg-surface-raised border px-2.5 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer truncate',
+                        !toLocationId ? 'border-warning/60 text-warning font-normal' : 'border-border'
                       )}
-                    </>
+                    >
+                      <option value="">-- Выберите получателя --</option>
+                      {stores.filter(s => s.id !== fromLocationId).map(s => (
+                        <option key={s.id} value={s.id}>
+                          {s.isMainWarehouse ? `Центральный склад (${formatStoreName(s.name)})` : formatStoreName(s.name)}
+                        </option>
+                      ))}
+                    </select>
                   )}
                 </div>
               </div>
             </div>
 
             {/* Device search & actions bar */}
-            <div className="p-3 bg-surface border-b border-border shrink-0">
-              <SearchBar
-                value={searchQuery ?? ''}
-                onChange={setSearchQuery}
-                onScan={handleScanDevice}
-                onSubmit={(value) => handleDeviceCode(value, 'enter')}
-                placeholder="Поиск устройства в этой точке (модель, IMEI)..."
-              />
+            <div className="p-2 sm:p-2.5 bg-surface border-b border-border shrink-0">
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                <input
+                  type="text"
+                  value={searchQuery ?? ''}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault();
+                      handleDeviceCode(searchQuery, 'enter');
+                    }
+                  }}
+                  enterKeyHint="search"
+                  placeholder="Поиск устройства в этой точке (модель, IMEI)..."
+                  className="w-full h-9 rounded-xl bg-surface-raised border border-border pl-8 pr-8 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
+                    title="Очистить"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleScanDevice}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-accent hover:text-accent-strong p-0.5 transition-colors cursor-pointer"
+                    title="Сканировать IMEI или штрихкод"
+                  >
+                    <Scan className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Devices Toolbar */}
+            <div className="flex items-center justify-between text-xs px-2.5 sm:px-3 py-1.5 border-b border-border/60 bg-surface/50 shrink-0">
+              <div className="flex items-center gap-1.5">
+                <span className="font-semibold text-fg-muted text-[11px]">Доступные товары</span>
+                <span className="px-1.5 py-0.2 rounded-full bg-surface-raised border border-border/80 text-[10px] font-bold text-fg-subtle">
+                  {availableDevicesAtFromLocation.length}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2.5">
+                {availableDevicesAtFromLocation.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleSelectAllFiltered}
+                    className="text-[11px] text-accent hover:underline font-bold cursor-pointer"
+                  >
+                    Выбрать все
+                  </button>
+                )}
+                {selectedDeviceIds.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={handleClearSelection}
+                    className="text-[11px] text-fg-subtle hover:text-danger hover:underline cursor-pointer"
+                  >
+                    Сбросить ({selectedDeviceIds.length})
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Devices Checklist */}
-            <div className="flex-1 overflow-y-auto divide-y divide-border bg-bg p-3 space-y-3 pb-24">
-              <div className="flex items-center justify-between text-xs text-fg-muted px-1">
-                <span>Доступные товары ({availableDevicesAtFromLocation.length})</span>
-                <div className="flex space-x-3 text-xs">
-                  <button onClick={handleSelectAllFiltered} className="text-accent hover:underline font-bold">Выбрать все</button>
-                  <button onClick={handleClearSelection} className="text-fg-subtle hover:underline">Сбросить</button>
-                </div>
-              </div>
-
+            <div className="flex-1 overflow-y-auto bg-bg p-2 sm:p-2.5 space-y-2 pb-24 flex flex-col">
               {isInitialLoading ? (
                 <LoadingState label="Загрузка устройств…" />
               ) : availableDevicesAtFromLocation.length === 0 ? (
-                <div className="p-12 text-center text-fg-muted text-xs tracking-wider">
-                  Нет доступных устройств в локации «{fromStoreName}»
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[260px]">
+                  <div className="w-13 h-13 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
+                    <ArrowLeftRight className="w-6 h-6" />
+                  </div>
+
+                  <h3 className="text-sm sm:text-base font-bold text-fg">
+                    {searchQuery ? 'Устройства не найдены' : 'Нет доступных устройств'}
+                  </h3>
+
+                  <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                    {searchQuery
+                      ? `По запросу «${searchQuery}» устройства не найдены в этой точке.`
+                      : `В локации «${fromStoreName}» сейчас нет товаров на балансе для перемещения.`}
+                  </p>
+
+                  <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                    {searchQuery && (
+                      <button
+                        type="button"
+                        onClick={() => setSearchQuery('')}
+                        className="h-8.5 px-3.5 rounded-xl bg-surface-raised border border-border text-fg text-xs font-semibold hover:border-accent hover:text-accent transition-all cursor-pointer flex items-center gap-1.5"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                        <span>Сбросить поиск</span>
+                      </button>
+                    )}
+                    <button
+                      type="button"
+                      onClick={handleScanDevice}
+                      className="h-8.5 px-3.5 rounded-xl bg-surface-raised border border-border text-accent text-xs font-semibold hover:border-accent hover:bg-accent/10 transition-all cursor-pointer flex items-center gap-1.5"
+                    >
+                      <Scan className="w-3.5 h-3.5" />
+                      <span>Сканировать IMEI</span>
+                    </button>
+                  </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                   {availableDevicesAtFromLocation.map((dev) => {
                     const isChecked = selectedDeviceIds.includes(dev.id);
 
@@ -447,29 +540,40 @@ export const TransferPage: React.FC = () => {
                         key={dev.id}
                         onClick={() => handleToggleSelectDevice(dev.id)}
                         aria-pressed={isChecked}
-                        className={`w-full text-left p-3.5 rounded-xl border flex items-center justify-between cursor-pointer transition-all ${
+                        className={cn(
+                          'w-full text-left p-2.5 sm:p-3 rounded-xl border flex items-center justify-between gap-2.5 cursor-pointer transition-all shadow-2xs',
                           isChecked
                             ? 'bg-accent/10 border-accent/40 shadow-xs'
-                            : 'bg-surface hover:bg-surface-raised border-border'
-                        }`}
+                            : 'bg-surface hover:bg-surface-raised/70 border-border/80'
+                        )}
                       >
-                        <span className="flex items-center space-x-3 min-w-0">
-                          <span aria-hidden="true" className={`w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-colors ${
-                            isChecked
-                              ? 'bg-accent border-accent text-accent-fg'
-                              : 'border-border bg-surface-raised'
-                          }`}>
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div
+                            aria-hidden="true"
+                            className={cn(
+                              'w-5 h-5 shrink-0 rounded-md border flex items-center justify-center transition-colors',
+                              isChecked
+                                ? 'bg-accent border-accent text-accent-fg'
+                                : 'border-border bg-surface-raised'
+                            )}
+                          >
                             {isChecked && <Check className="w-3.5 h-3.5 stroke-3" />}
-                          </span>
+                          </div>
 
-                          <span className="min-w-0 block">
-                            <span className="block text-xs font-bold text-fg-muted truncate">{dev.brand} {dev.model}</span>
-                            <span className="block text-[11px] text-fg-muted truncate">{dev.ram ? `${dev.ram} • ` : ''}{dev.storage} • {dev.color}</span>
-                            <span className="block text-[11px] text-fg-subtle truncate">IMEI: {dev.imei}</span>
-                          </span>
-                        </span>
+                          <div className="min-w-0">
+                            <span className="block text-xs font-bold text-fg truncate">
+                              {dev.brand} {dev.model}
+                            </span>
+                            <span className="block text-[11px] text-fg-muted truncate">
+                              {dev.ram ? `${dev.ram} • ` : ''}{dev.storage} • {dev.color}
+                            </span>
+                            <span className="block text-[10px] text-fg-subtle font-mono truncate">
+                              IMEI: {dev.imei}
+                            </span>
+                          </div>
+                        </div>
 
-                        <span className="text-xs font-bold text-accent shrink-0">
+                        <span className="text-xs font-bold text-accent font-mono shrink-0">
                           {(dev.retailPriceTjs ?? 0) > 0 ? `${formatMoney(dev.retailPriceTjs)} TJS` : '—'}
                         </span>
                       </button>
@@ -481,20 +585,21 @@ export const TransferPage: React.FC = () => {
 
             {/* Bottom Floating Bar */}
             {selectedDeviceIds.length > 0 && (
-              <div className="absolute bottom-3 inset-x-3 z-30">
-                <div className={`p-3.5 rounded-2xl bg-surface border shadow-2xl flex items-center justify-between gap-3 backdrop-blur-md transition-all ${
+              <div className="absolute bottom-2.5 inset-x-2.5 z-30">
+                <div className={cn(
+                  'p-2.5 sm:p-3 rounded-2xl bg-surface/95 border shadow-2xl flex items-center justify-between gap-2.5 backdrop-blur-md transition-all',
                   !toLocationId ? 'border-warning/60 shadow-warning/5' : 'border-accent/40'
-                }`}>
-                  <div className="flex items-center space-x-3">
-                    <div className="w-9 h-9 rounded-xl bg-accent text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
+                )}>
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-8 h-8 rounded-xl bg-accent text-accent-fg flex items-center justify-center font-bold text-xs shrink-0 shadow-xs">
                       {selectedDeviceIds.length}
                     </div>
-                    <div>
-                      <p className="text-xs font-bold text-fg-muted">
-                        Выбрано: {selectedDeviceIds.length} устройств
+                    <div className="min-w-0 truncate">
+                      <p className="text-xs font-bold text-fg truncate">
+                        Выбрано: {selectedDeviceIds.length} шт.
                       </p>
-                      <p className="text-[11px] text-fg-muted">
-                        Из: <span className="font-semibold text-fg">{fromStoreName}</span> → В:{' '}
+                      <p className="text-[11px] text-fg-muted truncate">
+                        {fromStoreName} →{' '}
                         {toLocationId ? (
                           <span className="font-semibold text-accent">{toStoreName}</span>
                         ) : (
@@ -505,15 +610,17 @@ export const TransferPage: React.FC = () => {
                   </div>
 
                   <button
+                    type="button"
                     onClick={handleOpenConfirmModal}
-                    className={`px-4 py-2 rounded-xl font-bold text-xs flex items-center space-x-1.5 transition-all shadow-xs ${
+                    className={cn(
+                      'h-9 px-3.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-xs shrink-0 cursor-pointer',
                       !toLocationId
                         ? 'bg-warning hover:bg-warning/90 text-black'
                         : 'bg-accent hover:bg-accent-strong text-accent-fg'
-                    }`}
+                    )}
                   >
-                    <span>{toLocationId ? (isStoreScoped ? 'Отправить на склад' : 'Оформить') : 'Указать куда'}</span>
-                    <Send className="w-4 h-4" />
+                    <span>{toLocationId ? (isStoreScoped ? 'Отправить' : 'Переместить') : 'Куда'}</span>
+                    <Send className="w-3.5 h-3.5" />
                   </button>
                 </div>
               </div>
@@ -521,14 +628,14 @@ export const TransferPage: React.FC = () => {
           </div>
         ) : (
           /* HISTORY & APPROVALS TAB */
-          <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-3 bg-bg">
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2.5 bg-bg flex flex-col">
             {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
-              <div className="flex items-center justify-between pb-2 border-b border-border text-xs">
+              <div className="flex items-center justify-between pb-2 border-b border-border text-xs shrink-0">
                 <span className="text-fg-muted font-medium">Фильтр по локации:</span>
                 <select
                   value={historyFilterStoreId}
                   onChange={(e) => setHistoryFilterStoreId(e.target.value)}
-                  className="bg-surface border border-border text-fg-muted rounded-xl px-3 py-1.5 text-xs font-semibold focus:outline-none focus:border-accent"
+                  className="bg-surface border border-border text-fg rounded-lg px-2.5 py-1 text-xs font-semibold focus:outline-none focus:border-accent cursor-pointer"
                 >
                   <option value="ALL">Все (склад и магазины)</option>
                   {stores.map(s => (
@@ -541,8 +648,24 @@ export const TransferPage: React.FC = () => {
             )}
 
             {visibleTransfers.length === 0 ? (
-              <div className="p-12 text-center text-fg-muted text-xs tracking-wider">
-                История перемещений пуста
+              <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto min-h-[260px]">
+                <div className="w-13 h-13 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-fg-subtle mb-3 shadow-xs">
+                  <Clock className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm sm:text-base font-bold text-fg">
+                  История перемещений пуста
+                </h3>
+                <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                  Здесь будут отображаться созданные перемещения между складами и магазинами, а также их статусы.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('create')}
+                  className="mt-4 h-8.5 px-3.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold transition-all shadow-xs flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowLeftRight className="w-3.5 h-3.5" />
+                  <span>{isStoreScoped ? 'Создать отправку' : 'Создать перемещение'}</span>
+                </button>
               </div>
             ) : (
               <div className="space-y-3">

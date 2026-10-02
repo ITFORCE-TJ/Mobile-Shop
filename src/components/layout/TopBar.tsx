@@ -49,6 +49,7 @@ export const TopBar: React.FC = () => {
       case 'INVENTORY': return 'Склад товаров';
       case 'PURCHASE': return 'Приходы товара';
       case 'TRANSFER': return isStoreScoped ? 'Отправка на склад' : 'Перемещение';
+      case 'RECEIPTS': return isStoreScoped ? 'Приёмка товаров' : 'Приходы в магазины';
       case 'EXCHANGE': return 'Обмен Trade-In';
       case 'REPAIR': return 'Сервис и ремонт';
       case 'SUPPLIERS': return 'Поставщики';

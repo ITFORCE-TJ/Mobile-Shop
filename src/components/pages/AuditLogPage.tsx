@@ -99,14 +99,14 @@ export const AuditLogPage: React.FC = () => {
 
   const isAnyFilterActive = useMemo(() => {
     return (
-      dateFilterMode !== 'ALL' ||
+      dateFilterMode !== 'TODAY' ||
       activeCategoryFilter !== 'ALL' ||
       selectedUserFilter !== 'ALL' ||
       selectedRoleFilter !== 'ALL' ||
-      selectedStoreFilter !== 'ALL' ||
+      (storeCtx.mode === 'CENTRAL' && selectedStoreFilter !== 'ALL') ||
       searchQuery.trim() !== ''
     );
-  }, [dateFilterMode, activeCategoryFilter, selectedUserFilter, selectedRoleFilter, selectedStoreFilter, searchQuery]);
+  }, [dateFilterMode, activeCategoryFilter, selectedUserFilter, selectedRoleFilter, selectedStoreFilter, storeCtx.mode, searchQuery]);
 
   const [showExtraFilters, setShowExtraFilters] = useState<boolean>(false);
 
@@ -115,12 +115,12 @@ export const AuditLogPage: React.FC = () => {
     if (activeCategoryFilter !== 'ALL') count++;
     if (selectedUserFilter !== 'ALL') count++;
     if (selectedRoleFilter !== 'ALL') count++;
-    if (selectedStoreFilter !== 'ALL') count++;
+    if (storeCtx.mode === 'CENTRAL' && selectedStoreFilter !== 'ALL') count++;
     return count;
-  }, [activeCategoryFilter, selectedUserFilter, selectedRoleFilter, selectedStoreFilter]);
+  }, [activeCategoryFilter, selectedUserFilter, selectedRoleFilter, selectedStoreFilter, storeCtx.mode]);
 
   const handleResetFilters = () => {
-    setDateFilterMode('ALL');
+    setDateFilterMode('TODAY');
     setSelectedDate(todayStr);
     setActiveCategoryFilter('ALL');
     setSelectedUserFilter('ALL');
@@ -265,50 +265,10 @@ export const AuditLogPage: React.FC = () => {
 
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg">
-      {/* Header Bar */}
-      <div className="px-3 py-2 sm:px-4 sm:py-2.5 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-            <ShieldCheck className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-xs sm:text-sm font-bold text-fg leading-tight">Журнал аудита</h1>
-              <span className="text-[10px] font-bold text-accent bg-accent/10 px-1.5 py-0.2 rounded-full border border-accent/20">
-                {filteredLogs.length}
-              </span>
-            </div>
-            <p className="text-[10px] text-fg-subtle truncate hidden sm:block">История действий сотрудников и системные события безопасности</p>
-          </div>
-        </div>
-
-        <div className="flex items-center gap-1.5 shrink-0">
-          <button
-            type="button"
-            onClick={() =>
-              exportAuditLogsReport(
-                filteredLogs.map(log => ({
-                  ...log,
-                  action: auditActionLabel(log.action),
-                  userRole: auditRoleLabel(log.userRole),
-                  details: auditDetailsLabel(log.details || '')
-                }))
-              )
-            }
-            disabled={filteredLogs.length === 0}
-            className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold transition-colors disabled:opacity-40 cursor-pointer"
-            title="Экспорт в CSV"
-          >
-            <Download className="w-3.5 h-3.5 text-accent" />
-            <span className="hidden sm:inline">CSV</span>
-          </button>
-        </div>
-      </div>
-
-      {/* Filter Toolbar with Streamlined Controls */}
-      <div className="p-2 sm:p-2.5 border-b border-border bg-surface space-y-1.5 shrink-0 shadow-2xs">
-        {/* Row 1: Search & Quick Controls */}
-        <div className="flex items-center gap-1.5">
+      {/* Compact Top Action Bar: Search, Date Filter, and Essential Controls */}
+      <div className="border-b border-border bg-surface shrink-0 shadow-2xs">
+        {/* Row 1: Search, Date Filter & Main Action Buttons */}
+        <div className="p-2 sm:px-3 sm:py-2 flex items-center gap-1.5">
           {/* Search bar */}
           <div className="relative flex-1 min-w-0">
             <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle pointer-events-none" />
@@ -317,7 +277,7 @@ export const AuditLogPage: React.FC = () => {
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Поиск по действию, сотруднику, IMEI..."
-              className="w-full h-8 rounded-lg bg-surface-raised border border-border pl-8 pr-7 text-xs text-fg placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+              className="w-full h-8 rounded-lg bg-surface-raised border border-border pl-8 pr-7 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
             />
             {searchQuery && (
               <button
@@ -372,11 +332,11 @@ export const AuditLogPage: React.FC = () => {
               )}
             </button>
 
-            {/* Filter toggle button on mobile */}
+            {/* Filter toggle button */}
             <button
               type="button"
               onClick={() => setShowExtraFilters(prev => !prev)}
-              className={`sm:hidden h-8 px-2 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 ${
+              className={`h-8 px-2 rounded-lg border text-xs font-semibold flex items-center gap-1 transition-colors cursor-pointer shrink-0 ${
                 activeExtraFiltersCount > 0 || showExtraFilters
                   ? 'border-accent bg-accent/10 text-accent font-bold'
                   : 'border-border bg-surface-raised text-fg-subtle hover:text-fg'
@@ -389,6 +349,26 @@ export const AuditLogPage: React.FC = () => {
                   {activeExtraFiltersCount}
                 </span>
               )}
+            </button>
+
+            {/* Export CSV button */}
+            <button
+              type="button"
+              onClick={() =>
+                exportAuditLogsReport(
+                  filteredLogs.map(log => ({
+                    ...log,
+                    action: auditActionLabel(log.action),
+                    userRole: auditRoleLabel(log.userRole),
+                    details: auditDetailsLabel(log.details || '')
+                  }))
+                )
+              }
+              disabled={filteredLogs.length === 0}
+              className="h-8 w-8 rounded-lg border border-border bg-surface-raised hover:bg-surface text-fg flex items-center justify-center transition-colors disabled:opacity-40 cursor-pointer shrink-0"
+              title="Экспорт в CSV"
+            >
+              <Download className="w-3.5 h-3.5 text-accent" />
             </button>
 
             {/* Reset Filters button */}
@@ -406,100 +386,104 @@ export const AuditLogPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Row 2: Secondary Dropdowns (Collapsible on mobile, always visible on sm+) */}
-        <div
-          className={`grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-1.5 pt-1 sm:pt-0 border-t sm:border-t-0 border-border/40 ${
-            showExtraFilters || activeExtraFiltersCount > 0 ? 'grid' : 'hidden sm:flex'
-          }`}
-        >
-          {/* Category Dropdown */}
-          <div className="min-w-28 flex-1 sm:flex-initial">
-            <select
-              value={activeCategoryFilter}
-              onChange={(e) => setActiveCategoryFilter(e.target.value)}
-              className={`w-full h-7.5 bg-surface-raised border text-[11px] sm:text-xs font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
-                activeCategoryFilter !== 'ALL'
-                  ? 'border-accent text-accent font-bold bg-accent/10'
-                  : 'border-border text-fg'
-              }`}
-            >
-              {FILTER_CATEGORIES.map((cat) => (
-                <option key={cat.id} value={cat.id}>
-                  {cat.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* User / Employee Dropdown */}
-          <div className="min-w-32 flex-1 sm:flex-initial">
-            <select
-              value={selectedUserFilter}
-              onChange={(e) => setSelectedUserFilter(e.target.value)}
-              className={`w-full h-7.5 bg-surface-raised border text-[11px] sm:text-xs font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
-                selectedUserFilter !== 'ALL'
-                  ? 'border-accent text-accent font-bold bg-accent/10'
-                  : 'border-border text-fg'
-              }`}
-            >
-              <option value="ALL">Все сотрудники</option>
-              {userOptions.map((u) => (
-                <option key={u.val} value={u.val}>
-                  {u.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* Role Dropdown */}
-          <div className="min-w-28 flex-1 sm:flex-initial">
-            <select
-              value={selectedRoleFilter}
-              onChange={(e) => setSelectedRoleFilter(e.target.value)}
-              className={`w-full h-7.5 bg-surface-raised border text-[11px] sm:text-xs font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
-                selectedRoleFilter !== 'ALL'
-                  ? 'border-accent text-accent font-bold bg-accent/10'
-                  : 'border-border text-fg'
-              }`}
-            >
-              <option value="ALL">Все роли</option>
-              <option value="ADMIN">Администратор</option>
-              <option value="PARTNER">Партнер</option>
-              <option value="SELLER">Продавец</option>
-            </select>
-          </div>
-
-          {/* Store / Location Dropdown */}
-          {storeOptions.length > 0 && storeCtx.mode === 'CENTRAL' && (
-            <div className="min-w-28 flex-1 sm:flex-initial">
+        {/* Row 2: Secondary Dropdowns (Collapsible, neat single row!) */}
+        {showExtraFilters && (
+          <div className="px-2 pb-2 sm:px-3 sm:pb-2 pt-0.5 border-t border-border/40">
+            <div className={`grid gap-1.5 ${storeOptions.length > 0 && storeCtx.mode === 'CENTRAL' ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+              {/* Category Dropdown */}
               <select
-                value={selectedStoreFilter}
-                onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                className={`w-full h-7.5 bg-surface-raised border text-[11px] sm:text-xs font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
-                  selectedStoreFilter !== 'ALL'
+                value={activeCategoryFilter}
+                onChange={(e) => setActiveCategoryFilter(e.target.value)}
+                className={`h-7.5 bg-surface-raised border text-[11px] font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
+                  activeCategoryFilter !== 'ALL'
                     ? 'border-accent text-accent font-bold bg-accent/10'
                     : 'border-border text-fg'
                 }`}
               >
-                <option value="ALL">Все локации</option>
-                {storeOptions.map((store) => (
-                  <option key={store} value={store}>
-                    {store}
+                {FILTER_CATEGORIES.map((cat) => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.label}
                   </option>
                 ))}
               </select>
+
+              {/* User / Employee Dropdown */}
+              <select
+                value={selectedUserFilter}
+                onChange={(e) => setSelectedUserFilter(e.target.value)}
+                className={`h-7.5 bg-surface-raised border text-[11px] font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors truncate ${
+                  selectedUserFilter !== 'ALL'
+                    ? 'border-accent text-accent font-bold bg-accent/10'
+                    : 'border-border text-fg'
+                }`}
+              >
+                <option value="ALL">Все сотрудники</option>
+                {userOptions.map((u) => (
+                  <option key={u.val} value={u.val}>
+                    {u.label}
+                  </option>
+                ))}
+              </select>
+
+              {/* Role Dropdown */}
+              <select
+                value={selectedRoleFilter}
+                onChange={(e) => setSelectedRoleFilter(e.target.value)}
+                className={`h-7.5 bg-surface-raised border text-[11px] font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
+                  selectedRoleFilter !== 'ALL'
+                    ? 'border-accent text-accent font-bold bg-accent/10'
+                    : 'border-border text-fg'
+                }`}
+              >
+                <option value="ALL">Все роли</option>
+                <option value="ADMIN">Администратор</option>
+                <option value="PARTNER">Партнер</option>
+                <option value="SELLER">Продавец</option>
+              </select>
+
+              {/* Store / Location Dropdown (if central) */}
+              {storeOptions.length > 0 && storeCtx.mode === 'CENTRAL' && (
+                <select
+                  value={selectedStoreFilter}
+                  onChange={(e) => setSelectedStoreFilter(e.target.value)}
+                  className={`h-7.5 bg-surface-raised border text-[11px] font-medium rounded-lg px-2 focus:outline-none focus:border-accent cursor-pointer transition-colors ${
+                    selectedStoreFilter !== 'ALL'
+                      ? 'border-accent text-accent font-bold bg-accent/10'
+                      : 'border-border text-fg'
+                  }`}
+                >
+                  <option value="ALL">Все локации</option>
+                  {storeOptions.map((store) => (
+                    <option key={store} value={store}>
+                      {store}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
 
       {/* Main Table / Event List */}
-      <div className="flex-1 overflow-y-auto bg-bg p-2.5 sm:p-4 space-y-1.5 sm:space-y-2">
+      <div className="flex-1 overflow-y-auto bg-bg p-2 sm:p-3 space-y-1.5">
         {filteredLogs.length === 0 ? (
-          <div className="p-8 sm:p-12 text-center text-fg-subtle text-xs space-y-1">
+          <div className="py-10 px-4 text-center text-fg-subtle text-xs space-y-2">
             <ShieldCheck className="w-8 h-8 mx-auto opacity-30 text-fg-subtle" />
             <p className="font-semibold text-fg">События аудита не найдены</p>
-            <p className="text-[11px]">Попробуйте изменить параметры поиска или сбросить фильтры.</p>
+            <p className="text-[11px] text-fg-subtle max-w-xs mx-auto">
+              {isAnyFilterActive ? 'Попробуйте изменить параметры поиска или сбросить фильтры' : 'События безопасности пока не зафиксированы'}
+            </p>
+            {isAnyFilterActive && (
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="inline-flex items-center gap-1 px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-xs font-semibold text-fg active:scale-95 transition-colors"
+              >
+                <RotateCcw className="w-3 h-3 text-accent" />
+                <span>Сбросить фильтры</span>
+              </button>
+            )}
           </div>
         ) : (
           paginatedLogs.map((log) => {

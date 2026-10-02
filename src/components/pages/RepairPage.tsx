@@ -19,8 +19,10 @@ import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { Dialog } from '../ui/Dialog';
 import { Button } from '../ui/Button';
 import { LoadingState } from '../ui/Skeleton';
+import { EmptyState } from '../ui/EmptyState';
 import { MonthPicker } from '../ui/MonthPicker';
 import { useStoreContext } from '../../utils/storeContext';
+import { cn } from '../../utils/cn';
 
 export const RepairPage: React.FC = () => {
   const dataRefreshRevision = useDataRefreshRevision();
@@ -50,8 +52,10 @@ export const RepairPage: React.FC = () => {
     selectedStoreId: globalSelectedStoreId
   } = useAppFields('currentUser', 'repairs', 'fetchRepairsRange', 'sales', 'fetchSalesRange', 'devices', 'findDeviceByImei', 'stores', 'createRepairTicket', 'updateRepairStatus', 'openScanner', 'selectedStoreId');
 
+  const currentMonthKey = useMemo(() => getBusinessDateKey().substring(0, 7), []);
   const [activeTab, setActiveTab] = useState<'list' | 'create'>('list');
-  const [selectedMonth, setSelectedMonth] = useState<string>(getBusinessDateKey().substring(0, 7));
+  const [selectedMonth, setSelectedMonth] = useState<string>(currentMonthKey);
+  const [statusFilter, setStatusFilter] = useState<'ALL' | RepairStatus>('ALL');
   const [searchQuery, setSearchQuery] = useState('');
 
   // Form states for NEW TICKET
@@ -176,7 +180,7 @@ export const RepairPage: React.FC = () => {
     ? (currentUser?.storeName || retailStores.find(s => s.id === currentUser?.storeId)?.name || 'Магазин')
     : (selectedStoreId === 'ALL' ? 'Все филиалы (Розница)' : retailStores.find(s => s.id === selectedStoreId)?.name || 'Магазин');
 
-  const filteredRepairs = useMemo(() => {
+  const periodRepairs = useMemo(() => {
     return (repairs || []).filter((t: RepairTicket) => {
       // Exclude Main Warehouse from repairs
       if (t.storeId === 'store-main') return false;
@@ -210,10 +214,29 @@ export const RepairPage: React.FC = () => {
     }).sort((a: RepairTicket, b: RepairTicket) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
   }, [repairs, effectiveStoreId, selectedMonth, searchQuery]);
 
+  const statusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      ALL: periodRepairs.length,
+      ACCEPTED: 0,
+      IN_PROGRESS: 0,
+      READY: 0,
+      ISSUED: 0,
+    };
+    for (const t of periodRepairs) {
+      counts[t.status] = (counts[t.status] || 0) + 1;
+    }
+    return counts;
+  }, [periodRepairs]);
+
+  const filteredRepairs = useMemo(() => {
+    if (statusFilter === 'ALL') return periodRepairs;
+    return periodRepairs.filter((t: RepairTicket) => t.status === statusFilter);
+  }, [periodRepairs, statusFilter]);
+
   // Statistics for selected month
-  const totalRepairsCount = filteredRepairs.length;
-  const readyRepairsCount = filteredRepairs.filter((t: RepairTicket) => t.status === 'READY' || t.status === 'ISSUED').length;
-  const totalExpensesTjs = sumMoney(filteredRepairs.map(t => t.status === 'ISSUED' ? (t.finalCostTjs || 0) : 0));
+  const totalRepairsCount = periodRepairs.length;
+  const readyRepairsCount = (statusCounts['READY'] || 0) + (statusCounts['ISSUED'] || 0);
+  const totalExpensesTjs = sumMoney(periodRepairs.map(t => t.status === 'ISSUED' ? (t.finalCostTjs || 0) : 0));
 
   // Returns true (and fills the form) if a matching sale was found in the given list.
   const applySoldDeviceMatch = (list: typeof sales, q: string): boolean => {
@@ -449,17 +472,23 @@ export const RepairPage: React.FC = () => {
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
       {/* Top Search & Filter Bar */}
-      <div className="p-2.5 sm:p-3 border-b border-border bg-surface shrink-0 space-y-2">
+      <div className="p-2 sm:p-2.5 border-b border-border bg-surface shrink-0 space-y-2">
         <div className="flex items-center gap-1.5 sm:gap-2">
           {activeTab === 'create' ? (
-            <button
-              type="button"
-              onClick={() => setActiveTab('list')}
-              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 min-h-[32px] sm:min-h-[34px]"
-            >
-              <ArrowLeft className="w-3.5 h-3.5" />
-              <span>К журналу ремонтов</span>
-            </button>
+            <div className="flex items-center justify-between w-full">
+              <button
+                type="button"
+                onClick={() => setActiveTab('list')}
+                className="h-8.5 px-3 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0"
+              >
+                <ArrowLeft className="w-3.5 h-3.5" />
+                <span>К журналу ремонтов</span>
+              </button>
+              <div className="flex items-center gap-1.5 text-xs font-bold text-fg">
+                <Wrench className="w-3.5 h-3.5 text-accent" />
+                <span>Прием в ремонт</span>
+              </div>
+            </div>
           ) : (
             <>
               {/* Compact Search Bar with Scanner inside right corner */}
@@ -470,7 +499,7 @@ export const RepairPage: React.FC = () => {
                   value={searchQuery ?? ''}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Квитанция / ФИО / IMEI..."
-                  className="w-full rounded-xl bg-surface-raised border border-border pl-8 pr-8 py-1.5 text-xs text-fg placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                  className="w-full h-9 rounded-xl bg-surface-raised border border-border pl-8 pr-8 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                 />
                 {searchQuery ? (
                   <button
@@ -500,7 +529,7 @@ export const RepairPage: React.FC = () => {
                   setStatusMessage(null);
                   setActiveTab('create');
                 }}
-                className="shrink-0 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg font-semibold text-xs flex items-center gap-1 transition-all shadow-xs whitespace-nowrap min-h-[32px] sm:min-h-[34px] cursor-pointer"
+                className="shrink-0 h-9 px-3 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg font-semibold text-xs flex items-center gap-1.5 transition-all shadow-xs whitespace-nowrap cursor-pointer"
               >
                 <Plus className="w-3.5 h-3.5" />
                 <span><span className="hidden sm:inline">Прием в </span>ремонт</span>
@@ -517,7 +546,7 @@ export const RepairPage: React.FC = () => {
                 <select
                   value={selectedStoreId}
                   onChange={(e) => setSelectedStoreId(e.target.value)}
-                  className="h-7 bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-0.5 focus:outline-none focus:border-accent cursor-pointer"
+                  className="h-8 bg-surface-raised border border-border text-fg text-xs font-semibold rounded-lg px-2.5 py-0.5 focus:outline-none focus:border-accent cursor-pointer"
                 >
                   <option value="ALL">Все магазины</option>
                   {retailStores.map(s => (
@@ -529,92 +558,145 @@ export const RepairPage: React.FC = () => {
               <MonthPicker
                 value={selectedMonth}
                 onChange={setSelectedMonth}
-                className="h-7 px-2.5 rounded-xl border border-accent text-accent text-xs font-semibold bg-surface-raised focus:outline-none cursor-pointer"
+                isActive={selectedMonth !== currentMonthKey}
+                className="!h-8 !px-2.5 !rounded-lg text-xs"
               />
 
-              {(searchQuery || (selectedStoreId !== 'ALL' && !isStoreScoped && storeCtx.mode === 'CENTRAL')) && (
+              {(searchQuery || (selectedStoreId !== 'ALL' && !isStoreScoped && storeCtx.mode === 'CENTRAL') || selectedMonth !== currentMonthKey || statusFilter !== 'ALL') && (
                 <button
                   type="button"
                   onClick={() => {
                     setSearchQuery('');
+                    setSelectedMonth(currentMonthKey);
+                    setStatusFilter('ALL');
                     if (!isStoreScoped) setSelectedStoreId('ALL');
                   }}
-                  className="p-1 text-fg-subtle hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
-                  title="Сбросить фильтры"
+                  className="h-8 px-2 text-fg-subtle hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
+                  title="Сбросить все фильтры"
                 >
-                  <X className="w-3.5 h-3.5" />
+                  <X className="w-3 h-3" />
+                  <span className="text-[11px]">Сброс</span>
                 </button>
               )}
             </div>
 
             {/* Quick Metrics Strip */}
-            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] text-fg-subtle font-mono shrink-0">
-              <span>{totalRepairsCount} рем.</span>
-              <span>·</span>
-              <span className="text-accent font-bold">{readyRepairsCount} готово</span>
-              <span>·</span>
-              <span className="font-bold text-fg">
-                {formatMoney(totalExpensesTjs)} TJS
-              </span>
+            <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle shrink-0">
+              <span className="px-2 py-0.5 rounded-lg bg-surface-raised border border-border/80 text-fg-muted font-medium">{totalRepairsCount} рем.</span>
+              <span className="px-2 py-0.5 rounded-lg bg-accent/10 border border-accent/20 text-accent font-semibold">{readyRepairsCount} готово</span>
+              <span className="px-2 py-0.5 rounded-lg bg-surface-raised border border-border/80 font-bold text-fg">{formatMoney(totalExpensesTjs)} TJS</span>
             </div>
+          </div>
+        )}
+
+        {/* Row 3 (if list): Status Filter Segmented Tabs */}
+        {activeTab === 'list' && (
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pt-0.5">
+            {[
+              { id: 'ALL', label: 'Все', count: statusCounts.ALL },
+              { id: 'ACCEPTED', label: 'Приняты', count: statusCounts.ACCEPTED },
+              { id: 'IN_PROGRESS', label: 'В работе', count: statusCounts.IN_PROGRESS },
+              { id: 'READY', label: 'Готовы', count: statusCounts.READY },
+              { id: 'ISSUED', label: 'Выданы', count: statusCounts.ISSUED },
+            ].map((tab) => {
+              const isSelected = statusFilter === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  onClick={() => setStatusFilter(tab.id as 'ALL' | RepairStatus)}
+                  className={cn(
+                    'h-7 px-2.5 rounded-lg text-xs font-semibold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer',
+                    isSelected
+                      ? 'bg-accent text-accent-fg shadow-xs'
+                      : 'bg-surface-raised border border-border/80 text-fg-muted hover:text-fg hover:bg-surface'
+                  )}
+                >
+                  <span>{tab.label}</span>
+                  <span
+                    className={cn(
+                      'text-[10px] px-1.5 py-0.2 rounded-full font-bold',
+                      isSelected
+                        ? 'bg-black/20 text-accent-fg'
+                        : tab.count > 0
+                        ? 'bg-accent/10 text-accent border border-accent/20'
+                        : 'bg-surface text-fg-subtle border border-border/60'
+                    )}
+                  >
+                    {tab.count}
+                  </span>
+                </button>
+              );
+            })}
           </div>
         )}
       </div>
 
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-bg p-2.5 sm:p-4 min-w-0 max-w-full">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-bg p-2.5 sm:p-4 min-w-0 max-w-full flex flex-col">
         {activeTab === 'create' ? (
-          <form onSubmit={handleCreateTicket} className="w-full max-w-xl mx-auto space-y-4 min-w-0">
-            <div className="border border-border rounded-xl bg-surface p-3.5 sm:p-5 space-y-4 shadow-xs min-w-0">
-              <h3 className="text-xs md:text-sm font-bold uppercase tracking-wide text-fg-muted flex items-center gap-2 border-b border-border pb-3 flex-wrap sm:flex-nowrap">
-                <Wrench className="w-4 h-4 text-accent shrink-0" />
-                <span className="min-w-0 wrap-break-word">ОФОРМЛЕНИЕ ПРИЕМА НА ГАРАНТИЙНЫЙ РЕМОНТ</span>
-              </h3>
+          <form onSubmit={handleCreateTicket} className="w-full max-w-xl mx-auto space-y-3 min-w-0">
+            <div className="border border-border rounded-xl bg-surface p-3.5 sm:p-4 space-y-3 shadow-2xs min-w-0">
+              <div className="flex items-center justify-between border-b border-border pb-2.5">
+                <h3 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-2">
+                  <Wrench className="w-4 h-4 text-accent shrink-0" />
+                  <span>Квитанция на гарантийный ремонт</span>
+                </h3>
+                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                  Новый
+                </span>
+              </div>
 
-              {/* RECEIPT / IMEI SEARCH BAR */}
-              <div className="p-3 bg-surface-raised rounded-xl border border-accent/40 space-y-2 min-w-0">
-                <label className="block text-[10px] uppercase font-bold text-accent truncate">
-                  ПОИСК В БАЗЕ ПРОДАЖ ПО НОМЕРУ ЧЕКА ИЛИ IMEI:
-                </label>
-                <div className="flex items-center gap-1.5 sm:gap-2 min-w-0">
-                  <input
-                    type="text"
-                    value={receiptSearch ?? ''}
-                    onChange={(e) => setReceiptSearch(e.target.value)}
-                    onKeyDown={(e) => {
-                      // A USB/Bluetooth scanner types the code and presses Enter.
-                      if (e.key === 'Enter') { e.preventDefault(); handleFindSoldDevice(receiptSearch); }
-                    }}
-                    enterKeyHint="search"
-                    aria-label="Номер чека или IMEI"
-                    placeholder="Номер чека или IMEI..."
-                    className="flex-1 min-w-0 w-full rounded-lg bg-surface border border-border px-2.5 sm:px-3 py-1.5 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none"
-                  />
+              {/* Быстрый поиск по чеку или IMEI */}
+              <div className="p-2.5 bg-surface-raised rounded-xl border border-border space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-[11px] font-semibold text-fg-muted flex items-center gap-1.5">
+                    <Search className="w-3 h-3 text-accent" />
+                    Поиск по номеру чека или IMEI
+                  </span>
+                  <span className="text-[10px] text-fg-subtle">автозаполнение</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <div className="relative flex-1 min-w-0">
+                    <input
+                      type="text"
+                      value={receiptSearch ?? ''}
+                      onChange={(e) => setReceiptSearch(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') { e.preventDefault(); handleFindSoldDevice(receiptSearch); }
+                      }}
+                      enterKeyHint="search"
+                      aria-label="Номер чека или IMEI"
+                      placeholder="Номер чека или IMEI..."
+                      className="w-full h-9 rounded-lg bg-surface border border-border px-3 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                    />
+                  </div>
                   <button
                     type="button"
                     onClick={() => handleFindSoldDevice(receiptSearch)}
-                    className="shrink-0 px-2.5 sm:px-3 py-1.5 bg-accent hover:bg-accent-strong active:scale-95 text-xs font-bold rounded-lg text-accent-fg transition-all"
+                    disabled={!receiptSearch.trim()}
+                    className="h-9 px-3 bg-accent hover:bg-accent-strong active:scale-95 disabled:opacity-40 text-xs font-bold rounded-lg text-accent-fg transition-colors shrink-0 cursor-pointer"
                   >
                     Найти
                   </button>
                   <button
                     type="button"
                     onClick={handleScanTicket}
-                    className="shrink-0 p-1.5 sm:px-3 sm:py-1.5 bg-surface hover:bg-surface-raised active:scale-95 text-accent rounded-lg border border-border transition-all"
+                    className="h-9 w-9 flex items-center justify-center bg-surface hover:bg-surface-raised active:scale-95 text-accent rounded-lg border border-border transition-colors shrink-0 cursor-pointer"
                     title="Сканировать"
                   >
-                    <Scan className="w-4 h-4 shrink-0" />
+                    <Scan className="w-4 h-4" />
                   </button>
                 </div>
               </div>
 
               {!isStoreScoped && (
                 <div className="min-w-0">
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase font-bold truncate">Торговая точка (Где было продано / принято) *</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">Торговая точка *</label>
                   <select
                     value={createTicketStoreId}
                     onChange={(e) => setCreateTicketStoreId(e.target.value)}
-                    className="w-full min-w-0 max-w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted text-xs font-semibold focus:border-accent focus:outline-none truncate"
+                    className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs font-medium focus:border-accent focus:outline-none truncate cursor-pointer"
                   >
                     {retailStores.map(s => (
                       <option key={s.id} value={s.id}>{s.name}</option>
@@ -623,21 +705,21 @@ export const RepairPage: React.FC = () => {
                 </div>
               )}
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
                 <div className="min-w-0">
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">ФИО клиента *</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">ФИО клиента *</label>
                   <input
                     type="text"
                     required
                     value={clientName ?? ''}
                     onChange={(e) => setClientName(e.target.value)}
                     placeholder="Иван Иванов"
-                    className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                    className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                   />
                 </div>
 
                 <div className="min-w-0">
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">Телефон *</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">Телефон *</label>
                   <input
                     type="tel"
                     inputMode="tel"
@@ -646,58 +728,60 @@ export const RepairPage: React.FC = () => {
                     value={clientPhone ?? ''}
                     onChange={(e) => setClientPhone(e.target.value)}
                     placeholder="+992 900 000 000"
-                    className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                    className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                   />
                 </div>
               </div>
 
-              <div className="space-y-3 text-xs">
+              <div className="space-y-2.5 text-xs">
                 <div className="min-w-0">
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">Модель устройства *</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">Модель устройства *</label>
                   <input
                     type="text"
                     required
                     value={deviceModel ?? ''}
                     onChange={(e) => setDeviceModel(e.target.value)}
                     placeholder="iPhone 15 Pro Max 256GB"
-                    className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                    className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                   />
                 </div>
 
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
                   <div className="min-w-0">
-                    <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">IMEI 1</label>
+                    <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">IMEI 1</label>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={imei ?? ''}
                       onChange={(e) => setImei(e.target.value)}
                       placeholder="354891100234561"
-                      className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                      className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs font-mono placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                     />
                   </div>
                   <div className="min-w-0">
-                    <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">IMEI 2 (опционально / по желанию)</label>
+                    <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">
+                      IMEI 2 <span className="text-[10px] text-fg-subtle font-normal">(опционально)</span>
+                    </label>
                     <input
                       type="text"
                       inputMode="numeric"
                       value={imei2 ?? ''}
                       onChange={(e) => setImei2(e.target.value)}
-                      placeholder="354891100234562 (по желанию)"
-                      className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
+                      placeholder="354891100234562"
+                      className="w-full min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-fg text-xs font-mono placeholder:text-fg-subtle focus:border-accent focus:outline-none transition-colors"
                     />
                   </div>
                 </div>
 
                 <div className="min-w-0">
-                  <label className="block text-fg-subtle mb-1 text-[11px] uppercase truncate">Описание дефекта / Неисправности *</label>
+                  <label className="block text-fg-subtle mb-1 text-[11px] font-semibold">Описание неисправности *</label>
                   <textarea
                     required
-                    rows={3}
+                    rows={2}
                     value={defectDescription ?? ''}
                     onChange={(e) => setDefectDescription(e.target.value)}
                     placeholder="Не заряжается, разбито стекло дисплея..."
-                    className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none resize-none"
+                    className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs placeholder:text-fg-subtle focus:border-accent focus:outline-none resize-none transition-colors"
                   />
                 </div>
               </div>
@@ -705,7 +789,7 @@ export const RepairPage: React.FC = () => {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full py-3 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-sm font-bold text-accent-fg transition-all shadow-xs mt-2 disabled:opacity-60 flex items-center justify-center gap-1.5"
+                className="w-full h-10 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-xs sm:text-sm font-bold text-accent-fg transition-all shadow-xs mt-1 disabled:opacity-60 flex items-center justify-center gap-1.5 cursor-pointer"
               >
                 {isSubmitting && <Loader2 className="w-4 h-4 animate-spin shrink-0" />}
                 <span className="truncate">{isSubmitting ? 'Оформление…' : 'Оформить приём в ремонт'}</span>
@@ -713,18 +797,115 @@ export const RepairPage: React.FC = () => {
             </div>
           </form>
         ) : (
-          <div className="space-y-2">
+          <div className="flex-1 flex flex-col min-w-0">
             {/* List of Tickets */}
             {listLoad === 'loading' && filteredRepairs.length === 0 ? (
               <LoadingState label="Загрузка ремонтов…" />
             ) : listLoad === 'error' && filteredRepairs.length === 0 ? (
-              <div className="p-8 text-center space-y-3">
+              <div className="p-8 text-center space-y-3 my-auto">
                 <p className="text-sm text-fg-muted">Не удалось загрузить ремонты за период. Проверьте подключение к интернету.</p>
                 <Button onClick={() => setListLoadAttempt((n) => n + 1)}>Повторить</Button>
               </div>
             ) : filteredRepairs.length === 0 ? (
-              <div className="p-12 text-center text-fg-muted text-xs uppercase tracking-wider">
-                Квитанции на ремонт не найдены
+              <div className="flex-1 flex flex-col items-center justify-center py-8 px-4 text-center my-auto min-h-[300px]">
+                <div className="w-13 h-13 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
+                  <Wrench className="w-6 h-6" />
+                </div>
+
+                <h3 className="text-sm sm:text-base font-bold text-fg">
+                  {searchQuery
+                    ? 'Ничего не найдено'
+                    : statusFilter !== 'ALL'
+                    ? `Нет квитанций со статусом «${statusFilter === 'ACCEPTED' ? 'Приняты' : statusFilter === 'IN_PROGRESS' ? 'В работе' : statusFilter === 'READY' ? 'Готовы' : 'Выданы'}»`
+                    : 'Квитанции на ремонт не найдены'}
+                </h3>
+
+                <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                  {searchQuery
+                    ? `По запросу «${searchQuery}» совпадений не найдено. Проверьте номер чека, имя клиента или IMEI.`
+                    : statusFilter !== 'ALL'
+                    ? 'В выбранном периоде нет квитанций с таким статусом.'
+                    : `За ${selectedMonth === 'ALL' ? 'весь период' : 'выбранный месяц'} квитанций на ремонт нет.`}
+                </p>
+
+                <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                  {searchQuery && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      className="!h-8.5 !px-3 text-xs"
+                      onClick={() => setSearchQuery('')}
+                    >
+                      <X className="w-3.5 h-3.5 mr-1 text-fg-subtle" />
+                      Сбросить поиск
+                    </Button>
+                  )}
+                  {statusFilter !== 'ALL' && (
+                    <Button
+                      variant="secondary"
+                      size="md"
+                      className="!h-8.5 !px-3 text-xs"
+                      onClick={() => setStatusFilter('ALL')}
+                    >
+                      Показать все статусы
+                    </Button>
+                  )}
+                  {!searchQuery && statusFilter === 'ALL' && (
+                    <Button
+                      size="md"
+                      className="!h-8.5 !px-3.5 text-xs shadow-xs"
+                      onClick={() => {
+                        setStatusMessage(null);
+                        setActiveTab('create');
+                      }}
+                    >
+                      <Plus className="w-3.5 h-3.5 mr-1" />
+                      Оформить приём в ремонт
+                    </Button>
+                  )}
+                </div>
+
+                {/* Quick helper action cards */}
+                {!searchQuery && statusFilter === 'ALL' && (
+                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full text-left">
+                    <div
+                      onClick={() => {
+                        setStatusMessage(null);
+                        setActiveTab('create');
+                      }}
+                      className="p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/50 transition-all cursor-pointer group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-6 h-6 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent group-hover:scale-105 transition-transform">
+                          <Plus className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-bold text-fg group-hover:text-accent transition-colors">
+                          Приём в ремонт
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-fg-subtle leading-snug">
+                        Оформление приёма с фиксацией дефекта, IMEI и предоплаты
+                      </p>
+                    </div>
+
+                    <div
+                      onClick={handleScanListSearch}
+                      className="p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/50 transition-all cursor-pointer group shadow-2xs"
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <div className="w-6 h-6 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info group-hover:scale-105 transition-transform">
+                          <Scan className="w-3.5 h-3.5" />
+                        </div>
+                        <span className="text-xs font-bold text-fg group-hover:text-info transition-colors">
+                          Быстрый поиск
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-fg-subtle leading-snug">
+                        Поиск квитанции по штрихкоду или поиск устройства по IMEI
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="space-y-2">

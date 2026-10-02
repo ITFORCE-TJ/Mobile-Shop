@@ -94,27 +94,27 @@ export const BonusAccountCard: React.FC = () => {
   };
 
   return (
-    <section className="rounded-xl border border-border bg-surface p-3 sm:p-4 space-y-2.5 sm:space-y-3" aria-labelledby="bonus-account-title">
+    <section className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 space-y-2" aria-labelledby="bonus-account-title">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
         <div className="space-y-0.5 min-w-0">
           <h2 id="bonus-account-title" className="text-xs sm:text-sm font-bold text-fg">Бонусный счёт</h2>
           {error ? (
             <p className="text-xs text-danger">{error}</p>
           ) : (
             <p className="tabular-nums flex items-baseline gap-1.5">
-              <span className="text-base sm:text-lg font-black text-accent font-mono">{balance ? formatTjs(balance.balanceTjs) : '—'}</span>
-              <span className="text-[11px] sm:text-xs text-fg-subtle font-mono">{balance ? formatUsd(balance.balanceUsd) : ''}</span>
+              <span className="text-sm sm:text-base font-black text-accent font-mono">{balance ? formatTjs(balance.balanceTjs) : '—'}</span>
+              <span className="text-[11px] text-fg-subtle font-mono">{balance ? formatUsd(balance.balanceUsd) : ''}</span>
             </p>
           )}
         </div>
-        <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+        <div className="flex items-center gap-1.5 shrink-0 w-full sm:w-auto">
           <Button
             variant="primary"
             leftIcon={Landmark}
             disabled={available <= 0}
             onClick={() => openForm('transfer')}
-            className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold justify-center"
+            className="flex-1 sm:flex-initial !h-7.5 !px-2.5 text-xs font-bold justify-center shadow-xs"
           >
             <span className="sm:hidden">В кассу</span>
             <span className="hidden sm:inline">В Центральную кассу</span>
@@ -124,7 +124,7 @@ export const BonusAccountCard: React.FC = () => {
             leftIcon={HandCoins}
             disabled={available <= 0}
             onClick={() => openForm('payout')}
-            className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold justify-center"
+            className="flex-1 sm:flex-initial !h-7.5 !px-2.5 text-xs font-bold justify-center"
           >
             Выдать
           </Button>

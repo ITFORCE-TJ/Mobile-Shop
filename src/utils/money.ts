@@ -32,14 +32,34 @@ export function formatMoney(
   });
 }
 
-/** Formats a monetary value in TJS with 2 decimal places: e.g. "10.50 TJS" */
+/** Formats a monetary value in TJS with 2 decimal places: e.g. "10.50 TJS" or "-10.50 TJS" */
 export function formatTjs(value: Decimal | number | string | null | undefined): string {
-  return `${formatMoney(value)} TJS`;
+  if (value === null || value === undefined || value === '') return '0.00 TJS';
+  const num = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+    ? Number(value.trim().replace(',', '.'))
+    : Number(value);
+  if (!Number.isFinite(num)) return '0.00 TJS';
+  if (num < 0) {
+    return `-${formatMoney(Math.abs(num))} TJS`;
+  }
+  return `${formatMoney(num)} TJS`;
 }
 
-/** Formats a monetary value in USD with 2 decimal places: e.g. "$10.50" */
+/** Formats a monetary value in USD with 2 decimal places: e.g. "$10.50" or "-$10.50" */
 export function formatUsd(value: Decimal | number | string | null | undefined): string {
-  return `$${formatMoney(value)}`;
+  if (value === null || value === undefined || value === '') return '$0.00';
+  const num = typeof value === 'number'
+    ? value
+    : typeof value === 'string'
+    ? Number(value.trim().replace(',', '.'))
+    : Number(value);
+  if (!Number.isFinite(num)) return '$0.00';
+  if (num < 0) {
+    return `-$${formatMoney(Math.abs(num))}`;
+  }
+  return `$${formatMoney(num)}`;
 }
 
 /**

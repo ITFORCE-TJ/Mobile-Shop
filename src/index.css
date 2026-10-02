@@ -572,3 +572,30 @@ select optgroup,
   animation: storeCatalogFadeIn 0.28s cubic-bezier(0.16, 1, 0.3, 1) forwards;
 }
 
+@keyframes scanLaser {
+  0% {
+    top: 10%;
+    opacity: 0.4;
+  }
+  20% {
+    opacity: 1;
+  }
+  80% {
+    opacity: 1;
+  }
+  100% {
+    top: 90%;
+    opacity: 0.4;
+  }
+}
+
+.scanner-laser-line {
+  position: absolute;
+  left: 4%;
+  right: 4%;
+  height: 2px;
+  animation: scanLaser 2s cubic-bezier(0.45, 0.05, 0.55, 0.95) infinite alternate;
+  pointer-events: none;
+}
+
+

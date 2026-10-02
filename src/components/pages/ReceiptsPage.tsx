@@ -1,6 +1,20 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
-import { CheckCircle2, Eye, PackageCheck, PackagePlus, Repeat, Scan, Smartphone, Trash2 } from 'lucide-react';
+import {
+  CheckCircle2,
+  Eye,
+  PackageCheck,
+  PackagePlus,
+  Repeat,
+  Scan,
+  Smartphone,
+  Trash2,
+  ChevronRight,
+  Info,
+  ArrowRight,
+  Search,
+  X
+} from 'lucide-react';
 import { useAppFields } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
 import { mapStoreReceipt } from '../../api/mappers';
@@ -10,12 +24,12 @@ import { soundEffects } from '../../utils/sound';
 import { Button } from '../ui/Button';
 import { Badge } from '../ui/Badge';
 import { Dialog } from '../ui/Dialog';
-import { EmptyState } from '../ui/EmptyState';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { LoadingState } from '../ui/Skeleton';
 import { StatusBanner, type StatusMessage } from '../ui/StatusBanner';
-import { useStoreContext } from '../../utils/storeContext';
+import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 import { useUnfinishedWork } from '../../utils/pwaUpdateSafety';
+import { cn } from '../../utils/cn';
 
 interface ScannedDevice {
   id: string;
@@ -49,16 +63,44 @@ function useReceipts(revision: number, storeFilter: string) {
 }
 
 const ReceiptRow: React.FC<{ receipt: StoreReceipt; showStore: boolean; onOpen: () => void }> = ({ receipt, showStore, onOpen }) => (
-  <button type="button" onClick={onOpen} className="w-full text-left p-3 flex items-center justify-between gap-3 hover:bg-surface-raised/60 active:bg-surface-raised">
-    <div className="min-w-0">
-      <p className="text-sm font-semibold text-fg-muted truncate">
-        {showStore && receipt.storeName ? `${receipt.storeName} · ` : ''}{receipt.itemCount} шт.
-      </p>
-      <p className="text-xs text-fg-subtle truncate">{receipt.receiptNumber} · {new Date(receipt.createdAt).toLocaleString('ru-RU')} · {receipt.createdByName}</p>
+  <button
+    type="button"
+    onClick={onOpen}
+    className="w-full text-left p-2.5 sm:p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/50 active:bg-surface-raised transition-all flex items-center justify-between gap-3 shadow-2xs cursor-pointer"
+  >
+    <div className="flex items-center gap-2.5 min-w-0">
+      <div className="w-8.5 h-8.5 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-bold text-xs shrink-0 font-mono">
+        {receipt.itemCount}
+      </div>
+      <div className="min-w-0">
+        <div className="flex items-center gap-1.5 flex-wrap">
+          <span className="text-xs sm:text-sm font-bold text-fg truncate">
+            {receipt.receiptNumber}
+          </span>
+          {showStore && receipt.storeName && (
+            <span className="text-[10px] font-semibold text-fg-muted px-1.5 py-0.2 rounded-md bg-surface-raised border border-border/80 shrink-0 truncate max-w-[120px]">
+              {receipt.storeName}
+            </span>
+          )}
+        </div>
+        <p className="text-[11px] text-fg-subtle truncate mt-0.5">
+          {new Date(receipt.createdAt).toLocaleDateString('ru-RU')} • Принял: {receipt.createdByName}
+        </p>
+      </div>
     </div>
-    {receipt.acknowledgedAt
-      ? <Badge tone="success">Просмотрен</Badge>
-      : <Badge tone="warning">Не просмотрен</Badge>}
+
+    <div className="flex items-center gap-1.5 shrink-0">
+      {receipt.acknowledgedAt ? (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-accent/10 border border-accent/20 text-accent">
+          Просмотрен
+        </span>
+      ) : (
+        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-warning/15 border border-warning/30 text-warning">
+          Новый
+        </span>
+      )}
+      <ChevronRight className="w-4 h-4 text-fg-subtle" />
+    </div>
   </button>
 );
 
@@ -212,22 +254,143 @@ export const ReceiptsPage: React.FC = () => {
 
   // ---------- lists ----------
   const [storeFilterChoice, setStoreFilter] = useState('all');
+  const [statusFilter, setStatusFilter] = useState<'ALL' | 'UNACKNOWLEDGED' | 'ACKNOWLEDGED'>('ALL');
+  const [searchQuery, setSearchQuery] = useState('');
   const storeCtx = useStoreContext();
   const storeFilter = storeCtx.mode === 'STORE' && isAdmin ? storeCtx.storeId : storeFilterChoice;
   const { items: receipts, error: listError } = useReceipts(revision, isAdmin ? storeFilter : 'all');
   const retailStores = useMemo(() => stores.filter((s) => !s.isMainWarehouse), [stores]);
 
+  const totalReceipts = receipts?.length || 0;
+  const totalDevicesReceived = (receipts || []).reduce((sum, r) => sum + (r.itemCount || 0), 0);
+  const unacknowledgedCount = (receipts || []).filter((r) => !r.acknowledgedAt).length;
+  const acknowledgedCount = totalReceipts - unacknowledgedCount;
+
+  const filteredReceipts = useMemo(() => {
+    return (receipts || []).filter((r) => {
+      if (statusFilter === 'UNACKNOWLEDGED' && r.acknowledgedAt) return false;
+      if (statusFilter === 'ACKNOWLEDGED' && !r.acknowledgedAt) return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        const matches =
+          r.receiptNumber.toLowerCase().includes(q) ||
+          r.createdByName.toLowerCase().includes(q) ||
+          (r.storeName && r.storeName.toLowerCase().includes(q)) ||
+          r.items.some((item) => item.imei.toLowerCase().includes(q) || item.model.toLowerCase().includes(q));
+        if (!matches) return false;
+      }
+      return true;
+    });
+  }, [receipts, statusFilter, searchQuery]);
+
   const list = (
-    <div className="space-y-2">
+    <div className="flex-1 flex flex-col space-y-2">
       {listError ? (
-        <EmptyState icon={PackagePlus} title="Не удалось загрузить приходы" description={listError} action={<Button onClick={() => setRevision((v) => v + 1)}>Повторить</Button>} />
+        <div className="p-8 text-center space-y-3 my-auto">
+          <p className="text-sm text-fg-muted">{listError}</p>
+          <Button onClick={() => setRevision((v) => v + 1)}>Повторить</Button>
+        </div>
       ) : receipts === null ? (
         <LoadingState label="Загрузка приходов…" />
-      ) : receipts.length === 0 ? (
-        <EmptyState icon={PackagePlus} title="Приходов пока нет" description={isAdmin ? 'Здесь появятся приходы, которые магазины оформили по IMEI' : 'Оформленные вами приходы появятся здесь'} />
+      ) : filteredReceipts.length === 0 ? (
+        <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[300px]">
+          <div className="w-13 h-13 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
+            <PackagePlus className="w-6 h-6" />
+          </div>
+
+          <h3 className="text-sm sm:text-base font-bold text-fg">
+            {searchQuery
+              ? 'Приходы не найдены'
+              : statusFilter !== 'ALL'
+              ? 'Нет приходов в этом статусе'
+              : 'Приходов пока нет'}
+          </h3>
+
+          <p className="text-xs text-fg-subtle mt-1.5 max-w-sm leading-relaxed">
+            {searchQuery
+              ? `По запросу «${searchQuery}» приходов не обнаружено.`
+              : statusFilter !== 'ALL'
+              ? 'В выбранной вкладке нет приходов.'
+              : isAdmin
+              ? 'Сюда поступают отчёты о приёмке товара, когда продавцы в магазине сканируют IMEI доставленных телефонов.'
+              : 'Отсканируйте телефоны, поступившие со склада, чтобы принять их на баланс магазина.'}
+          </p>
+
+          <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+            {searchQuery && (
+              <Button
+                variant="secondary"
+                size="md"
+                className="!h-8.5 !px-3 text-xs"
+                onClick={() => setSearchQuery('')}
+              >
+                <X className="w-3.5 h-3.5 mr-1" />
+                Сбросить поиск
+              </Button>
+            )}
+            {statusFilter !== 'ALL' && (
+              <Button
+                variant="secondary"
+                size="md"
+                className="!h-8.5 !px-3 text-xs"
+                onClick={() => setStatusFilter('ALL')}
+              >
+                Все статусы
+              </Button>
+            )}
+          </div>
+
+          {/* Visual workflow step guide for Admin when 0 receipts */}
+          {!searchQuery && statusFilter === 'ALL' && isAdmin && (
+            <div className="mt-6 max-w-md w-full bg-surface border border-border/80 rounded-2xl p-3.5 text-left space-y-3 shadow-2xs">
+              <div className="flex items-center gap-2 pb-2 border-b border-border/60">
+                <div className="w-5 h-5 rounded-md bg-info/10 border border-info/20 flex items-center justify-center text-info">
+                  <Info className="w-3 h-3" />
+                </div>
+                <span className="text-xs font-bold text-fg">Как работает оприходование в магазине</span>
+              </div>
+
+              <div className="space-y-2 text-[11px] text-fg-subtle">
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-surface-raised border border-border text-fg font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                  <p><strong className="text-fg-muted">Закупка:</strong> партия товара приходуется на главный склад в разделе «Закупки».</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-surface-raised border border-border text-fg font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                  <p><strong className="text-fg-muted">Перемещение:</strong> со склада телефоны отправляются в магазин через раздел «Перемещения».</p>
+                </div>
+                <div className="flex items-start gap-2">
+                  <span className="w-4 h-4 rounded-full bg-accent/10 border border-accent/20 text-accent font-bold text-[10px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                  <p><strong className="text-accent">Приёмка:</strong> продавец открывает «Приход» в магазине, сканирует IMEI полученных телефонов, и они сразу поступают на витрину.</p>
+                </div>
+              </div>
+
+              <div className="pt-2 border-t border-border/60 flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => navigate('/transfer')}
+                  className="flex-1 h-8 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <ArrowRight className="w-3.5 h-3.5 text-accent" />
+                  <span>Перемещения</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate('/purchase')}
+                  className="flex-1 h-8 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                >
+                  <PackagePlus className="w-3.5 h-3.5 text-accent" />
+                  <span>Закупки</span>
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       ) : (
-        <div className="rounded-xl border border-border bg-surface divide-y divide-border">
-          {receipts.map((r) => <ReceiptRow key={r.id} receipt={r} showStore={isAdmin} onOpen={() => setOpenReceiptId(r.id)} />)}
+        <div className="space-y-2">
+          {filteredReceipts.map((r) => (
+            <ReceiptRow key={r.id} receipt={r} showStore={isAdmin && storeCtx.mode === 'CENTRAL'} onOpen={() => setOpenReceiptId(r.id)} />
+          ))}
         </div>
       )}
     </div>
@@ -237,19 +400,107 @@ export const ReceiptsPage: React.FC = () => {
     return (
       <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
         <StatusBanner message={status} onDismiss={() => setStatus(null)} />
-        <div className="p-3 border-b border-border shrink-0 flex items-center justify-between gap-2">
-          <h1 className="text-base font-semibold text-fg">{storeCtx.mode === 'STORE' ? `Приходы: ${storeCtx.storeName}` : 'Приходы магазинов'}</h1>
-          {storeCtx.mode === 'CENTRAL' && <select
-            value={storeFilter}
-            onChange={(e) => setStoreFilter(e.target.value)}
-            aria-label="Магазин"
-            className="rounded-lg bg-surface border border-border px-3 text-fg-muted"
-          >
-            <option value="all">Все магазины</option>
-            {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>}
+
+        {/* Admin Header Controls */}
+        <div className="p-2.5 sm:p-3 border-b border-border bg-surface shrink-0 space-y-2">
+          {/* Row 1: Title + Store Filter + KPI Chips */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <h1 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
+              <PackagePlus className="w-4 h-4 text-accent" />
+              <span>{storeCtx.mode === 'STORE' ? `Приходы: ${formatStoreName(storeCtx.storeName)}` : 'Приходы в магазины'}</span>
+            </h1>
+
+            <div className="flex items-center gap-1.5 text-[11px] shrink-0">
+              {storeCtx.mode === 'CENTRAL' && (
+                <select
+                  value={storeFilter}
+                  onChange={(e) => setStoreFilter(e.target.value)}
+                  aria-label="Магазин"
+                  className="h-7.5 rounded-lg bg-surface-raised border border-border px-2 text-fg text-xs font-semibold focus:outline-none focus:border-accent cursor-pointer"
+                >
+                  <option value="all">Все магазины</option>
+                  {retailStores.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
+                </select>
+              )}
+              <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-fg-muted font-medium">
+                {totalReceipts} док.
+              </span>
+              <span className="px-2 py-0.5 rounded-md bg-accent/10 border border-accent/20 text-accent font-semibold">
+                {totalDevicesReceived} шт.
+              </span>
+              {unacknowledgedCount > 0 && (
+                <span className="px-2 py-0.5 rounded-md bg-warning/15 border border-warning/30 text-warning font-bold">
+                  {unacknowledgedCount} новых
+                </span>
+              )}
+            </div>
+          </div>
+
+          {/* Row 2: Status Tabs + Quick Search */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
+            <div className="flex items-center gap-1 overflow-x-auto no-scrollbar py-0.5">
+              {[
+                { id: 'ALL', label: 'Все', count: totalReceipts },
+                { id: 'UNACKNOWLEDGED', label: 'Новые', count: unacknowledgedCount },
+                { id: 'ACKNOWLEDGED', label: 'Просмотрены', count: acknowledgedCount },
+              ].map((tab) => {
+                const isSelected = statusFilter === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    type="button"
+                    onClick={() => setStatusFilter(tab.id as any)}
+                    className={cn(
+                      'h-7 px-2.5 rounded-lg text-xs font-semibold shrink-0 transition-all flex items-center gap-1.5 cursor-pointer',
+                      isSelected
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'bg-surface-raised border border-border/80 text-fg-muted hover:text-fg hover:bg-surface'
+                    )}
+                  >
+                    <span>{tab.label}</span>
+                    <span
+                      className={cn(
+                        'text-[10px] px-1.5 py-0.2 rounded-full font-bold',
+                        isSelected
+                          ? 'bg-black/20 text-accent-fg'
+                          : tab.count > 0
+                          ? 'bg-accent/10 text-accent border border-accent/20'
+                          : 'bg-surface text-fg-subtle border border-border/60'
+                      )}
+                    >
+                      {tab.count}
+                    </span>
+                  </button>
+                );
+              })}
+            </div>
+
+            {totalReceipts > 0 && (
+              <div className="relative w-full sm:w-56 shrink-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Номер, сотрудник, IMEI..."
+                  className="w-full h-7.5 rounded-lg bg-surface-raised border border-border pl-8 pr-7 text-xs text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none"
+                />
+                {searchQuery && (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
+                  >
+                    <X className="w-3 h-3" />
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
         </div>
-        <div className="flex-1 overflow-y-auto p-3 max-w-3xl w-full mx-auto">{list}</div>
+
+        {/* Content list */}
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 max-w-3xl w-full mx-auto flex flex-col">{list}</div>
         <ReceiptDialog receiptId={openReceiptId} isAdmin onClose={closeReceipt} onChanged={() => setRevision((v) => v + 1)} />
       </div>
     );
@@ -259,12 +510,12 @@ export const ReceiptsPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      <div className="p-3 border-b border-border shrink-0 space-y-3">
+      <div className="p-2.5 sm:p-3 border-b border-border shrink-0 space-y-2.5 bg-surface">
         <FilterPillGroup options={[{ value: 'NEW', label: 'Новый приход' }, { value: 'HISTORY', label: 'Мои приходы' }]} value={tab} onChange={setTab} />
         {tab === 'NEW' && (
-          <>
-            <Button fullWidth size="lg" leftIcon={Scan} onClick={startScan} className="h-14 text-base">Сканировать IMEI</Button>
-            <div className="flex items-center gap-2">
+          <div className="space-y-2">
+            <Button fullWidth size="md" leftIcon={Scan} onClick={startScan} className="h-10 text-xs sm:text-sm font-bold shadow-xs">Сканировать IMEI</Button>
+            <div className="flex items-center gap-1.5">
               <input
                 ref={manualInput}
                 type="text"
@@ -282,41 +533,52 @@ export const ReceiptsPage: React.FC = () => {
                 }}
                 placeholder="IMEI вручную или ручным сканером"
                 aria-label="IMEI вручную или ручным сканером"
-                className="flex-1 min-w-0 h-11 rounded-lg bg-surface border border-border px-3 text-fg-muted placeholder:text-fg-subtle focus:outline-none focus:border-accent"
+                className="flex-1 min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
               />
-              <Button variant="secondary" disabled={!manualCode.trim()} onClick={() => { const code = manualCode; setManualCode(''); void addCode(code); manualInput.current?.focus(); }}>Добавить</Button>
+              <Button size="md" variant="secondary" disabled={!manualCode.trim()} onClick={() => { const code = manualCode; setManualCode(''); void addCode(code); manualInput.current?.focus(); }} className="!h-9 !px-3 text-xs">Добавить</Button>
             </div>
-            <label className="flex items-center gap-2 text-xs text-fg-subtle select-none">
-              <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} className="w-4 h-4 accent-[var(--color-accent)]" />
-              <Repeat className="w-3.5 h-3.5" /> Непрерывное сканирование (камера открывается снова после каждого телефона)
+            <label className="flex items-center gap-2 text-[11px] text-fg-subtle select-none cursor-pointer">
+              <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} className="w-3.5 h-3.5 accent-[var(--color-accent)]" />
+              <Repeat className="w-3 h-3 text-accent" /> Непрерывное сканирование (камера открывается снова после каждого телефона)
             </label>
-          </>
+          </div>
         )}
       </div>
 
       {tab === 'NEW' ? (
         <>
-          <div className="flex-1 min-h-0 overflow-y-auto p-3">
-            <div className="flex items-baseline justify-between mb-2">
-              <h2 className="text-sm font-semibold text-fg-muted">Отсканировано</h2>
-              <span className="text-2xl font-bold tabular-nums text-accent" aria-live="polite">{scanned.length}</span>
+          <div className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 flex flex-col">
+            <div className="flex items-center justify-between mb-2">
+              <h2 className="text-xs font-bold text-fg-muted">Отсканировано</h2>
+              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent font-mono" aria-live="polite">{scanned.length} шт.</span>
             </div>
             {scanned.length === 0 ? (
-              <EmptyState icon={Smartphone} title="Список пуст" description="Отсканируйте телефоны, которые привёз администратор. Каждый проверяется по главному складу." />
+              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[240px]">
+                <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
+                  <Smartphone className="w-6 h-6" />
+                </div>
+                <h3 className="text-sm font-bold text-fg">Список приёмки пуст</h3>
+                <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                  Отсканируйте телефоны, которые поступили со склада. Каждый телефон автоматически сверяется с базой.
+                </p>
+                <Button size="md" leftIcon={Scan} onClick={startScan} className="mt-4 !h-8.5 !px-3.5 text-xs shadow-xs">
+                  Начать сканирование
+                </Button>
+              </div>
             ) : (
-              <ul className="rounded-xl border border-border bg-surface divide-y divide-border">
+              <ul className="space-y-1.5">
                 {scanned.map((d) => (
-                  <li key={d.id} className="flex items-center justify-between gap-2 pl-3 pr-1 py-1.5">
-                    <div className="min-w-0 py-1">
-                      <p className="text-sm font-semibold text-fg-muted truncate">{d.brand} {d.model}</p>
-                      <p className="text-xs text-fg-subtle truncate">{specLine(d)}</p>
-                      <p className="text-xs text-fg-subtle tabular-nums">IMEI {d.imei}</p>
+                  <li key={d.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-surface border border-border shadow-2xs">
+                    <div className="min-w-0">
+                      <p className="text-xs font-bold text-fg truncate">{d.brand} {d.model}</p>
+                      <p className="text-[11px] text-fg-muted truncate">{specLine(d)}</p>
+                      <p className="text-[10px] text-fg-subtle font-mono">IMEI: {d.imei}</p>
                     </div>
                     <button
                       type="button"
                       onClick={() => setScanned((prev) => prev.filter((x) => x.id !== d.id))}
                       aria-label={`Убрать ${d.brand} ${d.model} (${d.imei}) из прихода`}
-                      className="w-11 h-11 shrink-0 flex items-center justify-center rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10"
+                      className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
                     >
                       <Trash2 className="w-4 h-4" />
                     </button>
@@ -326,14 +588,14 @@ export const ReceiptsPage: React.FC = () => {
             )}
           </div>
           {/* In-flow bottom bar (above the bottom nav and its safe area, clear of its raised button). */}
-          <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-bg">
-            <Button fullWidth size="lg" leftIcon={PackageCheck} loading={submitting} disabled={scanned.length === 0 || submitting} onClick={submit} className="h-14 text-base max-w-2xl mx-auto">
+          <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-surface/80 backdrop-blur-xs">
+            <Button fullWidth size="md" leftIcon={PackageCheck} loading={submitting} disabled={scanned.length === 0 || submitting} onClick={submit} className="h-10 text-xs sm:text-sm font-bold max-w-2xl mx-auto shadow-xs">
               {submitting ? 'Оприходование…' : `Оприходовать ${scanned.length} шт.`}
             </Button>
           </div>
         </>
       ) : (
-        <div className="flex-1 overflow-y-auto p-3">{list}</div>
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 flex flex-col">{list}</div>
       )}
 
       <Dialog

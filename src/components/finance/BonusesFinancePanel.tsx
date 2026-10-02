@@ -92,6 +92,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
   const [poolLoading, setPoolLoading] = useState(false);
   const [poolDetailsTab, setPoolDetailsTab] = useState<'ENTRIES' | 'HISTORY'>('ENTRIES');
   const [isPoolExpanded, setIsPoolExpanded] = useState(false);
+  const [isExplainerOpen, setIsExplainerOpen] = useState(false);
 
   const fetchBonusPool = useCallback(async () => {
     setPoolLoading(true);
@@ -273,17 +274,17 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
     <MonthPicker
       value={month}
       onChange={onMonthChange}
-      className="h-9 px-3 rounded-lg border border-accent bg-surface text-xs font-semibold text-accent focus:outline-none"
+      className="h-8 px-2.5 rounded-lg border border-accent/40 bg-surface text-xs font-semibold text-accent focus:outline-none"
     />
   );
 
   return (
     <div className="flex flex-col min-h-full">
       {/* Top Filter Bar */}
-      <div className="px-3 py-2.5 border-b border-border bg-surface flex flex-wrap items-center justify-between gap-2.5 shrink-0">
-        <div className="flex items-center gap-2">
+      <div className="px-3 py-2 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
           {monthPicker}
-          <span className="text-xs text-fg-subtle hidden sm:inline">
+          <span className="text-xs text-fg-subtle hidden sm:inline truncate">
             Учёт бонусов за {periodLabel}
           </span>
         </div>
@@ -295,183 +296,200 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Поиск по IMEI, модели, поставщику..."
-            className="w-full h-8 pl-8 pr-3 rounded-lg bg-surface-raised border border-border text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent transition-colors"
+            placeholder="Поиск по IMEI, модели..."
+            className="w-full h-8 pl-8 pr-7 rounded-lg bg-surface-raised border border-border text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent transition-colors"
           />
           {searchQuery && (
             <button
               type="button"
               onClick={() => setSearchQuery('')}
-              className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg"
+              className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3 h-3" />
             </button>
           )}
         </div>
       </div>
 
-      <div className={`p-3 sm:p-4 space-y-4 ${summaryLoading ? 'opacity-70 transition-opacity' : ''}`}>
+      <div className={`p-2.5 sm:p-4 space-y-3 sm:space-y-4 ${summaryLoading ? 'opacity-70 transition-opacity' : ''}`}>
         {/* KPI Summary Cards */}
         <div>
-          <div className="flex items-center justify-between mb-2 px-0.5">
-            <h3 className="text-xs font-semibold text-fg-subtle uppercase tracking-wide flex items-center gap-1.5">
-              <Award className="w-3.5 h-3.5 text-accent" />
-              <span>Финансовые итоги по бонусам за {periodLabel}</span>
+          <div className="flex items-center justify-between mb-1.5 px-0.5">
+            <h3 className="text-xs font-semibold text-fg-subtle uppercase tracking-wide flex items-center gap-1.5 truncate">
+              <Award className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="truncate">Итоги по бонусам за {periodLabel}</span>
             </h3>
-            <Badge tone="neutral">
+            <Badge tone="neutral" className="text-[10px] py-0 px-2 shrink-0">
               Не входит в прибыль
             </Badge>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 sm:gap-3">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2">
             {/* Card 1: Total bonus profit */}
-            <div className="rounded-xl border border-accent/40 bg-accent/5 p-3.5 flex flex-col justify-between">
+            <div className="rounded-xl border border-accent/40 bg-accent/5 p-2.5 sm:p-3 flex flex-col justify-between shadow-2xs">
               <div>
-                <div className="flex items-center justify-between mb-1.5">
-                  <span className="text-[11px] font-bold uppercase tracking-wider text-accent">Всего бонусов</span>
-                  <Sparkles className="w-4 h-4 text-accent shrink-0" />
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-accent truncate">Всего бонусов</span>
+                  <Sparkles className="w-3.5 h-3.5 text-accent shrink-0" />
                 </div>
-                <div className="text-xl font-bold font-mono tracking-tight text-accent">
+                <div className="text-base sm:text-lg font-bold font-mono tracking-tight text-accent truncate">
                   {usd(totalBonusProfitUsd)}
                 </div>
-                <div className="text-xs font-semibold text-accent/80 mt-0.5">
-                  ≈ {tjs(totalBonusProfitTjs)}
-                </div>
               </div>
-              <div className="text-[11px] text-fg-subtle mt-2 pt-2 border-t border-accent/20">
-                Не входят в прибыль и никому не начисляются; деньги на Бонусном счёте
+              <div className="text-[10px] sm:text-[11px] font-semibold text-accent/80 mt-1 truncate">
+                ≈ {tjs(totalBonusProfitTjs)}
               </div>
             </div>
 
             {/* Card 2: Cash discounts */}
-            <StatCard
-              label="Денежные бонусы (скидки)"
-              value={usd(cashBonusUsd)}
-              subvalue={`≈ ${tjs(cashBonusTjs)} · ${cashBonusesForMonth.length} начислений`}
-              icon={DollarSign}
-              tone="success"
-            />
+            <div className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 flex flex-col justify-between shadow-2xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wide text-fg-subtle truncate">Денежные скидки</span>
+                  <DollarSign className="w-3.5 h-3.5 text-success shrink-0" />
+                </div>
+                <div className="text-base sm:text-lg font-bold font-mono text-success truncate">
+                  {usd(cashBonusUsd)}
+                </div>
+              </div>
+              <div className="text-[10px] sm:text-[11px] text-fg-subtle mt-1 truncate">
+                {cashBonusesForMonth.length} начисл. · {tjs(cashBonusTjs)}
+              </div>
+            </div>
 
             {/* Card 3: Sold gift phones */}
-            <StatCard
-              label="Прибыль с бонусных телефонов"
-              value={usd(soldProfitUsd)}
-              subvalue={`≈ ${tjs(soldProfitTjs)} · ${soldUnits} шт. продано`}
-              icon={Smartphone}
-              tone="warning"
-            />
+            <div className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 flex flex-col justify-between shadow-2xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wide text-fg-subtle truncate">Бонусные телефоны</span>
+                  <Smartphone className="w-3.5 h-3.5 text-warning shrink-0" />
+                </div>
+                <div className="text-base sm:text-lg font-bold font-mono text-warning truncate">
+                  {usd(soldProfitUsd)}
+                </div>
+              </div>
+              <div className="text-[10px] sm:text-[11px] text-fg-subtle mt-1 truncate">
+                {soldUnits} шт. продано
+              </div>
+            </div>
 
             {/* Card 4: Gift phones in stock */}
-            <StatCard
-              label="Бонусные телефоны на складе"
-              value={`${inStockUnits} шт.`}
-              subvalue="В наличии ($0 себестоимость)"
-              icon={PackageCheck}
-              tone="info"
-            />
+            <div className="rounded-xl border border-border bg-surface p-2.5 sm:p-3 flex flex-col justify-between shadow-2xs">
+              <div>
+                <div className="flex items-center justify-between mb-1">
+                  <span className="text-[10px] sm:text-[11px] font-medium uppercase tracking-wide text-fg-subtle truncate">Остаток на складе</span>
+                  <PackageCheck className="w-3.5 h-3.5 text-info shrink-0" />
+                </div>
+                <div className="text-base sm:text-lg font-bold font-mono text-info truncate">
+                  {inStockUnits} шт.
+                </div>
+              </div>
+              <div className="text-[10px] sm:text-[11px] text-fg-subtle mt-1 truncate">
+                Себестоимость $0
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Bonus pool of the current quarter (read-only; closed on the Bonuses page) */}
-        <div className="rounded-2xl border-2 border-emerald-500/30 bg-linear-to-br from-emerald-500/10 via-surface to-surface overflow-hidden shadow-xs">
+        <div className="rounded-2xl border border-emerald-500/30 bg-linear-to-br from-emerald-500/10 via-surface to-surface overflow-hidden shadow-xs">
           {/* Header */}
-          <div className="p-4 sm:p-5 border-b border-border/80 flex flex-col md:flex-row md:items-center justify-between gap-4">
-            <div className="space-y-1">
-              <div className="flex items-center gap-2 flex-wrap">
-                <span className="text-xs uppercase font-extrabold tracking-wider px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center gap-1.5 font-mono">
-                  <Gift className="w-3.5 h-3.5" />
-                  Квартал бонусов
-                </span>
-                {poolPendingUsd > 0 ? (
-                  <Badge tone="success">Ждёт закрытия квартала</Badge>
-                ) : (
-                  <Badge tone="neutral">Пул пуст</Badge>
-                )}
+          <div className="p-3 sm:p-3.5 border-b border-border/80 flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-emerald-500/15 text-emerald-400 flex items-center justify-center shrink-0">
+                <Gift className="w-4 h-4" />
               </div>
-              <h3 className="text-base sm:text-lg font-bold text-fg flex items-center gap-2">
-                Бонусные телефоны за квартал
-              </h3>
-              <p className="text-xs text-fg-subtle max-w-2xl leading-relaxed">
-                Прибыль от проданных бонусных телефонов учитывается отдельно и никому не начисляется. При инкассации эти деньги уходят на Бонусный счёт. После квартального отчёта администратор обнуляет счётчик на странице «Бонусы».
-              </p>
+              <div className="min-w-0">
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <h4 className="text-xs sm:text-sm font-bold text-fg truncate">Квартальный пул бонусов</h4>
+                  {poolPendingUsd > 0 ? (
+                    <Badge tone="success" className="text-[10px] py-0 px-1.5">Ждёт закрытия</Badge>
+                  ) : (
+                    <Badge tone="neutral" className="text-[10px] py-0 px-1.5">Пул пуст</Badge>
+                  )}
+                </div>
+                <p className="text-[11px] text-fg-subtle truncate">
+                  При инкассации средства поступают на Бонусный счёт
+                </p>
+              </div>
             </div>
 
-            <div className="text-xs text-fg-subtle bg-surface-raised/50 border border-border px-3 py-1.5 rounded-lg shrink-0">
-              Закрытие квартала — на странице «Бонусы»
-            </div>
+            <span className="text-[10px] text-fg-subtle bg-surface border border-border px-2 py-1 rounded-md shrink-0 hidden sm:inline">
+              Управление на странице «Бонусы»
+            </span>
           </div>
 
           {/* Metric cards */}
-          <div className="p-4 sm:p-5 grid grid-cols-1 sm:grid-cols-3 gap-3 bg-surface-raised/30">
-            <div className="p-3.5 rounded-xl bg-surface border border-emerald-500/20 shadow-2xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-1">
-                Прибыль бонусных телефонов
+          <div className="p-2.5 sm:p-3 grid grid-cols-3 gap-2 bg-surface-raised/30">
+            <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-emerald-500/20 shadow-2xs">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-emerald-400 block mb-0.5 truncate">
+                Прибыль пула
               </span>
-              <div className="text-2xl font-black font-mono text-emerald-400">
+              <div className="text-sm sm:text-lg font-black font-mono text-emerald-400 truncate">
                 {usd(poolPendingUsd)}
               </div>
-              <div className="text-xs font-semibold text-emerald-400/80 mt-0.5">
+              <div className="text-[10px] font-semibold text-emerald-400/80 truncate">
                 ≈ {tjs(Number(bonusPool?.pendingProfitTjs) || poolPendingUsd * rate)}
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-surface border border-border shadow-2xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-fg-subtle block mb-1">
-                Продано бонусных устройств
+            <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border shadow-2xs">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-fg-subtle block mb-0.5 truncate">
+                Устройств
               </span>
-              <div className="text-2xl font-black font-mono text-fg">
+              <div className="text-sm sm:text-lg font-black font-mono text-fg truncate">
                 {bonusPool?.pendingCount || 0} шт.
               </div>
-              <div className="text-xs text-fg-subtle mt-0.5">
-                Ожидают закрытия периода
+              <div className="text-[10px] text-fg-subtle truncate">
+                В ожидании
               </div>
             </div>
 
-            <div className="p-3.5 rounded-xl bg-surface border border-border shadow-2xs">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-fg-subtle block mb-1">
-                Предыдущих закрытий / операций
+            <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border shadow-2xs">
+              <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-fg-subtle block mb-0.5 truncate">
+                Закрытий
               </span>
-              <div className="text-2xl font-black font-mono text-fg">
+              <div className="text-sm sm:text-lg font-black font-mono text-fg truncate">
                 {bonusPool?.history?.length || 0}
               </div>
-              <div className="text-xs text-fg-subtle mt-0.5">
-                Зафиксировано в истории
+              <div className="text-[10px] text-fg-subtle truncate">
+                В истории
               </div>
             </div>
           </div>
 
           {/* Collapsible Details Drawer: Entries & History */}
           <div className="border-t border-border/80">
-            <div className="px-4 py-2 bg-surface flex items-center justify-between">
-              <div className="flex items-center gap-2">
+            <div className="px-3 py-1.5 bg-surface flex items-center justify-between">
+              <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => { setPoolDetailsTab('ENTRIES'); setIsPoolExpanded(true); }}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     isPoolExpanded && poolDetailsTab === 'ENTRIES'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       : 'text-fg-subtle hover:text-fg'
                   }`}
                 >
-                  Устройства в пуле ({bonusPool?.pendingEntries?.length || 0})
+                  Устройства ({bonusPool?.pendingEntries?.length || 0})
                 </button>
                 <button
                   type="button"
                   onClick={() => { setPoolDetailsTab('HISTORY'); setIsPoolExpanded(true); }}
-                  className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-colors cursor-pointer ${
                     isPoolExpanded && poolDetailsTab === 'HISTORY'
                       ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
                       : 'text-fg-subtle hover:text-fg'
                   }`}
                 >
-                  История закрытий ({bonusPool?.history?.length || 0})
+                  История ({bonusPool?.history?.length || 0})
                 </button>
               </div>
 
               <button
                 type="button"
                 onClick={() => setIsPoolExpanded(!isPoolExpanded)}
-                className="p-1 text-fg-subtle hover:text-fg flex items-center gap-1 text-xs"
+                className="p-1 text-fg-subtle hover:text-fg flex items-center gap-1 text-xs cursor-pointer"
               >
                 <span>{isPoolExpanded ? 'Скрыть' : 'Показать'}</span>
                 <ChevronDown className={`w-3.5 h-3.5 transition-transform ${isPoolExpanded ? 'rotate-180' : ''}`} />
@@ -479,7 +497,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
             </div>
 
             {isPoolExpanded && (
-              <div className="p-4 border-t border-border bg-surface-raised/20 max-h-80 overflow-y-auto">
+              <div className="p-3 sm:p-4 border-t border-border bg-surface-raised/20 max-h-80 overflow-y-auto">
                 {poolDetailsTab === 'ENTRIES' ? (
                   !bonusPool?.pendingEntries || bonusPool.pendingEntries.length === 0 ? (
                     <div className="text-center py-6 text-xs text-fg-subtle">
@@ -488,18 +506,18 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                   ) : (
                     <div className="divide-y divide-border border border-border rounded-xl bg-surface overflow-hidden">
                       {bonusPool.pendingEntries.map((e) => (
-                        <div key={e.id} className="p-3 flex items-center justify-between gap-3 text-xs">
+                        <div key={e.id} className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 text-xs">
                           <div className="min-w-0">
-                            <div className="flex items-center gap-2">
-                              <span className="font-bold text-fg">{e.brand} {e.model}</span>
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span className="font-bold text-fg truncate">{e.brand} {e.model}</span>
                               <span className="font-mono text-[11px] text-fg-subtle">IMEI: {e.imei}</span>
                             </div>
-                            <div className="text-[11px] text-fg-subtle font-mono mt-0.5 flex items-center gap-2">
+                            <div className="text-[11px] text-fg-subtle font-mono mt-0.5 flex items-center gap-2 flex-wrap">
                               {e.sale?.receiptNumber && (
                                 <span>Чек #{e.sale.receiptNumber}</span>
                               )}
                               <span>Дата: {e.createdAt.substring(0, 10)}</span>
-                              <Badge tone="warning">Бонус ($0 себестоимость)</Badge>
+                              <Badge tone="warning" className="text-[10px] py-0 px-1.5">Бонус ($0 себестоимость)</Badge>
                             </div>
                           </div>
                           <div className="text-right shrink-0">
@@ -520,15 +538,15 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                       Кварталы бонусов ещё не закрывались.
                     </div>
                   ) : (
-                    <div className="space-y-2.5">
+                    <div className="space-y-2">
                       {bonusPool.history.map((log) => {
                         const isDist = log.type === 'DISTRIBUTION';
                         const allocs = Array.isArray(log.allocations) ? log.allocations : [];
                         return (
-                          <div key={log.id} className="p-3 rounded-xl border border-border bg-surface text-xs space-y-1.5">
+                          <div key={log.id} className="p-2.5 sm:p-3 rounded-xl border border-border bg-surface text-xs space-y-1.5">
                             <div className="flex items-center justify-between gap-2">
                               <div className="flex items-center gap-2">
-                                <Badge tone={isDist ? 'success' : 'neutral'}>
+                                <Badge tone={isDist ? 'success' : 'neutral'} className="text-[10px] py-0 px-1.5">
                                   {isDist ? 'Распределение (до правила)' : 'Закрытие квартала'}
                                 </Badge>
                                 <span className="font-bold text-fg">{log.periodName}</span>
@@ -546,7 +564,7 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                               </p>
                             )}
                             {isDist && allocs.length > 0 && (
-                              <div className="flex flex-wrap gap-2 pt-1">
+                              <div className="flex flex-wrap gap-1.5 pt-1">
                                 {allocs.map((a: any, idx: number) => (
                                   <span key={idx} className="px-2 py-0.5 rounded bg-surface-raised border border-border text-[11px] text-fg-muted font-mono">
                                     {a.ownerName || a.ownerId}: <strong className="text-emerald-400">${a.amountUsd}</strong>
@@ -570,46 +588,59 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
           </div>
         </div>
 
-        {/* Informational Explainer Banner */}
-        <div className="rounded-xl bg-surface border border-border p-3 flex items-start gap-2.5 text-xs text-fg-muted">
-          <Info className="w-4 h-4 text-accent shrink-0 mt-0.5" />
-          <div className="space-y-0.5">
-            <p className="font-semibold text-fg">
-              Раздельный учёт бонусных доходов от поставщиков
-            </p>
-            <p className="text-fg-subtle text-[11px] leading-relaxed">
-              Бонусы не являются доходом: <strong>денежные бонусы</strong> и прибыль от <strong>бонусных телефонов</strong> ($0 себестоимость) не входят в прибыль и никому не начисляются. Их деньги — у компании на Бонусном счёте, ими распоряжается администратор: денежный бонус зачисляется туда при регистрации, прибыль бонусных телефонов — при инкассации магазина. Счётчики обнуляются при закрытии квартала на странице «Бонусы».
-            </p>
+        {/* Informational Explainer Banner (Compact & Collapsible) */}
+        <div className="rounded-xl bg-surface border border-border p-2.5 text-xs text-fg-muted space-y-1">
+          <div
+            className="flex items-center justify-between cursor-pointer select-none"
+            onClick={() => setIsExplainerOpen(!isExplainerOpen)}
+          >
+            <div className="flex items-center gap-2 min-w-0">
+              <Info className="w-3.5 h-3.5 text-accent shrink-0" />
+              <span className="font-semibold text-fg text-xs truncate">
+                Правило раздельного учёта бонусов
+              </span>
+            </div>
+            <span className="text-[11px] text-accent flex items-center gap-1 shrink-0 font-medium">
+              <span>{isExplainerOpen ? 'Скрыть' : 'Подробнее'}</span>
+              <ChevronDown className={`w-3 h-3 transition-transform ${isExplainerOpen ? 'rotate-180' : ''}`} />
+            </span>
           </div>
+          {isExplainerOpen && (
+            <p className="text-fg-subtle text-[11px] leading-relaxed pt-1.5 border-t border-border/50">
+              Бонусы не являются операционным доходом магазина: <strong>денежные бонусы</strong> и прибыль от <strong>бонусных телефонов</strong> ($0 себестоимость) не входят в прибыль и учитываются на отдельном Бонусном счёте компании. Денежный бонус зачисляется при регистрации, прибыль с телефонов — при инкассации. Счётчики обнуляются при закрытии квартала на странице «Бонусы».
+            </p>
+          )}
         </div>
 
         {/* Sub-tabs / Segmented Switcher */}
-        <div className="flex flex-wrap items-center gap-2 border-b border-border pb-2 pt-1">
+        <div className="p-1 rounded-xl bg-surface-raised border border-border flex items-center gap-1 overflow-x-auto no-scrollbar">
           <button
             type="button"
             onClick={() => setActiveSubTab('ALL')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'ALL'
                 ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface hover:bg-surface-raised text-fg-muted border border-border'
+                : 'text-fg-muted hover:text-fg hover:bg-surface/60'
             }`}
           >
             <Layers className="w-3.5 h-3.5" />
-            <span>Все операции</span>
+            <span>Все</span>
           </button>
 
           <button
             type="button"
             onClick={() => setActiveSubTab('CASH')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'CASH'
                 ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface hover:bg-surface-raised text-fg-muted border border-border'
+                : 'text-fg-muted hover:text-fg hover:bg-surface/60'
             }`}
           >
             <DollarSign className="w-3.5 h-3.5" />
-            <span>Денежные бонусы</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised/80 font-mono">
+            <span>Денежные</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              activeSubTab === 'CASH' ? 'bg-black/20 text-accent-fg' : 'bg-surface border border-border text-fg-subtle'
+            }`}>
               {filteredCashBonuses.length}
             </span>
           </button>
@@ -617,15 +648,17 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
           <button
             type="button"
             onClick={() => setActiveSubTab('SOLD_DEVICES')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'SOLD_DEVICES'
                 ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface hover:bg-surface-raised text-fg-muted border border-border'
+                : 'text-fg-muted hover:text-fg hover:bg-surface/60'
             }`}
           >
             <Smartphone className="w-3.5 h-3.5" />
-            <span>Проданные телефоны</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised/80 font-mono">
+            <span>Проданные</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              activeSubTab === 'SOLD_DEVICES' ? 'bg-black/20 text-accent-fg' : 'bg-surface border border-border text-fg-subtle'
+            }`}>
               {filteredSoldDevices.length}
             </span>
           </button>
@@ -633,15 +666,17 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
           <button
             type="button"
             onClick={() => setActiveSubTab('STOCK_DEVICES')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-colors ${
+            className={`px-2.5 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 whitespace-nowrap cursor-pointer ${
               activeSubTab === 'STOCK_DEVICES'
                 ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface hover:bg-surface-raised text-fg-muted border border-border'
+                : 'text-fg-muted hover:text-fg hover:bg-surface/60'
             }`}
           >
             <PackageCheck className="w-3.5 h-3.5" />
-            <span>Бонусы на складе</span>
-            <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised/80 font-mono">
+            <span>На складе</span>
+            <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
+              activeSubTab === 'STOCK_DEVICES' ? 'bg-black/20 text-accent-fg' : 'bg-surface border border-border text-fg-subtle'
+            }`}>
               {filteredStockDevices.length}
             </span>
           </button>
@@ -680,42 +715,40 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                     <div
                       key={bonus.id}
                       onClick={() => setSelectedBonus(bonus)}
-                      className="p-3.5 hover:bg-surface-raised cursor-pointer transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                      className="p-2.5 sm:p-3 hover:bg-surface-raised cursor-pointer transition-colors flex items-center justify-between gap-2.5 group"
                     >
-                      <div className="space-y-1 min-w-0">
+                      <div className="space-y-0.5 min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-xs font-bold text-fg">
+                          <span className="text-xs font-bold text-fg truncate">
                             {bonus.campaignTitle || bonus.campaignName || `Бонус от ${bonus.supplierName}`}
                           </span>
-                          <Badge tone="success">
-                            Денежная скидка
+                          <Badge tone="success" className="text-[10px] py-0 px-1.5">
+                            Скидка
                           </Badge>
-                          <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                          <span className="text-[10px] text-fg-subtle flex items-center gap-1">
                             <Calendar className="w-3 h-3" />
                             {dateStr}
                           </span>
                         </div>
-                        <div className="text-xs text-fg-muted flex items-center gap-3 flex-wrap">
+                        <div className="text-[11px] text-fg-subtle flex items-center gap-2 flex-wrap">
                           <span>
                             Поставщик: <strong className="text-fg">{bonus.supplierName}</strong>
                           </span>
                           <span>·</span>
                           <span>Курс: {bonusRate}</span>
-                          <span>·</span>
-                          <span className="text-success font-medium">100% зачислено в прибыль</span>
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-3 self-end sm:self-auto text-right">
+                      <div className="flex items-center gap-2 shrink-0 text-right">
                         <div>
-                          <div className="text-sm font-bold font-mono text-success">
+                          <div className="text-xs sm:text-sm font-bold font-mono text-success">
                             +{usd(bonusUsd)}
                           </div>
-                          <div className="text-[11px] font-semibold text-fg-subtle">
+                          <div className="text-[10px] sm:text-[11px] font-semibold text-fg-subtle">
                             ≈ {tjs(bonusTjs)}
                           </div>
                         </div>
-                        <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-accent transition-colors" />
+                        <ChevronRight className="w-3.5 h-3.5 text-fg-subtle group-hover:text-accent transition-colors" />
                       </div>
                     </div>
                   );
@@ -756,53 +789,45 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                   <div
                     key={`${item.saleId}-${item.deviceId}-${idx}`}
                     onClick={() => setSelectedSoldDevice(item)}
-                    className="p-3.5 hover:bg-surface-raised cursor-pointer transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    className="p-2.5 sm:p-3 hover:bg-surface-raised cursor-pointer transition-colors flex items-center justify-between gap-2.5 group"
                   >
-                    <div className="space-y-1 min-w-0">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-fg">
+                        <span className="text-xs font-bold text-fg truncate">
                           {item.brand} {item.model}
                         </span>
-                        <span className="text-[11px] text-fg-subtle">
+                        <span className="text-[10px] text-fg-subtle">
                           {item.storage} {item.color}
                         </span>
-                        <Badge tone="warning">
-                          Подарочный ($0 себестоимость)
+                        <Badge tone="warning" className="text-[10px] py-0 px-1.5">
+                          Подарочный
                         </Badge>
                       </div>
 
-                      <div className="text-[11px] text-fg-subtle font-mono flex items-center gap-2 flex-wrap">
+                      <div className="text-[11px] text-fg-subtle font-mono flex items-center gap-1.5 flex-wrap">
                         <span>IMEI: {item.imei}</span>
                         <span>·</span>
                         <span className="flex items-center gap-1">
                           <Receipt className="w-3 h-3 text-fg-subtle" />
-                          Чек #{item.receiptNumber}
+                          #{item.receiptNumber}
                         </span>
                         <span>·</span>
-                        <span className="flex items-center gap-1">
-                          <StoreIcon className="w-3 h-3 text-fg-subtle" />
-                          {item.storeName}
-                        </span>
-                        <span>·</span>
-                        <span className="flex items-center gap-1">
-                          <User className="w-3 h-3 text-fg-subtle" />
-                          {item.sellerName}
-                        </span>
+                        <span>{item.storeName}</span>
                         <span>·</span>
                         <span>{item.saleDate}</span>
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 self-end sm:self-auto text-right">
+                    <div className="flex items-center gap-2 shrink-0 text-right">
                       <div>
-                        <div className="text-sm font-bold font-mono text-accent">
+                        <div className="text-xs sm:text-sm font-bold font-mono text-accent">
                           +{usd(item.salePriceUsd)}
                         </div>
-                        <div className="text-[11px] font-semibold text-accent/80">
-                          {tjs(item.salePriceTjs)} · 100% прибыль
+                        <div className="text-[10px] sm:text-[11px] font-semibold text-accent/80">
+                          {tjs(item.salePriceTjs)}
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-accent transition-colors" />
+                      <ChevronRight className="w-3.5 h-3.5 text-fg-subtle group-hover:text-accent transition-colors" />
                     </div>
                   </div>
                 ))}
@@ -838,27 +863,27 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                   <div
                     key={d.id}
                     onClick={() => setSelectedStockDevice(d)}
-                    className="p-3.5 hover:bg-surface-raised cursor-pointer transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 group"
+                    className="p-2.5 sm:p-3 hover:bg-surface-raised cursor-pointer transition-colors flex items-center justify-between gap-2.5 group"
                   >
-                    <div className="space-y-1 min-w-0">
+                    <div className="space-y-0.5 min-w-0">
                       <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-bold text-fg">
+                        <span className="text-xs font-bold text-fg truncate">
                           {d.brand} {d.model}
                         </span>
-                        <span className="text-[11px] text-fg-subtle">
+                        <span className="text-[10px] text-fg-subtle">
                           {d.storage} {d.color}
                         </span>
-                        <Badge tone="neutral">
-                          Себестоимость $0
+                        <Badge tone="neutral" className="text-[10px] py-0 px-1.5">
+                          $0 себестоимость
                         </Badge>
                         {d.bonusCampaign && (
-                          <span className="text-[10px] px-1.5 py-0.5 rounded bg-surface-raised border border-border text-fg-muted font-medium">
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-surface-raised border border-border text-fg-muted font-medium">
                             {d.bonusCampaign}
                           </span>
                         )}
                       </div>
 
-                      <div className="text-[11px] text-fg-subtle font-mono flex items-center gap-2 flex-wrap">
+                      <div className="text-[11px] text-fg-subtle font-mono flex items-center gap-1.5 flex-wrap">
                         <span>IMEI: {d.imei}</span>
                         <span>·</span>
                         <span className="flex items-center gap-1">
@@ -868,28 +893,22 @@ export const BonusesFinancePanel: React.FC<BonusesFinancePanelProps> = ({ month,
                         {d.supplierName && (
                           <>
                             <span>·</span>
-                            <span>Поставщик: {d.supplierName}</span>
-                          </>
-                        )}
-                        {d.receivedDate && (
-                          <>
-                            <span>·</span>
-                            <span>Поступил: {d.receivedDate}</span>
+                            <span>{d.supplierName}</span>
                           </>
                         )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-3 self-end sm:self-auto text-right">
+                    <div className="flex items-center gap-2 shrink-0 text-right">
                       <div>
                         <div className="text-xs font-bold text-info">
                           В наличии
                         </div>
-                        <div className="text-[11px] text-fg-subtle">
-                          Прибыль при продаже: 100%
+                        <div className="text-[10px] text-fg-subtle">
+                          100% в прибыль
                         </div>
                       </div>
-                      <ChevronRight className="w-4 h-4 text-fg-subtle group-hover:text-accent transition-colors" />
+                      <ChevronRight className="w-3.5 h-3.5 text-fg-subtle group-hover:text-accent transition-colors" />
                     </div>
                   </div>
                 ))}

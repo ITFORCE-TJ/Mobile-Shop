@@ -35,9 +35,7 @@ export const PWAUpdateNotifier: React.FC = () => {
                 Доступна новая версия PWA
               </p>
               <p className="text-[10px] text-slate-400 truncate">
-                {latestCommit && latestCommit !== currentCommit
-                  ? `Сборка ${latestCommit} (текущая: ${currentCommit})`
-                  : 'Нажмите для применения обновления'}
+                Нажмите для применения обновления
               </p>
             </div>
           </div>

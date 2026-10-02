@@ -137,34 +137,34 @@ export const CashCollectionPanel: React.FC<{ month: string; storeId?: string | n
   if (!balances) return <LoadingState label="Загрузка касс…" />;
 
   return (
-    <div className="p-3 sm:p-4 space-y-4 max-w-3xl mx-auto">
+    <div className="p-2.5 sm:p-4 space-y-3.5 max-w-3xl mx-auto">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
       {/* Top Balances: Central Cash & Bonus Account */}
       {!storeId && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-2 gap-2 sm:gap-3">
           {balances.central && (
-            <section className="rounded-xl border border-accent/30 bg-accent/5 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-accent/15 text-accent flex items-center justify-center shrink-0">
-                <Landmark className="w-5 h-5" />
+            <section className="rounded-xl border border-accent/30 bg-accent/5 p-2.5 sm:p-3 flex items-center gap-2.5 shadow-2xs">
+              <div className="w-8 h-8 rounded-lg bg-accent/15 text-accent flex items-center justify-center shrink-0">
+                <Landmark className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-fg-subtle">Центральная касса</p>
-                <p className="text-lg font-bold text-fg tabular-nums">{formatTjs(balances.central.cashTjs)}</p>
-                <p className="text-xs text-fg-subtle tabular-nums">{formatUsd(balances.central.cashUsd)}</p>
+                <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-fg-subtle truncate">Центральная касса</p>
+                <p className="text-sm sm:text-base font-bold font-mono text-fg tabular-nums truncate">{formatTjs(balances.central.cashTjs)}</p>
+                <p className="text-[10px] sm:text-xs text-fg-subtle tabular-nums truncate">≈ {formatUsd(balances.central.cashUsd)}</p>
               </div>
             </section>
           )}
 
           {balances.bonusAccount && (
-            <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-4 flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-amber-500/15 text-amber-400 flex items-center justify-center shrink-0">
-                <Gift className="w-5 h-5" />
+            <section className="rounded-xl border border-amber-500/30 bg-amber-500/5 p-2.5 sm:p-3 flex items-center gap-2.5 shadow-2xs">
+              <div className="w-8 h-8 rounded-lg bg-amber-500/15 text-amber-500 dark:text-amber-400 flex items-center justify-center shrink-0">
+                <Gift className="w-4 h-4" />
               </div>
               <div className="min-w-0">
-                <p className="text-xs text-fg-subtle">Бонусный счёт (поставщики)</p>
-                <p className="text-lg font-bold text-amber-400 tabular-nums">{formatTjs(balances.bonusAccount.balanceTjs)}</p>
-                <p className="text-xs text-fg-subtle tabular-nums">{formatUsd(balances.bonusAccount.balanceUsd)} · денежные бонусы и прибыль бонусных телефонов</p>
+                <p className="text-[10px] sm:text-xs font-semibold uppercase tracking-wide text-fg-subtle truncate">Бонусный счёт</p>
+                <p className="text-sm sm:text-base font-bold font-mono text-amber-500 dark:text-amber-400 tabular-nums truncate">{formatTjs(balances.bonusAccount.balanceTjs)}</p>
+                <p className="text-[10px] sm:text-xs text-fg-subtle tabular-nums truncate">≈ {formatUsd(balances.bonusAccount.balanceUsd)}</p>
               </div>
             </section>
           )}
@@ -172,83 +172,118 @@ export const CashCollectionPanel: React.FC<{ month: string; storeId?: string | n
       )}
 
       {/* Store registers list */}
-      <section className="space-y-2" aria-label="Кассы магазинов">
-        <h2 className="text-sm font-semibold text-fg-muted">Наличные в магазинах</h2>
-        {balances.stores.length === 0 ? (
-          <p className="text-xs text-fg-subtle">Магазинов нет</p>
-        ) : balances.stores.filter((s) => !storeId || s.storeId === storeId).map((store) => {
-          const empty = isZero(store.cashUsd);
-          const unreconciled = !isZero(store.unreconciledUsd);
-          const hasBonus = Number(store.bonusCashUsd || 0) > 0;
+      <section className="space-y-1.5" aria-label="Кассы магазинов">
+        <div className="flex items-center justify-between px-0.5">
+          <h2 className="text-xs font-bold text-fg-subtle uppercase tracking-wide">Наличные в магазинах</h2>
+          <span className="text-[11px] text-fg-subtle font-medium">{balances.stores.length} точек</span>
+        </div>
 
-          return (
-            <div key={store.storeId} className="rounded-xl border border-border bg-surface p-3 flex items-center justify-between gap-3">
-              <div className="flex items-center gap-3 min-w-0">
-                <StoreIcon className="w-4 h-4 text-accent shrink-0" />
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="text-sm font-semibold text-fg-muted truncate">{store.storeName}</p>
-                    {hasBonus && (
-                      <span className="text-[10px] px-1.5 py-0.5 rounded bg-amber-500/10 border border-amber-500/20 text-amber-400 font-semibold shrink-0">
-                        Бонусы: {formatUsd(store.bonusCashUsd || 0)} ({store.bonusCount} шт.)
+        {balances.stores.length === 0 ? (
+          <p className="text-xs text-fg-subtle p-4 bg-surface rounded-xl border border-border text-center">Магазинов нет</p>
+        ) : (
+          <div className="rounded-2xl border border-border bg-surface divide-y divide-border/60 overflow-hidden shadow-xs">
+            {balances.stores.filter((s) => !storeId || s.storeId === storeId).map((store) => {
+              const empty = isZero(store.cashUsd);
+              const unreconciled = !isZero(store.unreconciledUsd);
+              const hasBonus = Number(store.bonusCashUsd || 0) > 0;
+
+              return (
+                <div key={store.storeId} className="p-3 sm:p-3.5 flex items-center justify-between gap-2.5 hover:bg-surface-raised/40 transition-colors">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 ${
+                      empty
+                        ? 'bg-surface-raised text-fg-subtle'
+                        : 'bg-emerald-500/10 text-emerald-500 dark:text-emerald-400'
+                    }`}>
+                      <StoreIcon className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs sm:text-sm font-semibold text-fg truncate">{store.storeName}</p>
+                        {hasBonus && (
+                          <span className="text-[10px] px-1.5 py-0.2 rounded bg-amber-500/10 border border-amber-500/20 text-amber-500 dark:text-amber-400 font-semibold shrink-0">
+                            Бонусы: {formatUsd(store.bonusCashUsd || 0)} ({store.bonusCount} шт.)
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-1.5 mt-0.5">
+                        <span className="text-xs sm:text-sm font-bold font-mono text-fg tabular-nums">{formatTjs(store.cashTjs)}</span>
+                        <span className="text-[10px] sm:text-xs text-fg-subtle tabular-nums">({formatUsd(store.cashUsd)})</span>
+                      </div>
+                      {unreconciled && (
+                        <p className="text-[11px] text-warning mt-0.5 font-medium">Не сверена (расхождение {formatUsd(store.unreconciledUsd)})</p>
+                      )}
+                    </div>
+                  </div>
+
+                  <div className="shrink-0">
+                    {empty ? (
+                      <span className="h-7.5 px-2.5 rounded-lg bg-surface-raised border border-border text-fg-subtle text-xs font-medium flex items-center gap-1.5 select-none">
+                        <span className="w-1.5 h-1.5 rounded-full bg-fg-subtle/50" />
+                        <span>Касса пуста</span>
                       </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={unreconciled || busy}
+                        onClick={() => setCollecting(store)}
+                        className="h-8 px-3 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-semibold flex items-center gap-1.5 transition-all shadow-xs active:scale-95 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                      >
+                        <ArrowDownToLine className="w-3.5 h-3.5" />
+                        <span>Инкассировать</span>
+                      </button>
                     )}
                   </div>
-                  <p className="text-sm font-bold text-fg tabular-nums">{formatTjs(store.cashTjs)}</p>
-                  <p className="text-xs text-fg-subtle tabular-nums">{formatUsd(store.cashUsd)}</p>
-                  {unreconciled && (
-                    <p className="text-xs text-warning mt-0.5">Касса не сверена (расхождение {formatUsd(store.unreconciledUsd)})</p>
-                  )}
                 </div>
-              </div>
-              <Button
-                size="md"
-                leftIcon={ArrowDownToLine}
-                disabled={empty || unreconciled || busy}
-                onClick={() => setCollecting(store)}
-              >
-                {empty ? 'Касса пуста' : 'Инкассировать'}
-              </Button>
-            </div>
-          );
-        })}
-        <p className="text-xs text-fg-subtle">
-          Кассир сдаёт всю выручку полностью, и касса магазина обнуляется. Доля от бонусных телефонов автоматически поступает на «Бонусный счёт», а остальная сумма — в Центральную кассу.
+              );
+            })}
+          </div>
+        )}
+        <p className="text-[11px] text-fg-subtle px-0.5 flex items-center gap-1.5">
+          <span className="text-accent">ℹ</span>
+          <span>Касса полностью обнуляется: бонусные средства зачисляются на Бонусный счёт, основные — в Центр. кассу.</span>
         </p>
       </section>
 
       {/* History */}
-      <section className="space-y-2" aria-label="История инкассаций">
-        <h2 className="text-sm font-semibold text-fg-muted">История за месяц</h2>
+      <section className="space-y-1.5" aria-label="История инкассаций">
+        <h2 className="text-xs font-bold text-fg-subtle uppercase tracking-wide px-0.5">История за месяц</h2>
         {history.length === 0 ? (
-          <p className="text-xs text-fg-subtle">Инкассаций в этом месяце не было</p>
+          <p className="text-xs text-fg-subtle p-3 bg-surface rounded-xl border border-border text-center">Инкассаций в этом месяце не было</p>
         ) : (
-          <div className="rounded-xl border border-border bg-surface divide-y divide-border">
+          <div className="rounded-2xl border border-border bg-surface divide-y divide-border/60 overflow-hidden shadow-xs">
             {history.map((item) => {
               const hasBonus = item.bonusAmountUsd !== undefined && item.bonusAmountUsd > 0;
               return (
-                <div key={item.id} className="p-3 flex items-center justify-between gap-3 text-sm">
+                <div key={item.id} className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 text-xs hover:bg-surface-raised/40 transition-colors">
                   <div className="min-w-0">
-                    <p className="font-medium text-fg-muted truncate">{item.storeName} · {item.transactionNumber}</p>
-                    <p className="text-xs text-fg-subtle">
+                    <p className="font-semibold text-fg truncate">{item.storeName} · {item.transactionNumber}</p>
+                    <p className="text-[11px] text-fg-subtle mt-0.5">
                       {new Date(item.createdAt).toLocaleString('ru-RU')} · {item.createdByName}
-                      {item.status === 'CANCELLED' && <span className="text-danger"> · отменена</span>}
+                      {item.status === 'CANCELLED' && <span className="text-danger font-semibold"> · отменена</span>}
                     </p>
                     {hasBonus && item.status !== 'CANCELLED' && (
-                      <p className="text-[11px] text-amber-400 mt-0.5">
-                        Центр. касса: {formatUsd(item.regularAmountUsd ?? 0)} · Бонусный счёт: {formatUsd(item.bonusAmountUsd ?? 0)} ({item.bonusCount ?? 0} шт.)
+                      <p className="text-[10px] text-amber-500 dark:text-amber-400 mt-0.5 font-medium">
+                        Центр: {formatUsd(item.regularAmountUsd ?? 0)} · Бонусы: {formatUsd(item.bonusAmountUsd ?? 0)} ({item.bonusCount ?? 0} шт.)
                       </p>
                     )}
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <div className="text-right tabular-nums">
-                      <p className={`font-semibold ${item.status === 'CANCELLED' ? 'line-through text-fg-subtle' : 'text-fg'}`}>{formatTjs(item.amountTjs)}</p>
-                      <p className="text-xs text-fg-subtle">{formatUsd(item.amountUsd)}</p>
+                      <p className={`font-bold font-mono text-xs sm:text-sm ${item.status === 'CANCELLED' ? 'line-through text-fg-subtle' : 'text-fg'}`}>{formatTjs(item.amountTjs)}</p>
+                      <p className="text-[10px] text-fg-subtle">{formatUsd(item.amountUsd)}</p>
                     </div>
                     {item.status === 'POSTED' && (
-                      <Button size="md" variant="secondary" leftIcon={Undo2} disabled={busy} onClick={() => setCancelling(item)} aria-label={`Отменить инкассацию ${item.transactionNumber}`}>
-                        Отменить
-                      </Button>
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={() => setCancelling(item)}
+                        className="h-7 px-2 rounded-lg bg-surface-raised hover:bg-danger/10 border border-border hover:border-danger/30 text-fg-subtle hover:text-danger text-xs font-medium flex items-center gap-1 transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                        aria-label={`Отменить инкассацию ${item.transactionNumber}`}
+                      >
+                        <Undo2 className="w-3 h-3" />
+                        <span className="hidden sm:inline">Отменить</span>
+                      </button>
                     )}
                   </div>
                 </div>

@@ -23,6 +23,8 @@ interface DialogProps {
   maxWidth?: MaxWidth;
   /** Set false for a modal the user must act on (e.g. setting today's mandatory exchange rate) — hides the close button and disables backdrop/Escape dismissal. */
   dismissable?: boolean;
+  compact?: boolean;
+  contentClassName?: string;
 }
 
 /**
@@ -40,6 +42,8 @@ export const Dialog: React.FC<DialogProps> = ({
   footer,
   maxWidth = 'md',
   dismissable = true,
+  compact = false,
+  contentClassName,
 }) => {
   if (!open) return null;
 
@@ -61,25 +65,32 @@ export const Dialog: React.FC<DialogProps> = ({
       >
         <div className="md:hidden mx-auto mt-2 h-1 w-10 rounded-full bg-border shrink-0" />
 
-        <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border shrink-0">
+        <div className={cn(
+          'flex items-center justify-between gap-3 border-b border-border shrink-0',
+          compact ? 'px-3.5 py-2' : 'px-4 py-3'
+        )}>
           <div className="min-w-0">
-            <h2 className="text-base font-semibold text-fg leading-snug">{title}</h2>
-            {subtitle && <p className="text-xs text-fg-subtle mt-1">{subtitle}</p>}
+            <h2 className={cn('font-semibold text-fg leading-snug', compact ? 'text-sm' : 'text-base')}>{title}</h2>
+            {subtitle && <p className="text-xs text-fg-subtle mt-0.5">{subtitle}</p>}
           </div>
           {dismissable && <IconButton icon={X} aria-label="Закрыть" onClick={onClose} size="sm" />}
         </div>
 
         <div
           className={cn(
-            'flex-1 min-h-0 overflow-y-auto px-4 py-4 overscroll-contain [-webkit-overflow-scrolling:touch]',
-            !footer && 'dialog-bottom-space'
+            'flex-1 min-h-0 overflow-y-auto overscroll-contain [-webkit-overflow-scrolling:touch]',
+            compact ? 'p-2.5 sm:p-3' : cn('px-4 py-4', !footer && 'dialog-bottom-space'),
+            contentClassName
           )}
         >
           {children}
         </div>
 
         {footer && (
-          <div className="dialog-bottom-space shrink-0 flex flex-wrap gap-2 px-4 py-3 border-t border-border">
+          <div className={cn(
+            'shrink-0 flex flex-wrap gap-2 border-t border-border',
+            compact ? 'px-3 py-2' : 'dialog-bottom-space px-4 py-3'
+          )}>
             {footer}
           </div>
         )}
