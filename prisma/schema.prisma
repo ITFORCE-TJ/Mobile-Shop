@@ -220,6 +220,17 @@ model CashHandover {
   acceptedByUserId       String
   acceptedByName         String
   financialTransactionId String   @unique
+  // Split of the handed-over cash (null on collections made before the split existed): the
+  // regular part went to Central Cash, the bonus part to the Bonus Account, each by its own
+  // ledger transfer. regular + bonus = amount in both currencies.
+  regularAmountTjs              Decimal?  @db.Decimal(14, 2)
+  regularAmountUsd              Decimal?  @db.Decimal(14, 2)
+  bonusAmountTjs                Decimal?  @db.Decimal(14, 2)
+  bonusAmountUsd                Decimal?  @db.Decimal(14, 2)
+  regularFinancialTransactionId String?   @unique
+  bonusFinancialTransactionId   String?   @unique
+  cancelledAt                   DateTime?
+  cancelledByUserId             String?
   createdAt              DateTime @default(now())
 
   store Store @relation(fields: [storeId], references: [id])
@@ -585,6 +596,9 @@ model SupplierBonus {
   bonusType     BonusType
   amountUsd     Decimal?  @db.Decimal(14, 2)
   ownerProfitAllocations Json?
+  // The posting that credited a cash bonus to the Bonus Account (null: bonuses recorded before
+  // cash bonuses were credited there, and gift-device bonuses).
+  bonusAccountTransactionId String? @unique
   exchangeRate  Decimal   @db.Decimal(10, 4)
   status        String?
   dateReceived  DateTime  @default(now())
@@ -981,6 +995,8 @@ model FinancialAccount {
   type              FinancialAccountType
   // One CASH account per store (nullable+unique so MAIN/OTHER accounts have no store).
   storeId           String?              @unique
+  // Stable identity of a system account (e.g. "BONUS_ACCOUNT"), never looked up by name.
+  systemKey         String?              @unique
   active            Boolean              @default(true)
   openingBalanceTjs Decimal              @default(0) @db.Decimal(14, 2)
   openingBalanceUsd Decimal              @default(0) @db.Decimal(14, 2)

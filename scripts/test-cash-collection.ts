@@ -1,6 +1,7 @@
-// Cash collection (инкассация) against a disposable schema: cash sales at different rates,
-// card and split payments, an expense and a refund paid from the register, then the full
-// handover to Central Cash. Expected TJS/USD figures are computed here independently.
+// Cash collection (инкассация) against a disposable schema: sales at different rates paid in
+// cash, by card/transfer and split, an expense and a refund paid from the register, then the full
+// handover to Central Cash. Every sale raises the store's single register by its whole receipt,
+// whatever the payment method. Expected TJS/USD figures are computed here independently.
 import 'dotenv/config';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -42,32 +43,43 @@ try {
 
   let n = 0;
   const device = async (storeId = 'store-siyoma') => db.device.create({ data: { imei: `3599${String(++n).padStart(11, '0')}`, brand: 'Apple', model: 'iPhone', storage: '128GB', color: 'Black', storeId, status: 'STORE_STOCK', purchasePriceUsd: 50, costBasisUsd: 50 } });
-  const sell = async (priceTjs: number, paymentMethod: string, cash: number, card: number) => {
+  const registerUsd = async () => D((await db.store.findUniqueOrThrow({ where: { id: 'store-siyoma' } })).cashBalanceUsd);
+  const sell = async (priceTjs: number, paymentMethod: string, cash: number, card: number, expectedUsd?: string) => {
     const d = await device();
+    const before = await registerUsd();
     const r = await call(seller, 'POST', '/sales', { storeId: 'store-siyoma', items: [{ deviceId: d.id, salePriceTjs: priceTjs }], paymentMethod, cashAmountTjs: cash, cardAmountTjs: card });
     assert.equal(r.status, 201, JSON.stringify(r));
+    if (expectedUsd !== undefined) {
+      // The whole receipt reaches the register, by one ledger row with its TJS and USD.
+      assert.equal((await registerUsd()).minus(before).toString(), expectedUsd, `${paymentMethod} ${priceTjs} TJS: register +$${expectedUsd}`);
+      const row = await db.financialTransaction.findFirstOrThrow({ where: { sourceType: 'SALE', sourceId: r.data.id } });
+      assert.equal(String(row.amountTjs), String(priceTjs));
+      assert.equal(String(row.amountUsd), expectedUsd);
+      assert.equal((await db.sale.findUniqueOrThrow({ where: { id: r.data.id } })).paymentMethod, paymentMethod);
+    }
     return r.data;
   };
 
-  // ---------- sales at three rates, card and split payments ----------
+  // ---------- sales at three rates, every payment method ----------
   await setRate(10);
-  const firstSale = await sell(1000, 'CASH', 1000, 0);            // +1000 TJS / +$100
+  const firstSale = await sell(1000, 'CASH', 1000, 0, '100');      // +1000 TJS / +$100
   await setRate(11);
-  await sell(1100, 'CASH', 1100, 0);                               // +1100 TJS / +$100
-  await sell(2200, 'CARD', 0, 2200);                               // card: not physical cash
-  await sell(1650, 'SPLIT', 550, 1100);                            // +550 TJS / +$50 (cash part only)
+  await sell(1100, 'CASH', 1100, 0, '100');                        // +1100 TJS / +$100
+  await sell(2200, 'CARD', 0, 2200, '200');                        // card/transfer: +2200 TJS / +$200
+  await sell(1650, 'SPLIT', 550, 1100, '150');                     // split: the whole +1650 TJS / +$150
   await setRate(12);
-  await sell(1200, 'CASH', 1200, 0);                               // +1200 TJS / +$100
+  await sell(1200, 'CASH', 1200, 0, '100');                        // +1200 TJS / +$100
+  pass('CASH, CARD and SPLIT receipts each raise the store register by their whole amount; the method is kept on the sale')
   const expense = await call(admin, 'POST', '/expenses', { category: 'Аренда', amountTjs: 120, storeId: 'store-siyoma', paidFromCashRegister: true, comment: 'Хозтовары' });
   assert.equal(expense.status, 201, JSON.stringify(expense));    // −120 TJS / −$10
   const refund = await call(admin, 'POST', `/sales/${firstSale.id}/refund`, { reason: 'Брак', refundAmountTjs: 1000, penaltyFeeTjs: 0, paymentMethod: 'CASH' });
   assert.equal(refund.status, 200, JSON.stringify(refund));       // −1000 TJS at today's 12 → −$83.33
 
-  const expectedTjs = D(1000).plus(1100).plus(550).plus(1200).minus(120).minus(1000);                 // 2730
-  const expectedUsd = D(100).plus(100).plus(50).plus(100).minus(10).minus(D(1000).div(12).toDecimalPlaces(2)); // 256.67
+  const expectedTjs = D(1000).plus(1100).plus(2200).plus(1650).plus(1200).minus(120).minus(1000);                       // 6030
+  const expectedUsd = D(100).plus(100).plus(200).plus(150).plus(100).minus(10).minus(D(1000).div(12).toDecimalPlaces(2)); // 556.67
   const register = async (id: string) => D((await db.store.findUniqueOrThrow({ where: { id } })).cashBalanceUsd);
   assert.equal((await register('store-siyoma')).toString(), expectedUsd.toString(), 'register USD before collection');
-  pass(`store cash after sales/expense/refund: ${expectedTjs} TJS = $${expectedUsd} (cash only, each at its own rate)`);
+  pass(`store register after sales/expense/refund: ${expectedTjs} TJS = $${expectedUsd} (all payment methods, each at its own rate)`);
 
   // ---------- balances for the admin (ADMIN only) ----------
   const balances = await call(admin, 'GET', '/cash-collections/balances');

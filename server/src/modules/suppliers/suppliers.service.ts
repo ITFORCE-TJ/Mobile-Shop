@@ -4,10 +4,10 @@ import type { TransactionClient } from '../../prisma/prisma.service';
 import { resolveActor } from '../../common/actor';
 import { requireNonNegativeMoney, requirePositiveMoney, roundMoney } from '../../common/money';
 import { requireTodayRate } from '../exchange-rate/exchange-rate.service';
-import { lockCashRegister } from '../finance/account.service';
+import { lockBonusAccount, lockCashRegister } from '../finance/account.service';
 import { currentOwnerAllocations, readOwnerAllocations, replaceOwnerAllocations } from '../finance/owner-allocations';
 import type { OwnerProfitAllocation } from '../sales/profit';
-import { postTransaction } from '../finance/financial-transaction.service';
+import { cancelTransaction, postTransaction } from '../finance/financial-transaction.service';
 import { allocateMoney } from '../../common/allocation';
 
 /** True if any of these devices has a sale, transfer, or repair record referencing it (hard FK, no cascade). */
@@ -18,6 +18,35 @@ async function deviceHasTransactionHistory(tx: TransactionClient, deviceIds: str
     tx.repairTicket.findFirst({ where: { deviceId: { in: deviceIds } } }),
   ]);
   return Boolean(saleItem || transferItem || repairTicket);
+}
+
+/**
+ * A cash supplier bonus is company money held on the Bonus Account: credited there once, by one
+ * ledger posting at the bonus's own rate (never through a store register or a collection).
+ */
+async function creditBonusAccount(tx: TransactionClient, bonus: { id: string; amountUsd: MoneyInput; exchangeRate: MoneyInput }, supplier: { id: string; name: string }, actorId: string) {
+  const account = await lockBonusAccount(tx);
+  const amountUsd = D(bonus.amountUsd);
+  return postTransaction(tx, {
+    type: 'INCOME', direction: 'IN', numberPrefix: 'CR',
+    accountId: account.id, balanceCurrency: 'USD',
+    amount: amountUsd, currency: 'USD', exchangeRate: bonus.exchangeRate,
+    amountTjs: roundMoney(amountUsd.mul(bonus.exchangeRate)), amountUsd,
+    categoryName: 'Бонус поставщика',
+    counterpartyType: 'SUPPLIER', counterpartyId: supplier.id, counterpartyName: supplier.name,
+    sourceType: 'SUPPLIER_BONUS', sourceId: bonus.id,
+    description: `Денежный бонус от ${supplier.name}`,
+    createdByUserId: actorId,
+  });
+}
+
+/** Takes a cash bonus's credit back off the Bonus Account (reversal with its original amounts), refusing to overdraw it. */
+async function reverseBonusAccountCredit(tx: TransactionClient, transactionId: string, amountUsd: MoneyInput, actorId: string) {
+  const account = await lockBonusAccount(tx);
+  if (D(account.balanceUsd).lt(amountUsd)) {
+    throw new Error(`На Бонусном счёте недостаточно средств ($${account.balanceUsd}) для сторно бонуса ($${D(amountUsd)})`);
+  }
+  await cancelTransaction(tx, transactionId, actorId);
 }
 
 interface PaySupplierInput {
@@ -360,8 +389,13 @@ export class SuppliersService {
           });
         }
       }
-      // A cash bonus is only recorded (the bonus row and its audit entry): it is no owner
-      // profit, no register movement and no journal amount.
+      // A cash bonus is no owner profit and never passes through a store register: it is
+      // credited once to the Bonus Account.
+      let created = bonus;
+      if (input.bonusType === 'CASH_DISCOUNT') {
+        const posting = await creditBonusAccount(tx, { id: bonus.id, amountUsd: input.amountUsd!, exchangeRate }, supplier, actor.id);
+        created = await tx.supplierBonus.update({ where: { id: bonus.id }, data: { bonusAccountTransactionId: posting.id } });
+      }
 
       await tx.auditLog.create({
         data: {
@@ -369,20 +403,22 @@ export class SuppliersService {
           userName: actor.name,
           userRole: actor.role,
           action: 'SUPPLIER_BONUS',
-          details: `Зафиксирован бонус от ${supplier.name}${input.amountUsd ? `: $${input.amountUsd}` : ''}`,
+          details: `Зафиксирован бонус от ${supplier.name}${input.amountUsd ? `: $${input.amountUsd}, зачислен на Бонусный счёт` : ''}`,
           financialDetails: moneyJson(input.amountUsd ? { amountUsd: input.amountUsd, exchangeRate } : { exchangeRate }),
           targetId: bonus.id,
         },
       });
 
-      return bonus;
+      return created;
     }, { maxWait: 10000, timeout: 25000 });
   }
 
   /**
-   * CASH_DISCOUNT edits only change the recorded amount. A bonus booked before bonuses stopped
-   * being owner income still carries its old owner accrual: an amount edit reverses that accrual
-   * (with its journal entry) and does not book a new one. FREE_DEVICES edits are
+   * CASH_DISCOUNT amount edits move the Bonus Account by the difference: the old credit is
+   * reversed and the new amount credited, each through the ledger. A bonus booked before bonuses
+   * stopped being owner income still carries its old owner accrual: an amount edit reverses that
+   * accrual (with its journal entry) and does not book a new one; a bonus recorded before cash
+   * bonuses were credited to the Bonus Account is not credited by an edit. FREE_DEVICES edits are
    * blocked once the underlying device has any transaction history (sold, transferred,
    * sent to repair) — the bonus record isn't the source of truth for that device anymore.
    */
@@ -393,7 +429,7 @@ export class SuppliersService {
       const bonus = await tx.supplierBonus.findUnique({ where: { id }, include: { freeDevices: true, supplier: { select: { name: true } } } });
       if (!bonus) throw new Error('Бонус не найден');
 
-      const data: { campaignTitle?: string | null; amountUsd?: MoneyInput; ownerProfitAllocations?: OwnerProfitAllocation[] } = {};
+      const data: { campaignTitle?: string | null; amountUsd?: MoneyInput; ownerProfitAllocations?: OwnerProfitAllocation[]; bonusAccountTransactionId?: string } = {};
       if (input.campaignTitle !== undefined) data.campaignTitle = input.campaignTitle.trim() || null;
 
       if (bonus.bonusType === 'CASH_DISCOUNT') {
@@ -407,6 +443,13 @@ export class SuppliersService {
             await tx.ledgerEntry.create({
               data: { type: 'SUPPLIER_BONUS', description: `Сторно (правка бонуса от ${bonus.supplier.name}, бонусы больше не доход владельцев): −$${oldAmountUsd}`, amountUsd: D(oldAmountUsd).negated(), exchangeRate: bonus.exchangeRate, userName: actor.name, referenceId: id },
             });
+          }
+          if (bonus.bonusAccountTransactionId && !D(newAmountUsd).eq(oldAmountUsd)) {
+            // Only the decrease must be covered by the account (the new credit lands in the same transaction).
+            const decrease = D(oldAmountUsd).minus(newAmountUsd);
+            await reverseBonusAccountCredit(tx, bonus.bonusAccountTransactionId, decrease.gt(0) ? decrease : 0, actor.id);
+            const posting = await creditBonusAccount(tx, { id, amountUsd: newAmountUsd, exchangeRate: bonus.exchangeRate }, { id: bonus.supplierId, name: bonus.supplier.name }, actor.id);
+            data.bonusAccountTransactionId = posting.id;
           }
           data.amountUsd = newAmountUsd;
         }
@@ -465,7 +508,8 @@ export class SuppliersService {
    * FREE_DEVICES bonuses can't be deleted once the device they created has any
    * transaction history — same guard as deleting a supplier outright, for the same
    * reason (SaleItem/TransferItem/RepairTicket hold a hard FK with no cascade).
-   * CASH_DISCOUNT deletes reverse the owner-profit accrual booked at creation.
+   * CASH_DISCOUNT deletes reverse the Bonus Account credit (refused if the account no longer
+   * holds it) and, for old bonuses, the owner-profit accrual booked at creation.
    */
   public static async deleteBonus(id: string, actorUserId: string) {
     return prisma.$transaction(async (tx) => {
@@ -482,7 +526,11 @@ export class SuppliersService {
           await tx.deviceTimelineEvent.deleteMany({ where: { deviceId: { in: deviceIds } } });
           await tx.device.deleteMany({ where: { id: { in: deviceIds } } });
         }
-      } else if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.amountUsd && readOwnerAllocations(bonus.ownerProfitAllocations).length > 0) {
+      }
+      if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.bonusAccountTransactionId && bonus.amountUsd) {
+        await reverseBonusAccountCredit(tx, bonus.bonusAccountTransactionId, bonus.amountUsd, actor.id);
+      }
+      if (bonus.bonusType === 'CASH_DISCOUNT' && bonus.amountUsd && readOwnerAllocations(bonus.ownerProfitAllocations).length > 0) {
         // Only an old bonus that was accrued to owners has anything to reverse.
         await replaceOwnerAllocations(tx, readOwnerAllocations(bonus.ownerProfitAllocations), [], 1, true);
         await tx.ledgerEntry.create({

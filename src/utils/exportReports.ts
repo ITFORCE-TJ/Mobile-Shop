@@ -662,7 +662,7 @@ export async function buildComprehensiveReportWorkbook({
     }
   }
   const noteRowNumber = checkRow.number + 2;
-  summarySheet.getCell(`A${noteRowNumber}`).value = 'Формула: прибыль с учётом возвратов − расходы. Бонусы поставщиков и прибыль бонусных телефонов — справочно: это не доход, они не зачисляются ни на какой счёт и обнуляются при закрытии квартала бонусов.';
+  summarySheet.getCell(`A${noteRowNumber}`).value = 'Формула: прибыль с учётом возвратов − расходы. Бонусы поставщиков и прибыль бонусных телефонов — справочно: это не доход, их деньги хранятся на Бонусном счёте, счётчики обнуляются при закрытии квартала бонусов.';
   summarySheet.mergeCells(`A${noteRowNumber}:C${noteRowNumber}`);
   summarySheet.getCell(`A${noteRowNumber}`).font = { italic: true, size: 9, color: { argb: XLSX_MUTED } };
 

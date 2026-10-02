@@ -58,29 +58,34 @@ export async function withdrawFromCentralCash(tx: TransactionClient, amountUsd: 
   return register;
 }
 
+/** Stable identity of the Bonus Account (never looked up by name once adopted). */
+export const BONUS_ACCOUNT_KEY = 'BONUS_ACCOUNT';
+const BONUS_ACCOUNT_NAME = 'Бонусный счёт';
+
 /**
- * Dedicated company financial account for bonus device proceeds.
- * Kept separate from Central Cash so supplier bonus income is segregated from regular store income.
+ * The company's Bonus Account (monetary supplier bonuses and the profit of sold bonus phones),
+ * read-only: never creates anything. Falls back to an account the earlier version created by
+ * name until it is adopted by the first write.
  */
-export async function getBonusFinancialAccount(tx: TransactionClient) {
-  const existing = await tx.financialAccount.findFirst({ where: { name: 'Бонусный счёт' } });
-  if (existing) return existing;
-  return tx.financialAccount.create({
-    data: {
-      name: 'Бонусный счёт',
-      type: 'OTHER',
-      openingBalanceTjs: 0,
-      openingBalanceUsd: 0,
-      balanceTjs: 0,
-      balanceUsd: 0,
-      active: true,
-    },
-  });
+export async function findBonusAccount(db: Pick<TransactionClient, 'financialAccount'>) {
+  return (await db.financialAccount.findUnique({ where: { systemKey: BONUS_ACCOUNT_KEY } }))
+    ?? db.financialAccount.findFirst({ where: { name: BONUS_ACCOUNT_NAME, storeId: null, systemKey: null }, orderBy: { createdAt: 'asc' } });
 }
 
-export async function lockBonusAccount(tx: TransactionClient, actor: Actor, purpose: string) {
-  const account = await getBonusFinancialAccount(tx);
+/**
+ * The Bonus Account for a write, created exactly once and row-locked for the caller's
+ * transaction. A transaction-scoped advisory lock serializes first use; the unique systemKey
+ * guarantees a single account. An existing name-only account is adopted, never duplicated.
+ */
+export async function lockBonusAccount(tx: TransactionClient) {
+  await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext('financial-account:BONUS_ACCOUNT'))::text`;
+  let account = await tx.financialAccount.findUnique({ where: { systemKey: BONUS_ACCOUNT_KEY } });
+  if (!account) {
+    const legacy = await tx.financialAccount.findFirst({ where: { name: BONUS_ACCOUNT_NAME, storeId: null, systemKey: null }, orderBy: { createdAt: 'asc' } });
+    account = legacy
+      ? await tx.financialAccount.update({ where: { id: legacy.id }, data: { systemKey: BONUS_ACCOUNT_KEY } })
+      : await tx.financialAccount.create({ data: { name: BONUS_ACCOUNT_NAME, type: 'OTHER', systemKey: BONUS_ACCOUNT_KEY } });
+  }
   await tx.$queryRaw`SELECT id FROM financial_accounts WHERE id = ${account.id} FOR UPDATE`;
-  const current = await tx.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
-  return current;
+  return tx.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
 }

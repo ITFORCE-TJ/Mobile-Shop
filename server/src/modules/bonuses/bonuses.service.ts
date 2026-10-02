@@ -169,7 +169,7 @@ export class BonusesService {
           userName: actor.name,
           userRole: actor.role,
           action: 'BONUS_POOL_ANNULLED',
-          details: `Закрыт квартал бонусов «${input.periodName?.trim() || 'без названия'}»: денежные бонусы $${quarter.cashBonusesUsd}, прибыль бонусных телефонов $${totalAnnulledUsd} (${pendingEntries.length} шт.) — обнулены, ни на какой счёт не зачислены`,
+          details: `Закрыт квартал бонусов «${input.periodName?.trim() || 'без названия'}»: денежные бонусы $${quarter.cashBonusesUsd}, прибыль бонусных телефонов $${totalAnnulledUsd} (${pendingEntries.length} шт.) — счётчики обнулены, деньги на Бонусном счёте не изменились`,
           financialDetails: moneyJson({
             totalAnnulledUsd,
             entriesCount: pendingEntries.length,

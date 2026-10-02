@@ -19,9 +19,10 @@ describe('cash collection cancel', () => {
   });
 
   it('moves no cash when another request already cancelled the same collection', async () => {
-    db.financialTransaction.updateMany.mockResolvedValue({ count: 0 });
+    // The collection itself is claimed: the second request finds it already cancelled.
+    db.cashHandover.updateMany.mockResolvedValue({ count: 0 });
     await expect(CashCollectionService.cancel('h1', 'admin')).rejects.toThrow('уже была отменена');
-    expect(db.financialTransaction.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'ftx', status: 'POSTED' } }));
+    expect(db.cashHandover.updateMany).toHaveBeenCalledWith(expect.objectContaining({ where: { id: 'h1', cancelledAt: null } }));
     expect(db.store.update).not.toHaveBeenCalled();
     expect(db.store.updateMany).not.toHaveBeenCalled();
   });

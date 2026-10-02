@@ -22,7 +22,8 @@ interface RegisterBalance {
 }
 
 interface BonusAccountBalance {
-  id: string;
+  /** null until the account's first credit. */
+  id: string | null;
   name: string;
   balanceUsd: string;
   balanceTjs: string;
@@ -162,8 +163,8 @@ export const CashCollectionPanel: React.FC<{ month: string; storeId?: string | n
               </div>
               <div className="min-w-0">
                 <p className="text-xs text-fg-subtle">Бонусный счёт (поставщики)</p>
-                <p className="text-lg font-bold text-amber-400 tabular-nums">{formatUsd(balances.bonusAccount.balanceUsd)}</p>
-                <p className="text-xs text-fg-subtle tabular-nums">Выручка от бесплатных бонусных устройств</p>
+                <p className="text-lg font-bold text-amber-400 tabular-nums">{formatTjs(balances.bonusAccount.balanceTjs)}</p>
+                <p className="text-xs text-fg-subtle tabular-nums">{formatUsd(balances.bonusAccount.balanceUsd)} · денежные бонусы и прибыль бонусных телефонов</p>
               </div>
             </section>
           )}
@@ -283,14 +284,14 @@ export const CashCollectionPanel: React.FC<{ month: string; storeId?: string | n
                       <Landmark className="w-3.5 h-3.5 text-accent" />
                       В Центральную кассу:
                     </span>
-                    <span className="font-semibold text-fg tabular-nums">{formatUsd(collecting.regularCashUsd || 0)}</span>
+                    <span className="font-semibold text-fg tabular-nums">{formatTjs(collecting.regularCashTjs || 0)} · {formatUsd(collecting.regularCashUsd || 0)}</span>
                   </div>
                   <div className="flex justify-between items-center text-amber-400">
                     <span className="flex items-center gap-1.5">
                       <Gift className="w-3.5 h-3.5" />
                       На Бонусный счёт ({collecting.bonusCount || 0} шт.):
                     </span>
-                    <span className="font-semibold tabular-nums">{formatUsd(collecting.bonusCashUsd || 0)}</span>
+                    <span className="font-semibold tabular-nums">{formatTjs(collecting.bonusCashTjs || 0)} · {formatUsd(collecting.bonusCashUsd || 0)}</span>
                   </div>
                 </div>
               ) : (

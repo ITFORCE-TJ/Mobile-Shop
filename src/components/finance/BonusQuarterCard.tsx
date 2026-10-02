@@ -91,7 +91,7 @@ export const BonusQuarterCard: React.FC = () => {
           <h2 id="bonus-quarter-title" className="text-sm font-bold text-fg">Бонусы текущего квартала</h2>
           <p className="text-xs text-fg-subtle leading-relaxed max-w-xl">
             {quarter?.since ? `С последнего закрытия (${dateRu(quarter.since)}). ` : 'Кварталы ещё не закрывались. '}
-            Бонусы не являются доходом: не входят в прибыль, не зачисляются ни на какой счёт и не выплачиваются. После квартального отчёта закройте квартал — счётчики обнулятся.
+            Бонусы не являются доходом: не входят в прибыль и не выплачиваются, их деньги хранятся на Бонусном счёте. После квартального отчёта закройте квартал — счётчики обнулятся.
           </p>
         </div>
         <Button
@@ -164,7 +164,7 @@ export const BonusQuarterCard: React.FC = () => {
           <div className="space-y-3">
             <p>
               Денежные бонусы <strong className="text-fg">{usd(Number(quarter?.cashBonusesUsd ?? 0))}</strong> и прибыль бонусных телефонов{' '}
-              <strong className="text-fg">{usd(Number(quarter?.bonusDeviceProfitUsd ?? 0))}</strong> будут обнулены. Ни на какой счёт они не зачисляются. Отменить нельзя.
+              <strong className="text-fg">{usd(Number(quarter?.bonusDeviceProfitUsd ?? 0))}</strong> будут обнулены в отчётах. Деньги на Бонусном счёте не меняются. Отменить нельзя.
             </p>
             <label className="block">
               <span className="block text-[11px] font-semibold text-fg-subtle mb-1">Название квартала</span>

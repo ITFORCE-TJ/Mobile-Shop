@@ -3,9 +3,10 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { PrismaClient } from '@prisma/client';
 
-// Supplier bonuses are nobody's income: they are recorded and shown in reports, never accrued
-// to an owner, a register, an account or a payout, and are zeroed on the Bonuses page at each
-// quarterly close. Owner profit payout and reinvestment no longer exist.
+// Supplier bonuses are nobody's income: shown in reports apart from profit, never accrued to an
+// owner, a store register or a payout. Their money is the company's and is held on the Bonus
+// Account (a cash bonus is credited there once). The Bonuses page's quarterly close zeroes the
+// reporting counters only. Owner profit payout and reinvestment no longer exist.
 const url = new URL(process.env.DATABASE_URL || '');
 assert(['localhost', '127.0.0.1'].includes(url.hostname), 'Disposable local database required');
 const schema = `audit_fixes_bonus_${Date.now()}_${process.pid}`;
@@ -38,11 +39,13 @@ try {
   token = adminToken;
   assert.equal((await api('POST', '/exchange-rate/today', { rate: 10 })).status, 200);
 
-  // Every place a bonus could wrongly land: owner balances, store registers, ledger accounts.
+  // Every place a bonus could wrongly land: owner balances, store registers, other ledger
+  // accounts — and, separately, the Bonus Account where bonus money belongs.
   const money = async () => ({
     owners: (await db.owner.findMany({ orderBy: { id: 'asc' } })).map(o => [o.id, o.capitalBalanceUsd.toString(), o.totalAccruedProfitUsd.toString(), o.availableProfitUsd.toString()]),
     stores: (await db.store.findMany({ orderBy: { id: 'asc' } })).map(s => [s.id, s.cashBalanceUsd.toString()]),
-    accounts: (await db.financialAccount.findMany({ orderBy: { id: 'asc' } })).map(a => [a.id, a.balanceUsd.toString()]),
+    accounts: (await db.financialAccount.findMany({ where: { OR: [{ systemKey: null }, { systemKey: { not: 'BONUS_ACCOUNT' } }] }, orderBy: { id: 'asc' } })).map(a => [a.id, a.balanceUsd.toString()]),
+    bonusAccountUsd: String((await db.financialAccount.findUnique({ where: { systemKey: 'BONUS_ACCOUNT' } }))?.balanceUsd ?? 0),
   });
   const report = async () => {
     const r = await api('GET', '/reports/summary?period=ALL');
@@ -50,16 +53,16 @@ try {
     return r.data;
   };
 
-  // 1. Cash bonus: recorded only.
+  // 1. Cash bonus: credited to the Bonus Account once, nowhere else.
   let before = await money();
   let reportBefore = await report();
   const bonus = await api('POST', '/supplier-bonuses', { supplierId: 'sup-dubai', campaignTitle: 'Квартальный бонус', bonusType: 'CASH_DISCOUNT', amountUsd: 250 });
   assert.equal(bonus.status, 201, JSON.stringify(bonus));
-  assert.deepEqual(await money(), before);
+  assert.deepEqual(await money(), { ...before, bonusAccountUsd: '250' });
   let reportAfter = await report();
   assert.equal(String(reportAfter.periodCashBonusesUsd - reportBefore.periodCashBonusesUsd), '250');
   assert.equal(reportAfter.netProfitUsd, reportBefore.netProfitUsd);
-  pass('cash bonus $250: no owner/register/account change; shown in report, not in net profit');
+  pass('cash bonus $250: Bonus Account +$250 once; no owner/register/other account change; shown in report, not in net profit');
 
   // 2. Bonus phone: its profit is nobody's — reported apart, not in profit or store profit.
   const device = await db.device.create({ data: {
