@@ -22,8 +22,12 @@ import {
   Combine,
   Wrench,
   Loader2,
-  Warehouse
+  Warehouse,
+  RefreshCw,
+  Download,
+  Smartphone
 } from 'lucide-react';
+import { usePWAUpdate } from '../../hooks/usePWAUpdate';
 
 export const SettingsPage: React.FC = () => {
   const {
@@ -60,6 +64,9 @@ export const SettingsPage: React.FC = () => {
   const [isSubmittingAdjust, setIsSubmittingAdjust] = useState(false);
 
   const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const pwa = usePWAUpdate();
+  const [checkUpdateLoading, setCheckUpdateLoading] = useState(false);
+  const [checkFeedback, setCheckFeedback] = useState<string | null>(null);
 
   const isAdmin = currentUser?.role === 'ADMIN';
   const visibleStores = useMemo<StoreType[]>(() => {
@@ -445,6 +452,99 @@ export const SettingsPage: React.FC = () => {
               <LogOut className="w-4 h-4" />
               <span>ВЫЙТИ ИЗ СИСТЕМЫ</span>
             </button>
+          </div>
+
+          {/* Row 4: System Information & PWA Updates */}
+          <div className="p-4 sm:p-5 rounded-xl bg-surface border border-border space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-border">
+              <div className="flex items-center space-x-3">
+                <div className="p-2.5 rounded-xl bg-accent/10 border border-accent/20 text-accent">
+                  <Smartphone className="w-5 h-5" />
+                </div>
+                <div>
+                  <h4 className="text-xs sm:text-sm font-bold text-fg-muted uppercase">О СИСТЕМЕ И ОБНОВЛЕНИЯХ</h4>
+                  <p className="text-[11px] text-fg-subtle">
+                    {pwa.isStandalone ? 'Установлено как приложение (PWA)' : 'Запущено в веб-браузере'}
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={async () => {
+                    setCheckUpdateLoading(true);
+                    setCheckFeedback(null);
+                    const updateFound = await pwa.checkForUpdates(true);
+                    setCheckUpdateLoading(false);
+                    setCheckFeedback(updateFound ? 'Найдена новая версия!' : 'У вас установлена последняя версия');
+                    setTimeout(() => setCheckFeedback(null), 4000);
+                  }}
+                  disabled={checkUpdateLoading || pwa.isUpdating}
+                  className="px-3.5 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-muted text-xs font-semibold flex items-center space-x-2 transition-all disabled:opacity-50 cursor-pointer"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${checkUpdateLoading ? 'animate-spin text-accent' : ''}`} />
+                  <span>{checkUpdateLoading ? 'Проверка…' : 'Проверить обновления'}</span>
+                </button>
+
+                {pwa.hasUpdate && (
+                  <button
+                    type="button"
+                    onClick={() => pwa.applyUpdate()}
+                    disabled={pwa.isUpdating}
+                    className="px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center space-x-2 shadow-sm transition-all cursor-pointer animate-pulse"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    <span>{pwa.isUpdating ? 'Обновление…' : 'Применить обновление'}</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {checkFeedback && (
+              <div className="p-2.5 rounded-xl bg-surface-raised border border-accent/30 text-accent text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0" />
+                <span>{checkFeedback}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+              <div className="p-3 rounded-xl bg-surface-raised border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-fg-subtle block">Версия приложения</span>
+                <span className="font-semibold text-fg-muted mt-0.5 block">v{pwa.buildInfo.version}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-surface-raised border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-fg-subtle block">Git Сборка (SHA)</span>
+                <span className="font-mono text-xs text-accent mt-0.5 block truncate">{pwa.buildInfo.commit}</span>
+              </div>
+              <div className="p-3 rounded-xl bg-surface-raised border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-fg-subtle block">Дата сборки</span>
+                <span className="text-[11px] text-fg-muted mt-0.5 block truncate">
+                  {new Date(pwa.buildInfo.buildTime).toLocaleDateString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                </span>
+              </div>
+              <div className="p-3 rounded-xl bg-surface-raised border border-border/60">
+                <span className="text-[10px] uppercase font-bold text-fg-subtle block">Режим работы</span>
+                <span className="text-[11px] font-semibold text-fg-muted mt-0.5 block flex items-center gap-1.5">
+                  {pwa.offline ? (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-danger shrink-0" />
+                      Офлайн
+                    </>
+                  ) : (
+                    <>
+                      <span className="w-2 h-2 rounded-full bg-emerald-500 shrink-0" />
+                      Онлайн
+                    </>
+                  )}
+                </span>
+              </div>
+            </div>
+
+            <p className="text-[11px] text-fg-subtle">
+              Приложение проверяет наличие обновлений автоматически при запуске, возвращении из фона и каждые 60 секунд. 
+              Обновление применяется безопасно, не прерывая активные продажи, чеки или ввод данных.
+            </p>
           </div>
         </div>
       </div>

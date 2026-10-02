@@ -14,6 +14,31 @@ export async function lockExpenseEmployee(tx: TransactionClient, expenseId: stri
   await tx.$queryRaw`SELECT u.id FROM users u JOIN expenses e ON e."employeeId" = u.id WHERE e.id = ${expenseId} FOR UPDATE OF u`;
 }
 
+export const EXPENSE_CATEGORY_NAMES: Record<string, string> = {
+  RENT: 'Аренда помещения',
+  SALARY: 'Зарплата сотрудников',
+  EMPLOYEE_ADVANCE: 'Аванс сотрудника',
+  UTILITIES: 'Коммуналка и интернет',
+  MARKETING: 'Реклама и маркетинг',
+  REPAIR_PARTS: 'Запчасти для ремонта',
+  TAXES: 'Налоги и сборы',
+  SUPPLIES: 'Расходные материалы',
+  OTHER: 'Прочие расходы',
+  'Аренда': 'Аренда помещения',
+  'Зарплата': 'Зарплата сотрудников',
+  'Аванс сотрудника': 'Аванс сотрудника',
+  'Коммунальные': 'Коммуналка и интернет',
+  'Ремонт': 'Запчасти для ремонта',
+  'Транспорт': 'Транспорт и доставка',
+  'Реклама': 'Реклама и маркетинг',
+  'Хозяйственные': 'Хозяйственные товары',
+  'Другие': 'Прочие расходы',
+};
+
+export function formatExpenseCategory(cat: string): string {
+  return EXPENSE_CATEGORY_NAMES[cat] || cat;
+}
+
 interface CreateExpenseInput {
   category: string;
   amountTjs: MoneyInput;
@@ -149,17 +174,17 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
     },
   });
 
-  await tx.auditLog.create({
-    data: {
-      userId: actor.id,
-      userName: actor.name,
-      userRole: actor.role,
-      action: 'EXPENSE',
-      details: `Зарегистрирован расход [${input.category}]: ${amountTjs} TJS ($${amountUsd}) (${store?.name || 'Бизнес'})${status === 'UNPAID' ? ' — не оплачено' : ''}`,
-      financialDetails: moneyJson({ amountTjs, amountUsd, exchangeRate: rate }),
-      targetId: expense.id,
-    },
-  });
+    await tx.auditLog.create({
+      data: {
+        userId: actor.id,
+        userName: actor.name,
+        userRole: actor.role,
+        action: 'EXPENSE',
+        details: `Зарегистрирован расход [${formatExpenseCategory(input.category)}]: ${amountTjs} TJS ($${amountUsd}) (${store?.name || 'Бизнес'})${status === 'UNPAID' ? ' — не оплачено' : ''}`,
+        financialDetails: moneyJson({ amountTjs, amountUsd, exchangeRate: rate }),
+        targetId: expense.id,
+      },
+    });
 
   return expense;
 }
@@ -262,7 +287,7 @@ export async function payExpense(id: string, actorId: string, storeIdForBusiness
         userName: actor.name,
         userRole: actor.role,
         action: 'EXPENSE_PAID',
-        details: `Оплачен расход [${existing.category}]: ${existing.amountTjs} TJS ($${amountUsd}) из ${cashStore.isMainWarehouse ? 'Центральной кассы' : `кассы ${cashStore.name}`}`,
+        details: `Оплачен расход [${formatExpenseCategory(existing.category)}]: ${existing.amountTjs} TJS ($${amountUsd}) из ${cashStore.isMainWarehouse ? 'Центральной кассы' : `кассы ${cashStore.name}`}`,
         financialDetails: moneyJson({ amountTjs: existing.amountTjs, amountUsd, exchangeRate: rate, registeredUsd }),
         targetId: id,
       },
@@ -429,7 +454,7 @@ export async function updateExpense(
         userName: actor.name,
         userRole: actor.role,
         action: 'EXPENSE_EDIT',
-        details: `Отредактирован расход [${newCategory}]: ${newAmountTjs} TJS ($${newAmountUsd})`,
+        details: `Отредактирован расход [${formatExpenseCategory(newCategory)}]: ${newAmountTjs} TJS ($${newAmountUsd})`,
         financialDetails: moneyJson({ amountTjs: newAmountTjs, amountUsd: newAmountUsd }),
         targetId: id,
       },
@@ -490,7 +515,7 @@ export async function deleteExpense(id: string, actorId: string) {
         userName: actor.name,
         userRole: actor.role,
         action: 'EXPENSE_DELETE',
-        details: `Отменён расход [${existing.category}]: ${existing.amountTjs} TJS ($${existing.amountUsd})`,
+        details: `Отменён расход [${formatExpenseCategory(existing.category)}]: ${existing.amountTjs} TJS ($${existing.amountUsd})`,
         financialDetails: moneyJson({ amountTjs: existing.amountTjs, amountUsd: existing.amountUsd }),
         targetId: id,
       },

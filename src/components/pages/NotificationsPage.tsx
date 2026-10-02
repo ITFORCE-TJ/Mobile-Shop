@@ -192,7 +192,9 @@ export const NotificationsPage: React.FC = () => {
                     <div className="flex items-center gap-2 flex-wrap">
                       {unread && <span className="w-2 h-2 rounded-full bg-accent shrink-0" aria-label="Не прочитано" />}
                       <span className="text-sm font-semibold text-fg">{n.title}</span>
-                      {n.actionType && ACTION_LABELS[n.actionType] && n.actionType !== 'STORE_RECEIPT' && (
+                      {n.actionType && ACTION_LABELS[n.actionType] && n.actionType !== 'STORE_RECEIPT' &&
+                       !n.title.toLowerCase().includes(ACTION_LABELS[n.actionType].toLowerCase()) &&
+                       !ACTION_LABELS[n.actionType].toLowerCase().includes(n.title.toLowerCase()) && (
                         <span className="text-xs text-fg-subtle">{ACTION_LABELS[n.actionType]}</span>
                       )}
                     </div>

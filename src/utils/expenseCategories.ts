@@ -28,3 +28,12 @@ export const LEGACY_EXPENSE_LABELS: Record<string, string> = {
 export function expenseCategoryLabel(key: string): string {
   return STANDARD_EXPENSE_CATEGORIES.find((c) => c.id === key)?.label || LEGACY_EXPENSE_LABELS[key] || key || 'Прочие расходы';
 }
+
+/** Translates any bracketed category codes like [UTILITIES] or [RENT] to user-facing Russian names. */
+export function translateExpenseText(text: string): string {
+  if (!text || typeof text !== 'string') return text;
+  return text.replace(/\[([A-Za-z0-9_]+)\]/g, (match, code) => {
+    const label = expenseCategoryLabel(code);
+    return label !== code ? `[${label}]` : match;
+  });
+}

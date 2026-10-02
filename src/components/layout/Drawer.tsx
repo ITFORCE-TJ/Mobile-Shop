@@ -413,7 +413,7 @@ export const Drawer: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border bg-surface shrink-0">
+        <div className="p-4 border-t border-border bg-surface shrink-0 space-y-2">
           <button
             type="button"
             onClick={logout}
@@ -422,6 +422,13 @@ export const Drawer: React.FC = () => {
             <LogOut className="w-4 h-4" />
             <span>Выйти из аккаунта</span>
           </button>
+
+          <div className="flex items-center justify-between text-[11px] text-fg-subtle px-1">
+            <span>Версия {typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</span>
+            <span className="font-mono text-[10px] bg-surface-raised px-1.5 py-0.5 rounded border border-border">
+              {typeof __COMMIT_SHA__ !== 'undefined' ? __COMMIT_SHA__ : 'dev'}
+            </span>
+          </div>
         </div>
       </div>
     </>

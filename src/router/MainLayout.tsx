@@ -14,7 +14,6 @@ import { DailyRateModal } from '../components/common/DailyRateModal';
 import { StoreSwitchModal } from '../components/common/StoreSwitchModal';
 import { StoreTransitionOverlay } from '../components/common/StoreTransitionOverlay';
 import { PWAInstallPrompt } from '../components/pwa/PWAInstallPrompt';
-import { PWAUpdateNotifier } from '../components/pwa/PWAUpdateNotifier';
 import { useUIStore } from '../stores/useUIStore';
 import { useAppFields } from '../context/AppContext';
 import { LoadingState } from '../components/ui/Skeleton';
@@ -189,7 +188,7 @@ export function MainLayout() {
       {native ? (
         <Suspense fallback={null}><NativeScannerOverlay /></Suspense>
       ) : (
-        <><PWAInstallPrompt /><PWAUpdateNotifier /></>
+        <PWAInstallPrompt />
       )}
     </div>
   );

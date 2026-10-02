@@ -1,3 +1,5 @@
+import { translateExpenseText } from './expenseCategories';
+
 const actions: Record<string, string> = {
   LOGIN: 'Вход в систему', LOGOUT: 'Выход из системы', RATE_SET: 'Установлен курс доллара',
   USER_CREATE: 'Добавлен сотрудник', USER_UPDATE: 'Изменены данные сотрудника', USER_DELETE: 'Удалён сотрудник', USER_STATUS_CHANGE: 'Изменён статус сотрудника',
@@ -13,5 +15,9 @@ const actions: Record<string, string> = {
 const roles: Record<string, string> = { ADMIN: 'Администратор', PARTNER: 'Партнёр', SELLER: 'Продавец', SYSTEM: 'Система' };
 export const auditActionLabel = (value: string) => actions[value] || (/^[A-Z_]+$/.test(value) ? 'Другое действие' : value);
 export const auditRoleLabel = (value?: string) => roles[value || 'SYSTEM'] || 'Сотрудник';
-export const auditDetailsLabel = (value: string) => value.replace(/\b(ADMIN|PARTNER|SELLER|SYSTEM|USD|TJS)\b/g, token => roles[token] || (token === 'USD' ? 'долл. США' : 'сомони'));
+export const auditDetailsLabel = (value: string) => {
+  const withRoles = value.replace(/\b(ADMIN|PARTNER|SELLER|SYSTEM|USD|TJS)\b/g, token => roles[token] || (token === 'USD' ? 'долл. США' : 'сомони'));
+  return translateExpenseText(withRoles);
+};
 export const auditDateLabel = (value: string) => new Date(value).toLocaleString('ru-RU', { timeZone: 'Asia/Tashkent', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false });
+

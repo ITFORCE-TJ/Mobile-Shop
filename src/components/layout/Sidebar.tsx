@@ -343,6 +343,9 @@ export const Sidebar: React.FC = () => {
             >
               <LogOut className="w-4 h-4" />
             </button>
+            <div title={`v${typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'} (${typeof __COMMIT_SHA__ !== 'undefined' ? __COMMIT_SHA__ : 'dev'})`} className="text-[9px] font-mono text-fg-subtle opacity-60 text-center select-none truncate max-w-full">
+              {typeof __COMMIT_SHA__ !== 'undefined' ? __COMMIT_SHA__ : 'dev'}
+            </div>
           </>
         ) : (
           <>
@@ -386,6 +389,11 @@ export const Sidebar: React.FC = () => {
                 <LogOut className="w-3.5 h-3.5" />
                 <span>Выход</span>
               </button>
+            </div>
+
+            <div className="pt-0.5 px-1 flex items-center justify-between text-[10px] text-fg-subtle opacity-70">
+              <span>v{typeof __APP_VERSION__ !== 'undefined' ? __APP_VERSION__ : '1.0.0'}</span>
+              <span className="font-mono text-[9px]">{typeof __COMMIT_SHA__ !== 'undefined' ? __COMMIT_SHA__ : 'dev'}</span>
             </div>
           </>
         )}

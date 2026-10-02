@@ -1,4 +1,5 @@
 import type { Device, DeviceTimelineEvent, Sale, SaleItem, ExchangeEvent, Supplier, SupplierInvoice, SupplierBonus, Expense, Owner, OwnerTransaction, TransferRequest, RepairTicket, User, Store, NotificationItem, AuditLogEntry, DailyRate, StoreReceipt } from '../types';
+import { translateExpenseText } from '../utils/expenseCategories';
 
 type NameLookup = Map<string, string>;
 
@@ -346,7 +347,9 @@ export function mapStore(s: any): Store {
 
 export function mapNotification(n: any): NotificationItem {
   const rawMsg = n.message || '';
-  const cleanMsg = typeof rawMsg === 'string' ? rawMsg.replace(/^TR-[^:]*:\s*/i, '') : rawMsg;
+  const cleanMsg = typeof rawMsg === 'string'
+    ? translateExpenseText(rawMsg.replace(/^TR-[^:]*:\s*/i, ''))
+    : rawMsg;
 
   return {
     id: n.id,
@@ -399,7 +402,7 @@ export function mapAuditLog(a: any): AuditLogEntry {
     userName: a.userName ?? 'Система',
     userRole: a.userRole ?? 'ADMIN',
     storeName: a.storeName ?? undefined,
-    details: a.details,
+    details: typeof a.details === 'string' ? translateExpenseText(a.details) : a.details,
     financialDetails: a.financialDetails ?? undefined,
     imei: a.imei ?? undefined,
     receiptNumber: a.receiptNumber ?? undefined,

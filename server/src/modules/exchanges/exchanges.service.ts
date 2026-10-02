@@ -191,15 +191,15 @@ export class ExchangesService {
       });
 
       const store = await tx.store.findUnique({ where: { id: sale.storeId } });
-      const cashDelta = paymentMethod === 'CASH' ? diffTjs : 0;
+      const cashDelta = diffTjs;
       // In USD the settlement is exactly the new price minus the credit, both at today's rate —
       // the same figures the exchange books as revenue, so register and report agree to the cent.
-      const cashDeltaUsd = paymentMethod === 'CASH' ? diffUsd : D(0);
+      const cashDeltaUsd = diffUsd;
       if (!D(cashDelta).eq(0) && store) {
         const cashGuard = D(cashDeltaUsd).lt(0)
           ? await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceUsd: { gte: D(cashDeltaUsd).abs() } }, data: { cashBalanceUsd: { increment: cashDeltaUsd } } })
           : await tx.store.updateMany({ where: { id: sale.storeId }, data: { cashBalanceUsd: { increment: cashDeltaUsd } } });
-        if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для выплаты разницы клиенту');
+        if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно средств для выплаты разницы клиенту');
 
         const cashAccount = await getStoreCashAccount(tx, sale.storeId, store.name);
         await postTransaction(tx, {

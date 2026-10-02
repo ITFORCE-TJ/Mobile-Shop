@@ -66,6 +66,25 @@ export const AUDIT_NOTIFICATION_RULES: Record<string, Rule> = {
 
 const money = (value: unknown): number | null => (typeof value === 'number' && Number.isFinite(value) ? value : null);
 
+const EXPENSE_CATEGORY_LABELS: Record<string, string> = {
+  RENT: 'Аренда помещения',
+  SALARY: 'Зарплата сотрудников',
+  EMPLOYEE_ADVANCE: 'Аванс сотрудника',
+  UTILITIES: 'Коммуналка и интернет',
+  MARKETING: 'Реклама и маркетинг',
+  REPAIR_PARTS: 'Запчасти для ремонта',
+  TAXES: 'Налоги и сборы',
+  SUPPLIES: 'Расходные материалы',
+  OTHER: 'Прочие расходы',
+};
+
+function translateExpenseCategoryText(text: string): string {
+  if (!text) return text;
+  return text.replace(/\[([A-Z_]+)\]/g, (match, code) => {
+    return EXPENSE_CATEGORY_LABELS[code] ? `[${EXPENSE_CATEGORY_LABELS[code]}]` : match;
+  });
+}
+
 /** The notification for one audited business event, or null when the admin is not notified. */
 export function buildAuditNotification(row: AuditRow, ctx: { store?: { id: string; name: string } | null; actorName?: string | null }): AdminNotificationInput | null {
   const rule = AUDIT_NOTIFICATION_RULES[row.action];
@@ -76,7 +95,7 @@ export function buildAuditNotification(row: AuditRow, ctx: { store?: { id: strin
   return {
     actionType: row.action,
     title: rule.title,
-    message: row.details,
+    message: translateExpenseCategoryText(row.details),
     dedupeKey: `AUDIT:${row.id}`,
     store: ctx.store ?? null,
     actor: row.userId && actorName ? { id: row.userId, name: actorName } : null,

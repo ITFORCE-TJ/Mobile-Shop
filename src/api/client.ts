@@ -7,6 +7,10 @@ const pendingMutations = new Map<string, Promise<unknown>>();
 const pendingKeys = new Map<string, string>();
 export const REQUEST_TIMEOUT_MS = 45_000;
 
+export function hasActiveMutations(): boolean {
+  return pendingMutations.size > 0;
+}
+
 export async function apiClient<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
   const mutation = ['POST', 'PUT', 'PATCH', 'DELETE'].includes((options.method || 'GET').toUpperCase()) && !endpoint.startsWith('/auth/');
   if (!mutation) return request<T>(endpoint, options);

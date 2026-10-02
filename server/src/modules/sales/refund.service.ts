@@ -118,10 +118,11 @@ export class RefundService {
       });
 
       const store = await tx.store.findUnique({ where: { id: sale.storeId } });
-      if (input.paymentMethod === 'CASH') {
+      if (!D(actualRefundTjs).eq(0)) {
         const cashGuard = await tx.store.updateMany({ where: { id: sale.storeId, cashBalanceUsd: { gte: actualRefundUsd } }, data: { cashBalanceUsd: { decrement: actualRefundUsd } } });
-        if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно наличных для возврата');
+        if (!D(cashGuard.count).eq(1)) throw new Error('В кассе недостаточно средств для возврата');
         const cashAccount = await getStoreCashAccount(tx, sale.storeId, store?.name);
+        const refundMethodLabel = input.paymentMethod === 'CARD' ? 'переводом / картой' : 'наличными';
         await postTransaction(tx, {
           type: 'REFUND',
           direction: 'OUT',
@@ -137,7 +138,7 @@ export class RefundService {
           shopId: sale.storeId,
           sourceType: 'SALE',
           sourceId: sale.id,
-          description: `Возврат по чеку #${sale.receiptNumber}: ${input.reason}`,
+          description: `Возврат по чеку #${sale.receiptNumber} (${refundMethodLabel}): ${input.reason}`,
           createdByUserId: actor.id,
         });
       }

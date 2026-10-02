@@ -176,32 +176,30 @@ export class SalesService {
         })),
       });
 
-      if (!D(cashAmountTjs).eq(0)) {
-        // The register is kept in USD at today's rate; the cash share of the receipt's USD
-        // total is split exactly so cash + card always add up to totalUsd.
-        const [cashAmountUsd] = allocateMoney(totalUsd, [cashAmountTjs, cardAmountTjs]);
-        await tx.store.update({ where: { id: input.storeId }, data: { cashBalanceUsd: { increment: cashAmountUsd } } });
-        // Card payments settle outside any account this system tracks today (no
-        // card/bank settlement account exists yet — matches existing behavior, where
-        // the card portion has never moved a balance field either), so only the cash
-        // component is posted to the ledger.
+      if (!D(totalTjs).eq(0)) {
+        await tx.store.update({ where: { id: input.storeId }, data: { cashBalanceUsd: { increment: totalUsd } } });
         const cashAccount = await getStoreCashAccount(tx, input.storeId, store.name);
+        const paymentDescription = input.paymentMethod === 'CASH'
+          ? 'продажа наличными'
+          : input.paymentMethod === 'CARD'
+            ? 'продажа (перевод / карта)'
+            : `смешанная оплата (наличные ${cashAmountTjs} TJS, перевод/карта ${cardAmountTjs} TJS)`;
         await postTransaction(tx, {
           type: 'INCOME',
           direction: 'IN',
           numberPrefix: 'CR',
           accountId: cashAccount.id,
           balanceCurrency: 'USD',
-          amount: cashAmountTjs,
+          amount: totalTjs,
           currency: 'TJS',
           exchangeRate: rate,
-          amountTjs: cashAmountTjs,
-          amountUsd: cashAmountUsd,
+          amountTjs: totalTjs,
+          amountUsd: totalUsd,
           categoryName: 'Продажа',
           shopId: input.storeId,
           sourceType: 'SALE',
           sourceId: sale.id,
-          description: `Чек #${sale.receiptNumber}: продажа наличными`,
+          description: `Чек #${sale.receiptNumber}: ${paymentDescription}`,
           createdByUserId: input.userId,
         });
       }

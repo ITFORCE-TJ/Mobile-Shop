@@ -57,3 +57,30 @@ export async function withdrawFromCentralCash(tx: TransactionClient, amountUsd: 
   if (guard.count !== 1) throw new Error(`В центральной кассе недостаточно наличных: ${purpose}`);
   return register;
 }
+
+/**
+ * Dedicated company financial account for bonus device proceeds.
+ * Kept separate from Central Cash so supplier bonus income is segregated from regular store income.
+ */
+export async function getBonusFinancialAccount(tx: TransactionClient) {
+  const existing = await tx.financialAccount.findFirst({ where: { name: 'Бонусный счёт' } });
+  if (existing) return existing;
+  return tx.financialAccount.create({
+    data: {
+      name: 'Бонусный счёт',
+      type: 'OTHER',
+      openingBalanceTjs: 0,
+      openingBalanceUsd: 0,
+      balanceTjs: 0,
+      balanceUsd: 0,
+      active: true,
+    },
+  });
+}
+
+export async function lockBonusAccount(tx: TransactionClient, actor: Actor, purpose: string) {
+  const account = await getBonusFinancialAccount(tx);
+  await tx.$queryRaw`SELECT id FROM financial_accounts WHERE id = ${account.id} FOR UPDATE`;
+  const current = await tx.financialAccount.findUniqueOrThrow({ where: { id: account.id } });
+  return current;
+}
