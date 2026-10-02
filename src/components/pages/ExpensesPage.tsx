@@ -514,140 +514,213 @@ export const ExpensesPage: React.FC = () => {
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
       <div className="border-b border-border bg-bg shrink-0">
-        <div className="px-3 pb-3">
-          <div className="p-3.5 rounded-xl bg-surface border border-border flex flex-wrap items-center justify-between gap-3 shadow-xs">
-            <div className="flex items-center gap-3 min-w-0">
-              <div className="p-2.5 rounded-xl bg-danger/10 text-danger shrink-0">
-                <TrendingDown className="w-5 h-5" />
+        <div className="p-2.5 sm:p-3 pb-2 sm:pb-2.5">
+          <div className="p-2.5 sm:p-3 rounded-xl bg-surface border border-border shadow-xs">
+            <div className="flex items-center justify-between gap-2.5">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <div className="w-8 h-8 rounded-lg bg-danger/10 text-danger flex items-center justify-center shrink-0">
+                  <TrendingDown className="w-4 h-4" />
+                </div>
+                <div className="min-w-0">
+                  <div className="flex items-baseline gap-1.5 flex-wrap">
+                    <span className="text-base sm:text-lg font-black text-danger font-mono">
+                      -{formatMoney(totalExpensesTjs)} TJS
+                    </span>
+                    <span className="text-[11px] sm:text-xs text-fg-subtle font-mono">
+                      ≈ -${formatMoney(totalExpensesUsd)}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 text-[10px] sm:text-xs text-fg-subtle truncate">
+                    <span>{filteredExpenses.length} из {expenses.length} записей</span>
+                    {filteredExpenses.length > 0 && (
+                      <span className="hidden sm:inline">· ср. {formatMoney(totalExpensesTjs / filteredExpenses.length)} TJS</span>
+                    )}
+                  </div>
+                </div>
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="text-xs text-fg-subtle font-medium">
-                    Итого за период: <strong className="text-fg font-semibold">{filteredExpenses.length}</strong> из {expenses.length} записей
-                  </span>
-                  {hasActiveFilters && (
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent font-bold border border-accent/25">
-                      Фильтров: {activeFiltersCount}
-                    </span>
-                  )}
-                </div>
-                <div className="flex items-baseline gap-2 flex-wrap mt-0.5">
-                  <span className="text-xl font-bold text-danger">-{formatMoney(totalExpensesTjs)} TJS</span>
-                  <span className="text-xs text-fg-subtle">≈ -${formatMoney(totalExpensesUsd)}</span>
-                  {filteredExpenses.length > 0 && (
-                    <span className="text-[11px] text-fg-subtle">
-                      · ср. {formatMoney(totalExpensesTjs / filteredExpenses.length)} TJS
-                    </span>
-                  )}
-                </div>
-                {unpaidTotalTjs > 0 && (
+
+              <div className="flex items-center gap-1.5 shrink-0">
+                {hasActiveFilters && (
                   <button
                     type="button"
-                    onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
-                    className="text-xs font-semibold text-warning hover:underline flex items-center gap-1.5 mt-1 cursor-pointer"
-                    title="Нажмите для фильтрации"
+                    onClick={handleResetFilters}
+                    className="h-8 px-2 sm:px-2.5 rounded-lg border border-border bg-surface-raised hover:bg-surface text-xs font-semibold text-fg-muted hover:text-fg transition-colors flex items-center gap-1 cursor-pointer"
+                    title="Сбросить фильтры"
                   >
-                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-                    <span>из них не оплачено: <strong>{formatMoney(unpaidTotalTjs)} TJS</strong> ({unpaidCount} шт.)</span>
-                    <span className="text-[10px] underline ml-0.5">
-                      {statusFilter === 'UNPAID' ? '✕ сбросить фильтр' : '→ показать'}
-                    </span>
+                    <RotateCcw className="w-3.5 h-3.5" />
+                    <span className="hidden sm:inline">Сбросить</span>
                   </button>
                 )}
+                <Button
+                  variant="danger"
+                  leftIcon={Plus}
+                  onClick={() => setIsModalOpen(true)}
+                  className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold shrink-0"
+                >
+                  <span className="sm:hidden">Расход</span>
+                  <span className="hidden sm:inline">Добавить расход</span>
+                </Button>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              {hasActiveFilters && (
-                <Button
-                  variant="secondary"
-                  size="md"
-                  leftIcon={RotateCcw}
-                  onClick={handleResetFilters}
-                  className="text-xs font-semibold"
+            {/* Unpaid Warning Notice (if any) */}
+            {unpaidTotalTjs > 0 && (
+              <div className="mt-2 pt-2 border-t border-border/60 flex items-center justify-between text-xs">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter(statusFilter === 'UNPAID' ? 'ALL' : 'UNPAID')}
+                  className="text-xs font-semibold text-warning hover:underline flex items-center gap-1.5 cursor-pointer"
+                  title="Нажмите для фильтрации"
                 >
-                  Сбросить
-                </Button>
-              )}
-              <Button variant="danger" leftIcon={Plus} onClick={() => setIsModalOpen(true)}>
-                Добавить расход
-              </Button>
-            </div>
+                  <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                  <span>Не оплачено: <strong>{formatMoney(unpaidTotalTjs)} TJS</strong> ({unpaidCount} шт.)</span>
+                  <span className="text-[10px] opacity-75">
+                    {statusFilter === 'UNPAID' ? '✕ сбросить' : '→ показать'}
+                  </span>
+                </button>
+              </div>
+            )}
           </div>
         </div>
 
         {/* Search, Status, and Filter toggle bar */}
-        <div className="px-3 pb-3 space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
+        <div className="px-2.5 sm:px-3 pb-2.5 sm:pb-3 space-y-2">
+          {/* Row A: SearchBar (full width on mobile, flex-1 on desktop) */}
+          <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
             <SearchBar
               value={searchQuery}
               onChange={setSearchQuery}
-              placeholder="Поиск по расходу, категории, автору, сотруднику, сумме..."
-              className="flex-1 min-w-50"
+              placeholder="Поиск по расходам, категории, автору..."
+              className="w-full sm:flex-1"
             />
 
-            {/* Quick Status pills */}
-            <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
+            {/* Desktop: Status pills + Filter button alongside SearchBar */}
+            <div className="hidden sm:flex items-center gap-2 shrink-0">
+              <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ALL')}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    statusFilter === 'ALL'
+                      ? 'bg-surface text-fg shadow-xs border border-border/80'
+                      : 'text-fg-subtle hover:text-fg'
+                  }`}
+                >
+                  Все
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('UNPAID')}
+                  className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all cursor-pointer ${
+                    statusFilter === 'UNPAID'
+                      ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
+                      : 'text-fg-subtle hover:text-warning'
+                  }`}
+                >
+                  <span>Не оплачено</span>
+                  {totalUnpaidInScope > 0 && (
+                    <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
+                      statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
+                    }`}>
+                      {totalUnpaidInScope}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('PAID')}
+                  className={`px-2.5 py-1 rounded-lg font-semibold transition-all cursor-pointer ${
+                    statusFilter === 'PAID'
+                      ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
+                      : 'text-fg-subtle hover:text-fg'
+                  }`}
+                >
+                  Оплачено
+                </button>
+              </div>
+
               <button
                 type="button"
-                onClick={() => setStatusFilter('ALL')}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  statusFilter === 'ALL'
-                    ? 'bg-surface text-fg shadow-xs border border-border/80'
-                    : 'text-fg-subtle hover:text-fg'
+                onClick={() => setFiltersOpen(v => !v)}
+                className={`relative h-9 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                  filtersOpen || hasActiveFilters
+                    ? 'border-accent bg-accent/10 text-accent shadow-xs'
+                    : 'border-border bg-surface text-fg-muted hover:border-accent/40'
                 }`}
               >
-                Все
-              </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('UNPAID')}
-                className={`px-2.5 py-1 rounded-lg font-semibold flex items-center gap-1.5 transition-all ${
-                  statusFilter === 'UNPAID'
-                    ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
-                    : 'text-fg-subtle hover:text-warning'
-                }`}
-              >
-                <span>Не оплачено</span>
-                {totalUnpaidInScope > 0 && (
-                  <span className={`px-1.5 py-0.2 rounded-full text-[10px] font-bold ${
-                    statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
-                  }`}>
-                    {totalUnpaidInScope}
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Фильтры</span>
+                {hasActiveFilters && (
+                  <span className="w-4 h-4 rounded-full bg-accent text-accent-fg font-bold text-[9px] flex items-center justify-center">
+                    {activeFiltersCount}
                   </span>
                 )}
               </button>
-              <button
-                type="button"
-                onClick={() => setStatusFilter('PAID')}
-                className={`px-2.5 py-1 rounded-lg font-semibold transition-all ${
-                  statusFilter === 'PAID'
-                    ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
-                    : 'text-fg-subtle hover:text-fg'
-                }`}
-              >
-                Оплачено
-              </button>
             </div>
 
-            {/* Advanced Filters Button */}
-            <button
-              type="button"
-              onClick={() => setFiltersOpen(v => !v)}
-              className={`relative h-10 px-3 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all ${
-                filtersOpen || hasActiveFilters
-                  ? 'border-accent bg-accent/10 text-accent'
-                  : 'border-border bg-surface text-fg-muted hover:border-accent/40'
-              }`}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-              <span>Фильтры</span>
-              {hasActiveFilters && (
-                <span className="w-5 h-5 rounded-full bg-accent text-accent-fg font-bold text-[10px] flex items-center justify-center">
-                  {activeFiltersCount}
-                </span>
-              )}
-            </button>
+            {/* Mobile: Status pills on left + Filter button on right in ONE compact line */}
+            <div className="flex sm:hidden items-center justify-between gap-1.5">
+              <div className="flex items-center gap-0.5 bg-surface-raised p-0.5 rounded-xl border border-border text-xs shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('ALL')}
+                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-all cursor-pointer ${
+                    statusFilter === 'ALL'
+                      ? 'bg-surface text-fg shadow-xs border border-border/80'
+                      : 'text-fg-subtle hover:text-fg'
+                  }`}
+                >
+                  Все
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('UNPAID')}
+                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] flex items-center gap-1 transition-all cursor-pointer ${
+                    statusFilter === 'UNPAID'
+                      ? 'bg-warning/20 text-warning border border-warning/40 shadow-xs'
+                      : 'text-fg-subtle hover:text-warning'
+                  }`}
+                >
+                  <span>Не оплачено</span>
+                  {totalUnpaidInScope > 0 && (
+                    <span className={`px-1 py-0.2 rounded-full text-[9px] font-bold ${
+                      statusFilter === 'UNPAID' ? 'bg-warning text-black' : 'bg-warning/20 text-warning'
+                    }`}>
+                      {totalUnpaidInScope}
+                    </span>
+                  )}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStatusFilter('PAID')}
+                  className={`px-2 py-1 rounded-lg font-semibold text-[11px] transition-all cursor-pointer ${
+                    statusFilter === 'PAID'
+                      ? 'bg-accent/20 text-accent border border-accent/40 shadow-xs'
+                      : 'text-fg-subtle hover:text-fg'
+                  }`}
+                >
+                  Оплачено
+                </button>
+              </div>
+
+              <button
+                type="button"
+                onClick={() => setFiltersOpen(v => !v)}
+                className={`relative h-8 px-2.5 rounded-xl border text-xs font-semibold flex items-center gap-1.5 shrink-0 transition-all cursor-pointer ${
+                  filtersOpen || hasActiveFilters
+                    ? 'border-accent bg-accent/10 text-accent shadow-xs'
+                    : 'border-border bg-surface text-fg-muted hover:border-accent/40'
+                }`}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+                <span>Фильтры</span>
+                {hasActiveFilters && (
+                  <span className="w-4 h-4 rounded-full bg-accent text-accent-fg font-bold text-[9px] flex items-center justify-center">
+                    {activeFiltersCount}
+                  </span>
+                )}
+              </button>
+            </div>
           </div>
 
           {/* Quick Date Bar: Сегодня + Календарь (текущий месяц по умолчанию) */}
@@ -937,14 +1010,14 @@ export const ExpensesPage: React.FC = () => {
               const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
 
               return (
-                <div key={exp.id} className="p-4 flex items-start gap-3">
-                  <div className="p-2 rounded-lg bg-surface-raised text-fg-muted shrink-0">
+                <div key={exp.id} className="p-3 sm:p-3.5 flex items-start gap-2.5 sm:gap-3 hover:bg-surface-raised/40 transition-colors">
+                  <div className="p-2 rounded-xl bg-surface-raised border border-border/60 text-fg-subtle shrink-0">
                     <Icon className="w-4 h-4" />
                   </div>
 
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-sm font-semibold text-fg-muted">{label}</span>
+                      <span className="text-xs sm:text-sm font-bold text-fg truncate">{label}</span>
                       {exp.status === 'UNPAID'
                         ? <Badge tone="warning">Не оплачено</Badge>
                         : <Badge tone="success">Оплачено</Badge>}
@@ -953,16 +1026,16 @@ export const ExpensesPage: React.FC = () => {
                       )}
                       {exp.employeeName && <Badge tone="accent">{exp.employeeName}</Badge>}
                     </div>
-                    <p className="text-sm text-fg-muted mt-0.5">{exp.comment || exp.description || 'Операционный расход'}</p>
-                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-fg-subtle mt-1">
+                    <p className="text-xs sm:text-sm text-fg-muted mt-0.5 line-clamp-1">{exp.comment || exp.description || 'Операционный расход'}</p>
+                    <div className="flex flex-wrap items-center gap-1.5 text-[10px] sm:text-xs text-fg-subtle mt-1">
                       {!isStoreScoped && (
                         <>
-                          <StoreIcon className="w-3 h-3" />
+                          <StoreIcon className="w-3 h-3 text-fg-subtle/70" />
                           <span>{exp.storeName || 'Магазин'}</span>
                           <span>·</span>
                         </>
                       )}
-                      <Calendar className="w-3 h-3" />
+                      <Calendar className="w-3 h-3 text-fg-subtle/70" />
                       <span>{formattedDate}</span>
                       <span>·</span>
                       <span>{exp.createdByName || 'Администратор'}</span>
@@ -970,9 +1043,9 @@ export const ExpensesPage: React.FC = () => {
                   </div>
 
                   <div className="text-right shrink-0">
-                    <p className="text-sm font-semibold text-danger">-{formatMoney(exp.amountTjs)} TJS</p>
-                    <p className="text-xs text-fg-subtle">≈ -${formatMoney(costUsd)}</p>
-                    <div className="flex items-center gap-1 mt-1.5 justify-end">
+                    <p className="text-sm sm:text-base font-black text-danger font-mono">-{formatMoney(exp.amountTjs)} TJS</p>
+                    <p className="text-[10px] sm:text-xs text-fg-subtle font-mono">≈ -${formatMoney(costUsd)}</p>
+                    <div className="flex items-center gap-1 mt-1 justify-end">
                       {isAdmin && exp.status === 'UNPAID' && (
                         <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
                       )}

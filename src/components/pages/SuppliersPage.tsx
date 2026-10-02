@@ -14,7 +14,10 @@ import {
   Edit,
   Trash2,
   Loader2,
-  Landmark
+  Landmark,
+  Search,
+  User,
+  Phone
 } from 'lucide-react';
 
 const formatDateStr = (dateVal?: string) => {
@@ -80,6 +83,18 @@ export const SuppliersPage: React.FC = () => {
       .filter(inv => inv.supplierId === selectedSupplier.id)
       .sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
   }, [supplierInvoices, selectedSupplier]);
+
+  const [searchQuery, setSearchQuery] = useState('');
+  const filteredSuppliers = useMemo(() => {
+    if (!searchQuery.trim()) return suppliers;
+    const q = searchQuery.toLowerCase().trim();
+    return suppliers.filter(s =>
+      s.name.toLowerCase().includes(q) ||
+      (s.contactPerson && s.contactPerson.toLowerCase().includes(q)) ||
+      (s.phone && s.phone.toLowerCase().includes(q))
+    );
+  }, [suppliers, searchQuery]);
+
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
   const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
 
@@ -326,23 +341,33 @@ export const SuppliersPage: React.FC = () => {
 
   return (
     <div className="flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
-      {/* Top Header */}
-      <div className="p-3 sm:p-4 border-b border-border bg-surface flex items-center justify-between gap-3 shrink-0">
-        <div className="text-xs text-fg-muted">
-          Общий долг поставщикам: <strong className="text-danger">${formatMoney(totalAllDebt)}</strong>
+      {/* Top Header / Stat Card */}
+      <div className="p-3 border-b border-border bg-surface shrink-0 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="w-9 h-9 rounded-xl bg-danger/10 border border-danger/25 text-danger flex items-center justify-center shrink-0">
+            <Truck className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider block">Долг поставщикам</span>
+            <span className="text-sm sm:text-base font-black text-danger font-mono leading-none">
+              ${formatMoney(totalAllDebt)}
+            </span>
+          </div>
         </div>
+
         <button
+          type="button"
           onClick={() => setIsAddSupplierOpen(true)}
-          className="px-3 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg flex items-center space-x-1.5 shrink-0 transition-colors shadow-xs"
+          className="px-3 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg flex items-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer"
           title="Добавить поставщика"
         >
           <Plus className="w-3.5 h-3.5" />
-          <span>ДОБАВИТЬ ПОСТАВЩИКА</span>
+          <span>Добавить</span>
         </button>
       </div>
 
       {statusMessage && statusMessage.type === 'error' && (
-        <div className="mx-4 mt-3 p-2.5 rounded-lg text-xs flex items-center justify-between shrink-0 bg-danger/10 text-danger border border-danger/30">
+        <div className="mx-3 mt-2.5 p-2.5 rounded-lg text-xs flex items-center justify-between shrink-0 bg-danger/10 text-danger border border-danger/30">
           <div className="flex items-center space-x-2">
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{statusMessage.text}</span>
@@ -357,65 +382,130 @@ export const SuppliersPage: React.FC = () => {
       <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 divide-y lg:divide-y-0 lg:divide-x divide-border overflow-hidden">
         {/* Left Column: Suppliers list */}
         <div className="lg:col-span-1 flex flex-col overflow-hidden bg-surface">
-          <div className="p-3 border-b border-border bg-surface-raised font-bold text-xs text-fg-muted uppercase tracking-wide">
-            Список контрагентов ({suppliers.length})
+          {/* Search bar & counter */}
+          <div className="px-3 py-2 border-b border-border bg-surface-raised/40 flex items-center justify-between gap-2 shrink-0">
+            <div className="relative flex-1">
+              <Search className="w-3.5 h-3.5 text-fg-subtle absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+              <input
+                type="text"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                placeholder="Поиск по имени или телефону..."
+                className="w-full h-8 pl-8 pr-7 rounded-lg bg-surface border border-border text-xs text-fg placeholder:text-fg-subtle focus:outline-hidden focus:border-accent transition-colors"
+              />
+              {searchQuery && (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery('')}
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg cursor-pointer p-0.5"
+                >
+                  <X className="w-3 h-3" />
+                </button>
+              )}
+            </div>
+            <span className="text-[10px] font-semibold text-fg-subtle whitespace-nowrap shrink-0">
+              {filteredSuppliers.length} {filteredSuppliers.length === 1 ? 'контрагент' : filteredSuppliers.length < 5 ? 'контрагента' : 'контрагентов'}
+            </span>
           </div>
 
-          <div className="flex-1 overflow-y-auto divide-y divide-border bg-bg">
-            {suppliers.map((s) => {
-              const isSelected = selectedSupplier?.id === s.id;
+          <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 space-y-1.5 bg-bg">
+            {filteredSuppliers.length === 0 ? (
+              <div className="p-8 text-center text-xs text-fg-subtle">
+                <Truck className="w-8 h-8 mx-auto mb-2 opacity-30 text-fg-subtle" />
+                <p className="font-semibold">Поставщики не найдены</p>
+                {searchQuery && <p className="text-[11px] mt-0.5">Попробуйте изменить поисковый запрос</p>}
+              </div>
+            ) : (
+              filteredSuppliers.map((s) => {
+                const isSelected = selectedSupplier?.id === s.id;
+                const initials = (s.name || '').trim().substring(0, 2).toUpperCase() || 'П';
+                const hasDebt = s.totalDebtUsd > 0;
 
-              return (
-                <button
-                  key={s.id}
-                  onClick={() => setSelectedSupplierId(s.id)}
-                  className={`group w-full text-left p-3.5 hover:bg-surface-raised flex items-center justify-between transition-colors ${
-                    isSelected ? 'bg-accent/10 border-l-4 border-accent font-semibold' : ''
-                  }`}
-                >
-                  <div>
-                    <div className="flex items-center space-x-1.5">
-                      <h4 className="text-sm font-semibold text-fg-muted">{s.name}</h4>
-                      <ChevronRight className="w-3.5 h-3.5 text-fg-subtle lg:hidden" />
+                return (
+                  <div
+                    key={s.id}
+                    onClick={() => setSelectedSupplierId(s.id)}
+                    className={`group relative rounded-xl border transition-all text-left p-2.5 sm:p-3 cursor-pointer select-none active:scale-[0.99] flex items-center justify-between gap-2.5 ${
+                      isSelected
+                        ? 'bg-accent/10 border-accent/40 shadow-xs'
+                        : hasDebt
+                        ? 'bg-surface hover:bg-surface-raised/80 border-border/80'
+                        : 'bg-surface hover:bg-surface-raised/80 border-border/60 text-fg-muted'
+                    }`}
+                  >
+                    {/* Left: Avatar initials badge + details */}
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/25 text-accent font-black text-xs flex items-center justify-center shrink-0 tracking-wider">
+                        {initials}
+                      </div>
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-fg truncate">
+                          {s.name}
+                        </h4>
+                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-fg-subtle flex-wrap">
+                          {s.contactPerson && (
+                            <span className="flex items-center gap-1 truncate text-fg-muted">
+                              <User className="w-3 h-3 text-fg-subtle shrink-0" />
+                              <span>{s.contactPerson}</span>
+                            </span>
+                          )}
+                          {s.phone && (
+                            <span className="flex items-center gap-1 font-mono text-[10px] text-fg-subtle">
+                              <Phone className="w-3 h-3 text-fg-subtle shrink-0" />
+                              <span>{s.phone}</span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
                     </div>
-                    {s.contactPerson && (
-                      <p className="text-xs text-fg-muted mt-0.5">{s.contactPerson}</p>
-                    )}
-                    {s.phone && (
-                      <p className="text-[11px] text-fg-subtle mt-0.5">{s.phone}</p>
-                    )}
+
+                    {/* Right: Debt amount + Actions/Chevron */}
+                    <div className="flex items-center gap-2 shrink-0">
+                      <div className="text-right">
+                        {hasDebt ? (
+                          <>
+                            <span className="text-xs sm:text-sm font-black text-danger font-mono block leading-none">
+                              ${formatMoney(s.totalDebtUsd)}
+                            </span>
+                            <span className="text-[10px] text-fg-subtle block font-medium mt-0.5">
+                              Долг
+                            </span>
+                          </>
+                        ) : (
+                          <span className="text-[10px] font-semibold text-success px-1.5 py-0.5 rounded-md bg-success/10 border border-success/20">
+                            Оплачено
+                          </span>
+                        )}
+                      </div>
+
+                      {/* Desktop hover actions */}
+                      <div className="hidden lg:flex items-center space-x-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button
+                          type="button"
+                          onClick={(e) => handleStartEditSupplier(s, e)}
+                          className="p-1 rounded-md text-fg-subtle hover:text-accent hover:bg-surface"
+                          title="Редактировать поставщика"
+                        >
+                          <Edit className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          type="button"
+                          onClick={(e) => { e.stopPropagation(); setDeletingSupplier(s); }}
+                          className="p-1 rounded-md text-fg-subtle hover:text-danger hover:bg-surface"
+                          title="Удалить поставщика"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      <div className="p-1 rounded-lg bg-surface-raised/60 text-fg-subtle group-hover:text-accent group-hover:translate-x-0.5 transition-all">
+                        <ChevronRight className="w-4 h-4" />
+                      </div>
+                    </div>
                   </div>
-
-                  <div className="flex items-center space-x-2">
-                    <div className="text-right">
-                      <span className="text-xs font-bold text-danger">
-                        ${formatMoney(s.totalDebtUsd)}
-                      </span>
-                      <span className="block text-[10px] text-fg-subtle">Долг</span>
-                    </div>
-
-                    <div className="flex items-center space-x-1 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                      <button
-                        type="button"
-                        onClick={(e) => handleStartEditSupplier(s, e)}
-                        className="p-1.5 rounded-lg text-fg-subtle hover:text-accent hover:bg-surface"
-                        title="Редактировать поставщика"
-                      >
-                        <Edit className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={(e) => { e.stopPropagation(); setDeletingSupplier(s); }}
-                        className="p-1.5 rounded-lg text-fg-subtle hover:text-danger hover:bg-surface"
-                        title="Удалить поставщика"
-                      >
-                        <Trash2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  </div>
-                </button>
-              );
-            })}
+                );
+              })
+            )}
           </div>
         </div>
 

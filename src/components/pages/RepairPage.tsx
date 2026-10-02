@@ -10,7 +10,10 @@ import {
   Plus,
   Search,
   Loader2,
-  Scan
+  Scan,
+  ChevronRight,
+  ArrowLeft,
+  X
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { Dialog } from '../ui/Dialog';
@@ -240,6 +243,12 @@ export const RepairPage: React.FC = () => {
     return false;
   };
 
+  const handleScanListSearch = () => {
+    openScanner((scannedCode) => {
+      setSearchQuery(scannedCode.trim());
+    });
+  };
+
   const handleScanTicket = () => {
     openScanner(async (scannedCode) => {
       const code = scannedCode.trim();
@@ -427,9 +436,9 @@ export const RepairPage: React.FC = () => {
       case 'IN_PROGRESS':
         return { label: 'В работе', color: 'bg-warning/15 text-warning border-warning/30' };
       case 'READY':
-        return { label: 'Готов к выдаче', color: 'bg-accent/15 text-accent border-accent/30' };
+        return { label: 'Готов', color: 'bg-accent/15 text-accent border-accent/30' };
       case 'ISSUED':
-        return { label: 'Выдан клиенту', color: 'bg-surface-raised text-fg-subtle border-border' };
+        return { label: 'Выдан', color: 'bg-surface-raised text-fg-subtle border-border' };
       default:
         return { label: status, color: 'bg-surface-raised text-fg-subtle border-border' };
     }
@@ -439,79 +448,121 @@ export const RepairPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full min-w-0 max-w-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
-      {/* Row 1: Header Tabs Bar */}
-      <div className="p-2.5 sm:p-3 border-b border-border bg-surface flex items-center justify-between shrink-0 overflow-x-auto scrollbar-none">
-        <div className="flex items-center space-x-1.5 bg-surface-raised p-1 rounded-xl border border-border shrink-0">
-          <button
-            onClick={() => setActiveTab('list')}
-            className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold transition-all shrink-0 ${
-              activeTab === 'list'
-                ? 'bg-accent text-accent-fg shadow-xs'
-                : 'text-fg-muted hover:text-fg'
-            }`}
-          >
-            Журнал ремонтов ({filteredRepairs.length})
-          </button>
-          <button
-            onClick={() => setActiveTab('create')}
-            className={`px-3 sm:px-3.5 py-1.5 rounded-lg text-xs font-bold flex items-center space-x-1.5 transition-all shrink-0 ${
-              activeTab === 'create'
-                ? 'bg-accent text-accent-fg shadow-xs'
-                : 'text-fg-muted hover:text-fg'
-            }`}
-          >
-            <Plus className="w-3.5 h-3.5 shrink-0" />
-            <span>Прием в ремонт</span>
-          </button>
+      {/* Top Search & Filter Bar */}
+      <div className="p-2.5 sm:p-3 border-b border-border bg-surface shrink-0 space-y-2">
+        <div className="flex items-center gap-1.5 sm:gap-2">
+          {activeTab === 'create' ? (
+            <button
+              type="button"
+              onClick={() => setActiveTab('list')}
+              className="px-2.5 sm:px-3 py-1.5 sm:py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-all cursor-pointer shrink-0 min-h-[32px] sm:min-h-[34px]"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>К журналу ремонтов</span>
+            </button>
+          ) : (
+            <>
+              {/* Compact Search Bar with Scanner inside right corner */}
+              <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle" />
+                <input
+                  type="text"
+                  value={searchQuery ?? ''}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder="Квитанция / ФИО / IMEI..."
+                  className="w-full rounded-xl bg-surface-raised border border-border pl-8 pr-8 py-1.5 text-xs text-fg placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    onClick={() => setSearchQuery('')}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
+                    title="Очистить"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={handleScanListSearch}
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-accent hover:text-accent-strong p-0.5 transition-colors cursor-pointer"
+                    title="Сканировать IMEI или квитанцию"
+                  >
+                    <Scan className="w-3.5 h-3.5" />
+                  </button>
+                )}
+              </div>
+
+              {/* Action Button: + Прием */}
+              <button
+                type="button"
+                onClick={() => {
+                  setStatusMessage(null);
+                  setActiveTab('create');
+                }}
+                className="shrink-0 px-2.5 sm:px-3.5 py-1.5 sm:py-2 rounded-xl bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg font-semibold text-xs flex items-center gap-1 transition-all shadow-xs whitespace-nowrap min-h-[32px] sm:min-h-[34px] cursor-pointer"
+              >
+                <Plus className="w-3.5 h-3.5" />
+                <span><span className="hidden sm:inline">Прием в </span>ремонт</span>
+              </button>
+            </>
+          )}
         </div>
 
-        {!isStoreScoped && (
-          <div className="hidden sm:flex items-center space-x-2 text-xs font-medium text-fg-muted shrink-0">
-            <Wrench className="w-4 h-4 text-accent shrink-0" />
-            <span className="truncate">{currentStoreName}</span>
+        {/* Row 2 (if list): Store & Period Filters + KPI Metrics Strip */}
+        {activeTab === 'list' && (
+          <div className="flex items-center justify-between gap-1.5 text-xs flex-wrap">
+            <div className="flex items-center gap-1.5 flex-wrap">
+              {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
+                <select
+                  value={selectedStoreId}
+                  onChange={(e) => setSelectedStoreId(e.target.value)}
+                  className="h-7 bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-0.5 focus:outline-none focus:border-accent cursor-pointer"
+                >
+                  <option value="ALL">Все магазины</option>
+                  {retailStores.map(s => (
+                    <option key={s.id} value={s.id}>{s.name}</option>
+                  ))}
+                </select>
+              )}
+
+              <MonthPicker
+                value={selectedMonth}
+                onChange={setSelectedMonth}
+                className="h-7 px-2.5 rounded-xl border border-accent text-accent text-xs font-semibold bg-surface-raised focus:outline-none cursor-pointer"
+              />
+
+              {(searchQuery || (selectedStoreId !== 'ALL' && !isStoreScoped && storeCtx.mode === 'CENTRAL')) && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setSearchQuery('');
+                    if (!isStoreScoped) setSelectedStoreId('ALL');
+                  }}
+                  className="p-1 text-fg-subtle hover:text-danger hover:bg-danger/10 rounded-lg transition-colors cursor-pointer"
+                  title="Сбросить фильтры"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            {/* Quick Metrics Strip */}
+            <div className="flex items-center gap-1.5 sm:gap-2 text-[11px] text-fg-subtle font-mono shrink-0">
+              <span>{totalRepairsCount} рем.</span>
+              <span>·</span>
+              <span className="text-accent font-bold">{readyRepairsCount} готово</span>
+              <span>·</span>
+              <span className="font-bold text-fg">
+                {formatMoney(totalExpensesTjs)} TJS
+              </span>
+            </div>
           </div>
         )}
       </div>
 
-      {/* Row 2: Dedicated Filter & Search Bar */}
-      {activeTab === 'list' && (
-        <div className="p-3 border-b border-border bg-bg flex flex-col md:flex-row md:items-center justify-between gap-2.5 shrink-0">
-          <div className="relative w-full md:w-80 lg:w-96">
-            <Search className="absolute left-3 top-2.5 w-4 h-4 text-fg-subtle" />
-            <input
-              type="text"
-              value={searchQuery ?? ''}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Квитанция / ФИО / IMEI..."
-              className="w-full rounded-xl bg-surface border border-border pl-9 pr-3 py-2 text-xs text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
-            />
-          </div>
-
-          <div className="flex items-center gap-2 text-xs overflow-x-auto scrollbar-none">
-            {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
-              <select
-                value={selectedStoreId}
-                onChange={(e) => setSelectedStoreId(e.target.value)}
-                className="shrink-0 bg-surface border border-border text-fg-muted text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-accent"
-              >
-                <option value="ALL">Все магазины</option>
-                {retailStores.map(s => (
-                  <option key={s.id} value={s.id}>{s.name}</option>
-                ))}
-              </select>
-            )}
-
-            <MonthPicker
-              value={selectedMonth}
-              onChange={setSelectedMonth}
-              className="px-3 py-1.5 rounded-xl border border-border text-fg-muted text-xs font-semibold transition-colors bg-surface focus:outline-none focus:border-accent"
-            />
-          </div>
-        </div>
-      )}
-
       {/* Main Content Area */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-bg p-3 sm:p-4 min-w-0 max-w-full">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden bg-bg p-2.5 sm:p-4 min-w-0 max-w-full">
         {activeTab === 'create' ? (
           <form onSubmit={handleCreateTicket} className="w-full max-w-xl mx-auto space-y-4 min-w-0">
             <div className="border border-border rounded-xl bg-surface p-3.5 sm:p-5 space-y-4 shadow-xs min-w-0">
@@ -649,7 +700,6 @@ export const RepairPage: React.FC = () => {
                     className="w-full min-w-0 rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted placeholder-fg-subtle focus:border-accent focus:outline-none resize-none"
                   />
                 </div>
-
               </div>
 
               <button
@@ -663,19 +713,7 @@ export const RepairPage: React.FC = () => {
             </div>
           </form>
         ) : (
-          <div className="space-y-3">
-            {/* Summary Bar */}
-            <div className="p-3.5 bg-surface border border-border rounded-xl flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-xs">
-              <div className="text-fg-muted font-medium">
-                ПЕРИОД: <strong className="text-accent uppercase font-bold">{selectedMonth === 'ALL' ? 'Все время' : selectedMonth}</strong>
-              </div>
-              <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
-                <span>Всего ремонтов: <strong className="text-fg-muted font-bold">{totalRepairsCount}</strong></span>
-                <span>Отремонтировано / Готово: <strong className="text-accent font-bold">{readyRepairsCount}</strong></span>
-                <span>Затраты (Расходы): <strong className="text-accent font-bold">{formatMoney(totalExpensesTjs)} TJS</strong></span>
-              </div>
-            </div>
-
+          <div className="space-y-2">
             {/* List of Tickets */}
             {listLoad === 'loading' && filteredRepairs.length === 0 ? (
               <LoadingState label="Загрузка ремонтов…" />
@@ -689,89 +727,129 @@ export const RepairPage: React.FC = () => {
                 Квитанции на ремонт не найдены
               </div>
             ) : (
-              <div className="space-y-2.5">
+              <div className="space-y-2">
                 {filteredRepairs.map((ticket: RepairTicket) => {
                   const conf = getStatusBadge(ticket.status);
+                  const isAccepted = ticket.status === 'ACCEPTED';
+                  const isInProgress = ticket.status === 'IN_PROGRESS';
+                  const isIssued = ticket.status === 'ISSUED';
 
                   return (
                     <div
                       key={ticket.id}
                       onClick={() => setViewingTicket(ticket)}
-                      className="p-4 rounded-xl bg-surface border border-border flex flex-col md:flex-row md:items-center justify-between gap-3 text-xs transition-colors hover:border-fg-subtle cursor-pointer"
+                      className="p-2.5 sm:p-3 rounded-xl bg-surface border border-border hover:border-border-strong hover:bg-surface-raised/40 transition-all flex flex-col gap-1.5 cursor-pointer shadow-2xs"
                     >
-                      <div className="space-y-1.5 flex-1 min-w-0">
-                        <div className="flex items-center space-x-2">
-                          <span className="text-xs font-bold text-accent">Кв. #{ticket.ticketNumber}</span>
-                          <span className={`text-[10px] px-2 py-0.5 rounded-md font-bold uppercase border ${conf.color}`}>
+                      {/* Line 1: Ticket #, Status Badge, Date, Expense & Chevron */}
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <span className="text-xs sm:text-sm font-bold text-accent font-mono shrink-0">
+                            Кв. #{ticket.ticketNumber}
+                          </span>
+                          <span className={`text-[10px] px-1.5 py-0.5 rounded-md font-semibold border shrink-0 ${conf.color}`}>
                             {conf.label}
                           </span>
-                          <span className="text-[11px] text-fg-subtle">
-                            • {new Date(ticket.createdAt).toLocaleDateString('ru-RU')}{isStoreScoped ? '' : ` (${ticket.storeName || 'Магазин'})`}
+                          <span className="text-[11px] text-fg-subtle shrink-0">
+                            • {new Date(ticket.createdAt).toLocaleDateString('ru-RU')}
                           </span>
                         </div>
 
-                        <div>
-                          <h4 className="text-sm font-bold text-fg-muted">{ticket.deviceModel || `${ticket.brand || ''} ${ticket.model || ''}`}</h4>
-                          <p className="text-xs text-fg-muted mt-0.5">
-                            Клиент: <strong className="text-fg-muted">{ticket.customerName || 'Клиент'}</strong> ({ticket.customerPhone || 'телефон не указан'})
-                          </p>
-                          <p className="text-xs text-danger/90 mt-0.5">
-                            Дефект: {ticket.problemDescription}
-                          </p>
+                        {/* Right: Expense & Chevron */}
+                        <div className="text-right shrink-0 flex items-center gap-1.5">
+                          <div className="flex flex-col items-end">
+                            {isIssued ? (
+                              <>
+                                <span className="text-xs sm:text-sm font-bold font-mono text-accent leading-tight">
+                                  {formatMoney(ticket.finalCostTjs)} TJS
+                                </span>
+                                <span className="text-[10px] text-fg-subtle font-mono">расход</span>
+                              </>
+                            ) : (
+                              <span className="text-[10px] text-fg-subtle font-mono">
+                                расход при выдаче
+                              </span>
+                            )}
+                          </div>
+                          <ChevronRight className="w-3.5 h-3.5 text-fg-subtle shrink-0" />
                         </div>
                       </div>
 
-                        <div className="flex flex-col md:items-end justify-between shrink-0 space-y-2">
-                        <div className="text-left md:text-right">
-                          <span className="text-[10px] text-fg-subtle uppercase block">
-                            {ticket.status === 'ISSUED' ? 'Расход на ремонт' : 'Расход'}
-                          </span>
-                          <span className="text-xs font-bold text-accent">
-                            {ticket.status === 'ISSUED'
-                              ? `${formatMoney(ticket.finalCostTjs)} TJS`
-                              : 'Задаётся при выдаче'}
-                          </span>
-                          {ticket.prepaymentTjs ? (
-                            <span className="text-[10px] text-fg-subtle block">Предоплата: {formatMoney(ticket.prepaymentTjs)} TJS</span>
-                          ) : null}
-                        </div>
+                      {/* Line 2: Device Model */}
+                      <div className="min-w-0">
+                        <h4 className="text-xs sm:text-sm font-bold text-fg truncate">
+                          {ticket.deviceModel || `${ticket.brand || ''} ${ticket.model || ''}`}
+                        </h4>
+                      </div>
 
-                        {/* Quick action buttons depending on status */}
-                        <div className="flex items-center space-x-1.5" onClick={(e) => e.stopPropagation()}>
-                          {ticket.status === 'ACCEPTED' && (
-                            <button
-                              type="button"
-                              onClick={() => { void handleUpdateStatusQuick(ticket.id, 'IN_PROGRESS'); }}
-                              disabled={updatingTicketId !== null}
-                              className="px-3 py-1 rounded-lg bg-warning/15 hover:bg-warning/25 border border-warning/30 text-xs font-bold text-warning transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                            >
-                              {updatingTicketId === ticket.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                              В работу
-                            </button>
-                          )}
-                          {ticket.status === 'IN_PROGRESS' && (
-                            <button
-                              type="button"
-                              onClick={() => { void handleUpdateStatusQuick(ticket.id, 'READY'); }}
-                              disabled={updatingTicketId !== null}
-                              className="px-3 py-1 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/30 text-xs font-bold text-accent transition-colors disabled:opacity-50 flex items-center gap-1.5"
-                            >
-                              {updatingTicketId === ticket.id && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                              Готов
-                            </button>
-                          )}
-                          {ticket.status !== 'ISSUED' && (
+                      {/* Line 3: Client & Store & Defect */}
+                      <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle min-w-0 truncate">
+                        <span className="text-fg-muted font-medium shrink-0">
+                          {ticket.customerName || 'Клиент'}
+                        </span>
+                        {ticket.customerPhone && (
+                          <span className="shrink-0 text-fg-subtle">
+                            ({ticket.customerPhone})
+                          </span>
+                        )}
+                        {!isStoreScoped && ticket.storeName && (
+                          <>
+                            <span>•</span>
+                            <span className="text-fg-muted font-medium shrink-0">
+                              {ticket.storeName}
+                            </span>
+                          </>
+                        )}
+                        <span>•</span>
+                        <span className="text-danger font-medium truncate">
+                          Дефект: {ticket.problemDescription}
+                        </span>
+                      </div>
+
+                      {/* Line 4 (if not issued): Actions & Prepayment */}
+                      {!isIssued && (
+                        <div className="flex items-center justify-between gap-2 pt-1 border-t border-border/50 text-xs" onClick={(e) => e.stopPropagation()}>
+                          <div>
+                            {ticket.prepaymentTjs ? (
+                              <span className="text-[10px] text-fg-subtle font-mono">
+                                Предоплата: <strong className="text-fg font-semibold">{formatMoney(ticket.prepaymentTjs)} TJS</strong>
+                              </span>
+                            ) : <div />}
+                          </div>
+
+                          <div className="flex items-center gap-1.5 shrink-0">
+                            {isAccepted && (
+                              <button
+                                type="button"
+                                onClick={() => { void handleUpdateStatusQuick(ticket.id, 'IN_PROGRESS'); }}
+                                disabled={updatingTicketId !== null}
+                                className="h-7 px-2.5 rounded-lg bg-warning/15 hover:bg-warning/25 border border-warning/30 text-xs font-semibold text-warning transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                              >
+                                {updatingTicketId === ticket.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                                <span>В работу</span>
+                              </button>
+                            )}
+                            {isInProgress && (
+                              <button
+                                type="button"
+                                onClick={() => { void handleUpdateStatusQuick(ticket.id, 'READY'); }}
+                                disabled={updatingTicketId !== null}
+                                className="h-7 px-2.5 rounded-lg bg-accent/20 hover:bg-accent/30 border border-accent/30 text-xs font-semibold text-accent transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
+                              >
+                                {updatingTicketId === ticket.id && <Loader2 className="w-3 h-3 animate-spin" />}
+                                <span>Готов</span>
+                              </button>
+                            )}
                             <button
                               type="button"
                               onClick={() => handleOpenIssueModal(ticket)}
                               disabled={updatingTicketId === ticket.id}
-                              className="px-3.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold shadow-xs transition-colors disabled:opacity-50"
+                              className="h-7 px-3 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-semibold shadow-xs transition-colors disabled:opacity-50 flex items-center gap-1 cursor-pointer"
                             >
-                              Выдать клиенту
+                              <span>Выдать клиенту</span>
                             </button>
-                          )}
+                          </div>
                         </div>
-                      </div>
+                      )}
                     </div>
                   );
                 })}

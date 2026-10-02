@@ -1,7 +1,6 @@
 import React from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAppFields } from '../../context/AppContext';
-import { useNotifications } from '../../context/NotificationsContext';
 import {
   ShoppingBag,
   History,
@@ -9,7 +8,8 @@ import {
   Menu,
   RefreshCw,
   Landmark,
-  Wallet
+  Wallet,
+  Truck
 } from 'lucide-react';
 
 export const MobileBottomNav: React.FC = () => {
@@ -22,13 +22,10 @@ export const MobileBottomNav: React.FC = () => {
     setDrawerOpen,
     selectedStoreId,
   } = useAppFields('currentUser', 'setActivePage', 'drawerOpen', 'setDrawerOpen', 'selectedStoreId');
-  const { notifications } = useNotifications();
 
   const userRole = currentUser?.role || 'SELLER';
   const isAdmin = userRole === 'ADMIN';
   const isCentralCashMode = isAdmin && (!selectedStoreId || selectedStoreId === 'all');
-
-  const unreadNotifs = notifications.filter(n => !n.read).length;
 
   const NavItem: React.FC<{ routePath: string; label: string; icon: React.ElementType; onSelect: () => void }> = ({
     routePath,
@@ -56,12 +53,12 @@ export const MobileBottomNav: React.FC = () => {
     return (
       <nav className="app-bottom-nav md:hidden shrink-0 w-full bg-surface border-t border-border flex items-stretch justify-around select-none">
         <NavItem
-          routePath="/finance"
-          label="Финансы"
-          icon={Landmark}
+          routePath="/suppliers"
+          label="Поставщики"
+          icon={Truck}
           onSelect={() => {
-            setActivePage('FINANCE');
-            navigate('/finance');
+            setActivePage('SUPPLIERS');
+            navigate('/suppliers');
           }}
         />
         <NavItem
@@ -109,11 +106,6 @@ export const MobileBottomNav: React.FC = () => {
         >
           <div className="relative">
             <Menu className="w-5 h-5" strokeWidth={drawerOpen ? 2.5 : 2} />
-            {unreadNotifs > 0 && (
-              <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-                {unreadNotifs}
-              </span>
-            )}
           </div>
           <span className={`text-[10px] leading-none ${drawerOpen ? 'font-semibold' : 'font-medium'}`}>Меню</span>
         </button>
@@ -180,11 +172,6 @@ export const MobileBottomNav: React.FC = () => {
       >
         <div className="relative">
           <Menu className="w-5 h-5" strokeWidth={drawerOpen ? 2.5 : 2} />
-          {userRole !== 'PARTNER' && unreadNotifs > 0 && (
-            <span className="absolute -top-1.5 -right-2 flex h-4 min-w-4 items-center justify-center rounded-full bg-danger px-1 text-[9px] font-bold text-white">
-              {unreadNotifs}
-            </span>
-          )}
         </div>
         <span className={`text-[10px] leading-none ${drawerOpen ? 'font-semibold' : 'font-medium'}`}>Меню</span>
       </button>

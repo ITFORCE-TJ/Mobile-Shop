@@ -94,26 +94,40 @@ export const BonusAccountCard: React.FC = () => {
   };
 
   return (
-    <section className="rounded-2xl border border-border bg-surface p-4 space-y-3" aria-labelledby="bonus-account-title">
+    <section className="rounded-xl border border-border bg-surface p-3 sm:p-4 space-y-2.5 sm:space-y-3" aria-labelledby="bonus-account-title">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
-      <div className="flex flex-col sm:flex-row sm:items-start justify-between gap-3">
-        <div className="min-w-0 space-y-1">
-          <h2 id="bonus-account-title" className="text-sm font-bold text-fg">Бонусный счёт</h2>
-          <p className="text-xs text-fg-subtle leading-relaxed max-w-xl">
-            Деньги компании от бонусов поставщиков. Никому не начисляются; ими распоряжается администратор.
-          </p>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+        <div className="space-y-0.5 min-w-0">
+          <h2 id="bonus-account-title" className="text-xs sm:text-sm font-bold text-fg">Бонусный счёт</h2>
           {error ? (
             <p className="text-xs text-danger">{error}</p>
           ) : (
-            <p className="tabular-nums">
-              <span className="text-lg font-bold text-fg">{balance ? formatTjs(balance.balanceTjs) : '—'}</span>
-              <span className="text-xs text-fg-subtle ml-2">{balance ? formatUsd(balance.balanceUsd) : ''}</span>
+            <p className="tabular-nums flex items-baseline gap-1.5">
+              <span className="text-base sm:text-lg font-black text-accent font-mono">{balance ? formatTjs(balance.balanceTjs) : '—'}</span>
+              <span className="text-[11px] sm:text-xs text-fg-subtle font-mono">{balance ? formatUsd(balance.balanceUsd) : ''}</span>
             </p>
           )}
         </div>
-        <div className="flex flex-col sm:flex-row gap-2 shrink-0">
-          <Button variant="primary" leftIcon={Landmark} disabled={available <= 0} onClick={() => openForm('transfer')}>В Центральную кассу</Button>
-          <Button variant="secondary" leftIcon={HandCoins} disabled={available <= 0} onClick={() => openForm('payout')}>Выдать</Button>
+        <div className="grid grid-cols-2 sm:flex sm:flex-row gap-2 shrink-0 w-full sm:w-auto">
+          <Button
+            variant="primary"
+            leftIcon={Landmark}
+            disabled={available <= 0}
+            onClick={() => openForm('transfer')}
+            className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold justify-center"
+          >
+            <span className="sm:hidden">В кассу</span>
+            <span className="hidden sm:inline">В Центральную кассу</span>
+          </Button>
+          <Button
+            variant="secondary"
+            leftIcon={HandCoins}
+            disabled={available <= 0}
+            onClick={() => openForm('payout')}
+            className="h-8 sm:h-9 px-2.5 sm:px-3 text-xs font-bold justify-center"
+          >
+            Выдать
+          </Button>
         </div>
       </div>
 

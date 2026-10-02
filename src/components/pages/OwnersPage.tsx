@@ -39,6 +39,23 @@ function ownerCountLabel(count: number): string {
   return 'учредителей';
 }
 
+function formatTxDateTime(isoStr?: string): string {
+  if (!isoStr) return '—';
+  try {
+    const d = new Date(isoStr);
+    if (isNaN(d.getTime())) return isoStr;
+    return d.toLocaleString('ru-RU', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  } catch {
+    return isoStr;
+  }
+}
+
 
 export const OwnersPage: React.FC = () => {
   const {
@@ -553,36 +570,41 @@ export const OwnersPage: React.FC = () => {
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
       {/* Top Header Bar */}
-      <div className="p-3.5 sm:p-4 border-b border-border bg-surface flex flex-wrap items-center justify-between gap-3 shrink-0">
-        <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-            <PieChart className="w-5 h-5" />
+      <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border bg-surface flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center gap-2 min-w-0">
+          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           </div>
-          <div>
-            <h1 className="text-sm sm:text-base font-bold text-fg leading-tight">Партнеры и капитал</h1>
-            <p className="text-[11px] sm:text-xs text-fg-subtle">
-              {owners.length} {ownerCountLabel(owners.length)} · Учет долей, инвестиций и распределение прибыли
+          <div className="min-w-0">
+            <div className="flex items-center gap-1.5">
+              <h1 className="text-sm sm:text-base font-bold text-fg leading-tight">Партнеры и капитал</h1>
+              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-fg-subtle">
+                {owners.length} {ownerCountLabel(owners.length)}
+              </span>
+            </div>
+            <p className="text-[10px] text-fg-subtle hidden sm:block truncate">
+              Учет долей, инвестиций и распределение прибыли
             </p>
           </div>
         </div>
 
-        <div className="flex items-center gap-2 flex-wrap">
+        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end">
           <button
             type="button"
             onClick={() => openTxModalForOwner(displayOwners[0]?.id || '', 'INVESTMENT')}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-semibold transition-all shadow-xs cursor-pointer"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[32px]"
           >
-            <Plus className="w-4 h-4" />
-            <span>Внести капитал</span>
+            <Plus className="w-3.5 h-3.5" />
+            <span>+ Капитал</span>
           </button>
 
           <button
             type="button"
             onClick={() => openSharesModal()}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
           >
             <Percent className="w-3.5 h-3.5 text-accent" />
-            <span>Доли партнеров</span>
+            <span>Доли</span>
           </button>
 
           <button
@@ -591,150 +613,151 @@ export const OwnersPage: React.FC = () => {
               setStatusBanner(null);
               setIsQuarterModalOpen(true);
             }}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg text-xs font-medium transition-colors cursor-pointer"
+            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
           >
             <FileText className="w-3.5 h-3.5 text-warning" />
-            <span>Квартальный отчет</span>
+            <span className="hidden sm:inline">Квартальный отчет</span>
+            <span className="sm:hidden">Квартал</span>
           </button>
         </div>
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-3.5 sm:p-5 space-y-5 bg-bg">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-5 space-y-3 sm:space-y-4 bg-bg">
         {/* Top 4 Stat Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           {/* Total Capital */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Общий капитал</span>
-              <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-                <Briefcase className="w-3.5 h-3.5" />
+          <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border flex flex-col justify-between space-y-1 shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] font-semibold text-fg-subtle uppercase truncate">Общий капитал</span>
+              <div className="w-5 h-5 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                <Briefcase className="w-2.5 h-2.5" />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg sm:text-xl font-black text-fg">
+                <span className="text-sm sm:text-base lg:text-lg font-black font-mono text-fg truncate">
                   ${formatMoney(totalCapitalInvested)}
                 </span>
-                <span className="text-xs font-bold text-fg-subtle">USD</span>
+                <span className="text-[9px] font-bold text-fg-subtle">USD</span>
               </div>
-              <span className="text-[11px] text-fg-muted block mt-0.5">
+              <span className="text-[9px] sm:text-[10px] text-fg-subtle block font-mono truncate">
                 ≈ {formatMoney(moneyNumber(decimal(totalCapitalInvested).mul(rate)))} TJS
               </span>
             </div>
-            <div className="pt-2 border-t border-border flex items-center justify-between text-[10px] text-fg-subtle">
+            <div className="pt-1 border-t border-border/60 flex items-center justify-between text-[9px] sm:text-[10px] text-fg-subtle">
               <span>Товар: <strong className="text-info font-bold">${formatMoney(totalStockCostUsd)}</strong></span>
               <span>Нал: <strong className="text-accent font-bold">${formatMoney(totalCashInRegistersUsd)}</strong></span>
             </div>
           </div>
 
           {/* Stock on Hand */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">В товаре на складах</span>
-              <div className="w-7 h-7 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
-                <Package className="w-3.5 h-3.5" />
+          <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border flex flex-col justify-between space-y-1 shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] font-semibold text-fg-subtle uppercase truncate">В товаре</span>
+              <div className="w-5 h-5 rounded-md bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
+                <Package className="w-2.5 h-2.5" />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg sm:text-xl font-black text-info">
+                <span className="text-sm sm:text-base lg:text-lg font-black font-mono text-info truncate">
                   ${formatMoney(totalStockCostUsd)}
                 </span>
-                <span className="text-xs font-bold text-fg-subtle">USD</span>
+                <span className="text-[9px] font-bold text-fg-subtle">USD</span>
               </div>
-              <span className="text-[11px] text-fg-muted block mt-0.5">
+              <span className="text-[9px] sm:text-[10px] text-fg-subtle block font-mono truncate">
                 ≈ {formatMoney(totalStockCostUsd * rate)} TJS · {inStockDevices.length} шт
               </span>
             </div>
-            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              Себестоимость остатков ({stockRatioPercent}% активов)
+            <div className="pt-1 border-t border-border/60 text-[9px] sm:text-[10px] text-fg-subtle truncate">
+              Себестоимость ({stockRatioPercent}% активов)
             </div>
           </div>
 
           {/* Cash in Registers */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Наличными в кассах</span>
-              <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-                <Banknote className="w-3.5 h-3.5" />
+          <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border flex flex-col justify-between space-y-1 shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] font-semibold text-fg-subtle uppercase truncate">В кассах</span>
+              <div className="w-5 h-5 rounded-md bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                <Banknote className="w-2.5 h-2.5" />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg sm:text-xl font-black text-accent">
+                <span className="text-sm sm:text-base lg:text-lg font-black font-mono text-accent truncate">
                   ${formatMoney(totalCashInRegistersUsd)}
                 </span>
-                <span className="text-xs font-bold text-fg-subtle">USD</span>
+                <span className="text-[9px] font-bold text-fg-subtle">USD</span>
               </div>
-              <span className="text-[11px] text-fg-muted block mt-0.5">
+              <span className="text-[9px] sm:text-[10px] text-fg-subtle block font-mono truncate">
                 ≈ {formatMoney(totalCashInRegistersUsd * rate)} TJS · {stores.length} касс
               </span>
             </div>
-            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
+            <div className="pt-1 border-t border-border/60 text-[9px] sm:text-[10px] text-fg-subtle truncate">
               Кассовый остаток ({cashRatioPercent}% активов)
             </div>
           </div>
 
           {/* Available Profit */}
-          <div className="p-3.5 sm:p-4 rounded-2xl bg-surface border border-border flex flex-col justify-between space-y-2">
-            <div className="flex items-start justify-between gap-2">
-              <span className="text-[11px] font-semibold text-fg-subtle uppercase">Прибыль до закрытия квартала</span>
-              <div className="w-7 h-7 rounded-lg bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shrink-0">
-                <Wallet className="w-3.5 h-3.5" />
+          <div className="p-2 sm:p-2.5 rounded-xl bg-surface border border-border flex flex-col justify-between space-y-1 shadow-2xs">
+            <div className="flex items-center justify-between gap-1">
+              <span className="text-[10px] font-semibold text-fg-subtle uppercase truncate">Прибыль</span>
+              <div className="w-5 h-5 rounded-md bg-warning/10 border border-warning/20 flex items-center justify-center text-warning shrink-0">
+                <Wallet className="w-2.5 h-2.5" />
               </div>
             </div>
             <div>
               <div className="flex items-baseline gap-1">
-                <span className="text-lg sm:text-xl font-black text-warning">
+                <span className="text-sm sm:text-base lg:text-lg font-black font-mono text-warning truncate">
                   ${formatMoney(totalAvailableProfit)}
                 </span>
-                <span className="text-xs font-bold text-fg-subtle">USD</span>
+                <span className="text-[9px] font-bold text-fg-subtle">USD</span>
               </div>
-              <span className="text-[11px] text-fg-muted block mt-0.5">
+              <span className="text-[9px] sm:text-[10px] text-fg-subtle block font-mono truncate">
                 ≈ {formatMoney(moneyNumber(decimal(totalAvailableProfit).mul(rate)))} TJS
               </span>
             </div>
-            <div className="pt-2 border-t border-border text-[10px] text-fg-subtle truncate">
-              Станет капиталом при закрытии квартала
+            <div className="pt-1 border-t border-border/60 text-[9px] sm:text-[10px] text-fg-subtle truncate">
+              До закрытия квартала
             </div>
           </div>
         </div>
 
         {/* Section: Capital Allocation Breakdown (Goods vs Cash) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2.5 border-b border-border">
-            <div className="flex items-center gap-2">
-              <PieChart className="w-4 h-4 text-accent" />
-              <h2 className="text-xs sm:text-sm font-bold text-fg uppercase tracking-wide">
-                Размещение вложений: сколько в товаре и сколько налами лежит
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface border border-border shadow-xs space-y-2.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 pb-1.5 border-b border-border">
+            <div className="flex items-center gap-1.5">
+              <PieChart className="w-3.5 h-3.5 text-accent" />
+              <h2 className="text-xs font-bold text-fg uppercase tracking-wide">
+                Структура активов: товар и кассы
               </h2>
             </div>
-            <div className="text-[11px] text-fg-subtle flex items-center gap-3">
-              <span>Всего активов: <strong className="text-fg font-bold">${formatMoney(totalAssetsSumUsd)}</strong></span>
+            <div className="text-[10px] sm:text-[11px] text-fg-subtle flex items-center gap-2 flex-wrap">
+              <span>Всего активов: <strong className="text-fg font-bold font-mono">${formatMoney(totalAssetsSumUsd)}</strong></span>
               <span>·</span>
               <span>Курс: <strong className="text-accent font-semibold">{rate} TJS</strong></span>
             </div>
           </div>
 
           {/* Visual Split Ratio Progress Bar */}
-          <div className="space-y-2">
-            <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-info" />
-                <span className="text-fg-muted font-medium">В товаре (склад):</span>
-                <span className="font-bold text-fg">${formatMoney(totalStockCostUsd)}</span>
-                <span className="text-fg-subtle text-[11px]">({stockRatioPercent}% · {inStockDevices.length} шт)</span>
+          <div className="space-y-1">
+            <div className="flex flex-wrap items-center justify-between gap-1.5 text-[10px] sm:text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-info" />
+                <span className="text-fg-muted font-medium">В товаре:</span>
+                <span className="font-bold text-fg font-mono">${formatMoney(totalStockCostUsd)}</span>
+                <span className="text-fg-subtle">({stockRatioPercent}% · {inStockDevices.length} шт)</span>
               </div>
-              <div className="flex items-center gap-2">
-                <span className="w-2.5 h-2.5 rounded-full bg-accent" />
-                <span className="text-fg-muted font-medium">Наличными (кассы):</span>
-                <span className="font-bold text-fg">${formatMoney(totalCashInRegistersUsd)}</span>
-                <span className="text-fg-subtle text-[11px]">({cashRatioPercent}% · {stores.length} касс)</span>
+              <div className="flex items-center gap-1.5">
+                <span className="w-2 h-2 rounded-full bg-accent" />
+                <span className="text-fg-muted font-medium">Наличными:</span>
+                <span className="font-bold text-fg font-mono">${formatMoney(totalCashInRegistersUsd)}</span>
+                <span className="text-fg-subtle">({cashRatioPercent}% · {stores.length} касс)</span>
               </div>
             </div>
 
-            <div className="w-full h-3 bg-surface-raised rounded-full overflow-hidden flex border border-border">
+            <div className="w-full h-1.5 sm:h-2 bg-surface-raised rounded-full overflow-hidden flex border border-border">
               <div
                 className="bg-info h-full transition-all duration-300"
                 style={{ width: `${Math.min(100, Math.max(0, stockRatioPercent))}%` }}
@@ -749,13 +772,13 @@ export const OwnersPage: React.FC = () => {
           </div>
 
           {/* Per-Store / Warehouse Breakdown Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-1">
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-1.5 sm:gap-2 pt-0.5">
             {storeAssetsBreakdown.map(item => (
               <div
                 key={item.id}
-                className="p-3 rounded-xl bg-surface-raised border border-border flex flex-col justify-between space-y-2 shadow-2xs"
+                className="p-2 sm:p-2.5 rounded-xl bg-surface-raised border border-border flex flex-col justify-between space-y-1.5 shadow-2xs"
               >
-                <div className="flex items-center justify-between gap-1.5">
+                <div className="flex items-center justify-between gap-1">
                   <div className="flex items-center gap-1.5 min-w-0">
                     {item.isMainWarehouse ? (
                       <Warehouse className="w-3.5 h-3.5 text-warning shrink-0" />
@@ -765,32 +788,32 @@ export const OwnersPage: React.FC = () => {
                     <span className="font-bold text-xs text-fg truncate">{item.name}</span>
                   </div>
                   {item.isMainWarehouse && (
-                    <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-warning/10 text-warning border border-warning/20 shrink-0">
+                    <span className="text-[9px] font-bold px-1 py-0.2 rounded bg-warning/10 text-warning border border-warning/20 shrink-0">
                       Склад
                     </span>
                   )}
                 </div>
 
-                <div className="space-y-1 text-xs">
+                <div className="space-y-0.5 text-xs">
                   <div className="flex items-center justify-between text-fg-muted">
-                    <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                    <span className="text-[10px] sm:text-[11px] text-fg-subtle flex items-center gap-1">
                       <Package className="w-3 h-3 text-info shrink-0" />
-                      Товар ({item.stockCount} шт):
+                      Товар ({item.stockCount}):
                     </span>
-                    <span className="font-bold text-fg">${formatMoney(item.stockCostUsd)}</span>
+                    <span className="font-bold text-fg font-mono text-[11px] sm:text-xs">${formatMoney(item.stockCostUsd)}</span>
                   </div>
                   <div className="flex items-center justify-between text-fg-muted">
-                    <span className="text-[11px] text-fg-subtle flex items-center gap-1">
+                    <span className="text-[10px] sm:text-[11px] text-fg-subtle flex items-center gap-1">
                       <Banknote className="w-3 h-3 text-accent shrink-0" />
-                      Касса налом:
+                      Касса:
                     </span>
-                    <span className="font-bold text-accent">${formatMoney(item.cashUsd)}</span>
+                    <span className="font-bold text-accent font-mono text-[11px] sm:text-xs">${formatMoney(item.cashUsd)}</span>
                   </div>
                 </div>
 
-                <div className="pt-1.5 border-t border-border flex items-center justify-between text-[11px]">
-                  <span className="text-fg-subtle font-medium">Итого на точке:</span>
-                  <span className="font-bold text-fg">${formatMoney(item.totalUsd)}</span>
+                <div className="pt-1 border-t border-border flex items-center justify-between text-[10px] sm:text-[11px]">
+                  <span className="text-fg-subtle font-medium">Итого:</span>
+                  <span className="font-bold text-fg font-mono">${formatMoney(item.totalUsd)}</span>
                 </div>
               </div>
             ))}
@@ -798,10 +821,10 @@ export const OwnersPage: React.FC = () => {
         </div>
 
         {/* Section: Partner Cards (Core Section) */}
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-2.5">
           <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Users className="w-4 h-4 text-accent" />
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <Users className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent" />
               <h2 className="text-xs sm:text-sm font-bold text-fg uppercase tracking-wide">
                 Соучредители бизнеса
               </h2>
@@ -815,7 +838,7 @@ export const OwnersPage: React.FC = () => {
             </button>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-2.5 sm:gap-3">
             {displayOwners.map((owner) => {
               const info = getOwnerDetails(owner);
               const ownerPairs = storeProfitShares.filter(sh => sh.ownerId === owner.id);
@@ -824,26 +847,30 @@ export const OwnersPage: React.FC = () => {
               const capTjs = moneyNumber(decimal(capUsd).mul(rate));
               const profitUsd = owner.availableProfitUsd ?? 0;
               const profitTjs = moneyNumber(decimal(profitUsd).mul(rate));
+              const ownerStoreId = owner.storeId;
+              const ownerStore = ownerStoreId ? stores.find(s => s.id === ownerStoreId) : null;
+              const partnerStoreAssets = ownerStoreId ? storeAssetsBreakdown.find(s => s.id === ownerStoreId) : null;
+              const activeStores = stores.filter(s => (storeInvestmentsByOwner[owner.id]?.[s.id] || 0) > 0);
 
               return (
                 <div
                   key={owner.id}
-                  className="rounded-2xl bg-surface border border-border p-4 sm:p-5 space-y-4 hover:border-fg-subtle/50 transition-all shadow-xs flex flex-col justify-between"
+                  className="rounded-xl sm:rounded-2xl bg-surface border border-border p-2.5 sm:p-3.5 space-y-2 hover:border-fg-subtle/50 transition-all shadow-xs flex flex-col justify-between"
                 >
-                  <div className="space-y-4">
+                  <div className="space-y-2">
                     {/* Header: Partner Identity & Share */}
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex items-center gap-3 min-w-0">
-                        <div className="w-11 h-11 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black text-sm shrink-0">
+                    <div className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2 min-w-0">
+                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent font-black text-xs shrink-0">
                           {info.name.substring(0, 2).toUpperCase()}
                         </div>
                         <div className="min-w-0">
-                          <div className="flex items-center gap-2 flex-wrap">
-                            <h3 className="font-bold text-sm sm:text-base text-fg truncate">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <h3 className="font-bold text-xs sm:text-sm text-fg truncate">
                               {info.name}
                             </h3>
                             <span
-                              className={`text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider border ${
+                              className={`text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider border ${
                                 info.roleTag === 'Администратор'
                                   ? 'bg-accent/10 border-accent/30 text-accent'
                                   : 'bg-info/10 border-info/30 text-info'
@@ -851,35 +878,23 @@ export const OwnersPage: React.FC = () => {
                             >
                               {info.roleTag}
                             </span>
-                            {(() => {
-                              const ownerStoreId = owner.storeId;
-                              if (ownerStoreId) {
-                                return (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning">
-                                    {stores.find(s => s.id === ownerStoreId)?.name || 'Магазин'}
-                                  </span>
-                                );
-                              }
-                              if (info.roleTag === 'Администратор') {
-                                return (
-                                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-md uppercase tracking-wider bg-accent/10 border border-accent/30 text-accent">
-                                    Все филиалы
-                                  </span>
-                                );
-                              }
-                              return null;
-                            })()}
+                            {ownerStore ? (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider bg-warning/10 border border-warning/30 text-warning truncate max-w-28 sm:max-w-36">
+                                {ownerStore.name}
+                              </span>
+                            ) : info.roleTag === 'Администратор' ? (
+                              <span className="text-[9px] font-bold px-1.5 py-0.2 rounded uppercase tracking-wider bg-accent/10 border border-accent/30 text-accent">
+                                Все филиалы
+                              </span>
+                            ) : null}
                           </div>
-                          <span className="text-[11px] text-fg-subtle block mt-0.5">
-                            {info.roleSub}
-                          </span>
                         </div>
                       </div>
 
                       <button
                         type="button"
                         onClick={() => openSharesModal(owner.id)}
-                        className="px-2.5 py-1 rounded-xl bg-surface-raised hover:bg-surface border border-border text-accent font-bold text-xs transition-colors shrink-0 cursor-pointer"
+                        className="px-2 py-0.5 sm:py-1 rounded-lg bg-surface-raised hover:bg-surface border border-border text-accent font-bold text-[10px] sm:text-xs transition-colors shrink-0 cursor-pointer max-w-36 sm:max-w-48 truncate"
                         title="Нажмите для настройки доли"
                       >
                         {ownerShareLabel(owner.id)}
@@ -887,7 +902,7 @@ export const OwnersPage: React.FC = () => {
                     </div>
 
                     {/* Share Progress Bar */}
-                    <div className="w-full bg-surface-raised h-1.5 rounded-full overflow-hidden border border-border">
+                    <div className="w-full bg-surface-raised h-1 rounded-full overflow-hidden border border-border">
                       <div
                         className="bg-accent h-full rounded-full transition-all duration-300"
                         style={{ width: `${share === null ? 100 : Math.min(100, Math.max(0, share))}%` }}
@@ -895,137 +910,127 @@ export const OwnersPage: React.FC = () => {
                     </div>
 
                     {/* Balances: Capital & Available Profit */}
-                    <div className="grid grid-cols-2 gap-2.5">
+                    <div className="grid grid-cols-2 gap-1.5 sm:gap-2">
                       {/* Capital in business */}
-                      <div className="p-3 rounded-xl bg-surface-raised border border-border space-y-1">
-                        <span className="text-[10px] font-semibold text-fg-subtle uppercase block">
+                      <div className="p-2 rounded-xl bg-surface-raised border border-border">
+                        <span className="text-[9px] font-semibold text-fg-subtle uppercase block truncate">
                           Капитал в обороте
                         </span>
-                        <div className="text-base sm:text-lg font-bold text-fg">
+                        <div className="text-xs sm:text-sm font-bold font-mono text-fg mt-0.5">
                           ${formatMoney(capUsd)}
                         </div>
-                        <span className="text-[11px] text-fg-subtle block">
+                        <span className="text-[9px] sm:text-[10px] text-fg-subtle block font-mono truncate">
                           ≈ {formatMoney(capTjs)} TJS
                         </span>
                       </div>
 
-                      {/* Profit not yet capitalized: it becomes capital at the quarterly close */}
-                      <div className="p-3 rounded-xl bg-warning/10 border border-warning/25 space-y-1">
-                        <span className="text-[10px] font-semibold text-warning uppercase block">
-                          Прибыль до закрытия квартала
+                      {/* Profit not yet capitalized */}
+                      <div className="p-2 rounded-xl bg-warning/10 border border-warning/25">
+                        <span className="text-[9px] font-semibold text-warning uppercase block truncate">
+                          Прибыль до закрытия
                         </span>
-                        <div className="text-base sm:text-lg font-bold text-warning">
+                        <div className="text-xs sm:text-sm font-bold font-mono text-warning mt-0.5">
                           ${formatMoney(profitUsd)}
                         </div>
-                        <span className="text-[11px] text-warning/80 block">
+                        <span className="text-[9px] sm:text-[10px] text-warning/80 block font-mono truncate">
                           ≈ {formatMoney(profitTjs)} TJS
                         </span>
                       </div>
                     </div>
 
                     {/* Attached store stock & cash assets snapshot */}
-                    {(() => {
-                      const targetStoreId = owner.storeId;
-                      const partnerStore = targetStoreId ? storeAssetsBreakdown.find(s => s.id === targetStoreId) : null;
-                      if (!partnerStore) return null;
-                      return (
-                        <div className="p-2.5 rounded-xl bg-surface-raised border border-border text-xs flex flex-wrap items-center justify-between gap-2 shadow-2xs">
-                          <span className="text-[11px] text-fg-subtle flex items-center gap-1 font-semibold truncate">
-                            <Store className="w-3.5 h-3.5 text-accent shrink-0" />
-                            {partnerStore.name}:
+                    {partnerStoreAssets && (
+                      <div className="p-1.5 sm:p-2 rounded-lg bg-surface-raised border border-border text-[10px] sm:text-[11px] flex flex-wrap items-center justify-between gap-1 shadow-2xs">
+                        <span className="text-fg-subtle flex items-center gap-1 font-semibold truncate">
+                          <Store className="w-3 h-3 text-accent shrink-0" />
+                          {partnerStoreAssets.name}:
+                        </span>
+                        <div className="flex items-center gap-1.5 shrink-0 font-mono text-[10px]">
+                          <span className="text-fg-muted">
+                            Товар: <strong className="text-info font-bold">${formatMoney(partnerStoreAssets.stockCostUsd)}</strong> ({partnerStoreAssets.stockCount} шт)
                           </span>
-                          <div className="flex items-center gap-2 text-[11px] shrink-0">
-                            <span className="text-fg-muted">
-                              Товар: <strong className="text-info font-bold">${formatMoney(partnerStore.stockCostUsd)}</strong> ({partnerStore.stockCount} шт)
-                            </span>
-                            <span>·</span>
-                            <span className="text-fg-muted">
-                              Касса: <strong className="text-accent font-bold">${formatMoney(partnerStore.cashUsd)}</strong>
-                            </span>
-                          </div>
+                          <span>·</span>
+                          <span className="text-fg-muted">
+                            Касса: <strong className="text-accent font-bold">${formatMoney(partnerStoreAssets.cashUsd)}</strong>
+                          </span>
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )}
 
                     {/* Lifetime Financial Metrics */}
-                    <div className="p-2.5 rounded-xl bg-surface-raised/50 border border-border flex items-center justify-around text-center text-xs">
+                    <div className="p-1.5 rounded-lg bg-surface-raised/50 border border-border flex items-center justify-around text-center text-xs">
                       <div>
-                        <span className="text-[10px] text-fg-subtle block">Начислено</span>
-                        <span className="font-bold text-fg text-xs mt-0.5 block">
+                        <span className="text-[9px] text-fg-subtle block">Начислено</span>
+                        <span className="font-bold font-mono text-fg text-[10px] sm:text-[11px] block">
                           ${formatMoney(owner.totalAccruedProfitUsd)}
                         </span>
                       </div>
-                      <div className="h-6 w-px bg-border" />
+                      <div className="h-4 w-px bg-border" />
                       <div>
-                        <span className="text-[10px] text-fg-subtle block">Выплачено</span>
-                        <span className="font-bold text-info text-xs mt-0.5 block">
+                        <span className="text-[9px] text-fg-subtle block">Выплачено</span>
+                        <span className="font-bold font-mono text-info text-[10px] sm:text-[11px] block">
                           ${formatMoney(owner.totalPaidProfitUsd)}
                         </span>
                       </div>
-                      <div className="h-6 w-px bg-border" />
+                      <div className="h-4 w-px bg-border" />
                       <div>
-                        <span className="text-[10px] text-fg-subtle block">Реинвест</span>
-                        <span className="font-bold text-accent text-xs mt-0.5 block">
+                        <span className="text-[9px] text-fg-subtle block">Реинвест</span>
+                        <span className="font-bold font-mono text-accent text-[10px] sm:text-[11px] block">
                           ${formatMoney(owner.totalReinvestedUsd)}
                         </span>
                       </div>
                     </div>
 
                     {/* Stores distribution preview */}
-                    {(() => {
-                      // For Admin (all stores)
-                      // Placement follows the transaction history for every owner, partners included.
-                      const activeStores = stores.filter(s => (storeInvestmentsByOwner[owner.id]?.[s.id] || 0) > 0);
-                      if (activeStores.length === 0) return null;
-
-                      return (
-                        <div className="space-y-1.5 pt-1">
-                          <span className="text-[10px] uppercase font-bold text-fg-subtle block">
-                            Размещение капитала по локациям:
-                          </span>
-                          <div className="flex flex-wrap gap-1.5">
-                            {activeStores.map(s => {
-                              const storeAmt = storeInvestmentsByOwner[owner.id]?.[s.id] || 0;
-                              const isWh = s.isMainWarehouse;
-                              return (
-                                <div
-                                  key={s.id}
-                                  className="px-2 py-1 rounded-lg bg-surface-raised border border-border text-[11px] flex items-center gap-1.5"
-                                >
-                                  {isWh ? (
-                                    <Warehouse className="w-3 h-3 text-warning shrink-0" />
-                                  ) : (
-                                    <Store className="w-3 h-3 text-accent shrink-0" />
-                                  )}
-                                  <span className="font-medium text-fg-muted truncate max-w-32">{s.name}:</span>
-                                  <span className="font-bold text-fg">${formatMoney(storeAmt)}</span>
-                                </div>
-                              );
-                            })}
-                          </div>
+                    {activeStores.length > 0 && (
+                      <div className="space-y-1">
+                        <span className="text-[9px] uppercase font-bold text-fg-subtle block">
+                          Размещение капитала по локациям:
+                        </span>
+                        <div className="flex flex-wrap gap-1">
+                          {activeStores.map(s => {
+                            const storeAmt = storeInvestmentsByOwner[owner.id]?.[s.id] || 0;
+                            const isWh = s.isMainWarehouse;
+                            return (
+                              <div
+                                key={s.id}
+                                className="px-1.5 py-0.5 rounded-md bg-surface-raised border border-border text-[9px] sm:text-[10px] flex items-center gap-1"
+                              >
+                                {isWh ? (
+                                  <Warehouse className="w-3 h-3 text-warning shrink-0" />
+                                ) : (
+                                  <Store className="w-3 h-3 text-accent shrink-0" />
+                                )}
+                                <span className="font-medium text-fg-muted truncate max-w-24 sm:max-w-32">{s.name}:</span>
+                                <span className="font-bold font-mono text-fg">${formatMoney(storeAmt)}</span>
+                              </div>
+                            );
+                          })}
                         </div>
-                      );
-                    })()}
+                      </div>
+                    )}
                   </div>
 
                   {/* Clean Action Buttons */}
-                  <div className="grid grid-cols-2 gap-1.5 pt-3 border-t border-border">
+                  <div className="grid grid-cols-2 gap-1.5 pt-2 border-t border-border">
                     <button
                       type="button"
                       onClick={() => openTxModalForOwner(owner.id, 'INVESTMENT')}
-                      className="px-2 py-2 rounded-xl bg-surface-raised hover:bg-surface text-accent border border-accent/25 hover:border-accent text-xs font-bold transition-all text-center cursor-pointer shadow-2xs"
+                      className="px-2 py-1.5 rounded-lg bg-surface-raised hover:bg-surface text-accent border border-accent/25 hover:border-accent text-xs font-bold transition-all text-center cursor-pointer shadow-2xs min-h-[32px] flex items-center justify-center gap-1"
                       title="Внести личные средства в капитал"
                     >
-                      + Внести
+                      <Plus className="w-3.5 h-3.5" />
+                      <span>Внести</span>
                     </button>
 
                     <button
                       type="button"
                       onClick={() => openTxModalForOwner(owner.id, 'WITHDRAWAL')}
-                      className="px-2 py-2 rounded-xl bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 text-xs font-semibold transition-all text-center cursor-pointer"
+                      className="px-2 py-1.5 rounded-lg bg-surface-raised hover:bg-danger/10 text-fg-subtle hover:text-danger border border-border hover:border-danger/30 text-xs font-semibold transition-all text-center cursor-pointer min-h-[32px] flex items-center justify-center gap-1"
                       title="Изъять вложенный капитал"
                     >
-                      Вывод
+                      <Wallet className="w-3.5 h-3.5" />
+                      <span>Вывод</span>
                     </button>
                   </div>
                 </div>
@@ -1034,132 +1039,134 @@ export const OwnersPage: React.FC = () => {
           </div>
         </div>
 
-
         {/* Section: Transaction History (Clean & Minimalist) */}
-        <div className="p-4 sm:p-5 rounded-2xl bg-surface border border-border space-y-4 shadow-xs">
-          <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-border">
-            <div className="flex items-center gap-2">
-              <CreditCard className="w-4 h-4 text-accent" />
+        <div className="p-2.5 sm:p-3.5 rounded-xl bg-surface border border-border space-y-2.5 shadow-xs">
+          <div className="flex flex-wrap items-center justify-between gap-2 pb-2 border-b border-border">
+            <div className="flex items-center gap-1.5 sm:gap-2">
+              <CreditCard className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-accent" />
               <h2 className="text-xs sm:text-sm font-bold text-fg uppercase tracking-wide">
-                История финансовых операций
+                История операций
               </h2>
-              <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-muted font-bold">
-                {filteredTransactions.length} записей
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised border border-border text-fg-muted font-bold font-mono">
+                {filteredTransactions.length}
               </span>
             </div>
           </div>
 
           {/* Filters Bar */}
-          <div className="space-y-2.5">
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
+          <div className="space-y-1.5">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-1.5">
               {/* Search */}
-              <div className="relative flex-1 min-w-48">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-fg-subtle pointer-events-none" />
+              <div className="relative flex-1 min-w-36">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-fg-subtle pointer-events-none" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   placeholder="Поиск по учредителю, примечанию или сумме..."
-                  className="w-full rounded-xl bg-surface-raised border border-border pl-9 pr-8 py-1.5 text-xs text-fg placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
+                  className="w-full rounded-xl bg-surface-raised border border-border pl-8 pr-7 py-1.5 text-xs text-fg placeholder-fg-subtle focus:border-accent focus:outline-none transition-colors"
                 />
                 {searchQuery && (
                   <button
                     onClick={() => setSearchQuery('')}
-                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
+                    className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-subtle hover:text-fg p-0.5 cursor-pointer"
                   >
                     <X className="w-3.5 h-3.5" />
                   </button>
                 )}
               </div>
 
-              {/* Partner Dropdown */}
-              <select
-                value={selectedOwnerFilter}
-                onChange={(e) => setSelectedOwnerFilter(e.target.value)}
-                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-accent shrink-0 cursor-pointer"
-              >
-                <option value="ALL">Все учредители</option>
-                {displayOwners.map((o) => (
-                  <option key={o.id} value={o.id}>{getOwnerDetails(o).name}</option>
-                ))}
-              </select>
+              {/* Controls Row */}
+              <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
+                {/* Partner Dropdown */}
+                <select
+                  value={selectedOwnerFilter}
+                  onChange={(e) => setSelectedOwnerFilter(e.target.value)}
+                  className="flex-1 sm:flex-initial bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
+                >
+                  <option value="ALL">Все учредители</option>
+                  {displayOwners.map((o) => (
+                    <option key={o.id} value={o.id}>{getOwnerDetails(o).name}</option>
+                  ))}
+                </select>
 
-              {/* Store Dropdown (Central Cash only) */}
-              {storeCtx.mode === 'CENTRAL' && (
-              <select
-                value={selectedStoreFilter}
-                onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-3 py-1.5 focus:outline-none focus:border-accent shrink-0 cursor-pointer"
-              >
-                <option value="ALL">Все объекты</option>
-                {retailStores.map((s) => (
-                  <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>
-                ))}
-                {mainWarehouse && (
-                  <option value={mainWarehouse.id}>Центральный склад ({mainWarehouse.name})</option>
+                {/* Store Dropdown (Central Cash only) */}
+                {storeCtx.mode === 'CENTRAL' && (
+                  <select
+                    value={selectedStoreFilter}
+                    onChange={(e) => setSelectedStoreFilter(e.target.value)}
+                    className="flex-1 sm:flex-initial bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
+                  >
+                    <option value="ALL">Все объекты</option>
+                    {retailStores.map((s) => (
+                      <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>
+                    ))}
+                    {mainWarehouse && (
+                      <option value={mainWarehouse.id}>Центральный склад ({mainWarehouse.name})</option>
+                    )}
+                  </select>
                 )}
-              </select>
-              )}
 
-              {/* Period Filter */}
-              <div className="flex items-center gap-1 bg-surface-raised border border-border p-0.5 rounded-xl shrink-0">
-                <button
-                  type="button"
-                  onClick={() => setPeriodFilter('ALL')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    periodFilter === 'ALL'
-                      ? 'bg-surface text-accent shadow-xs font-bold'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  Все время
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setPeriodFilter('SPECIFIC_MONTH')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
-                    periodFilter === 'SPECIFIC_MONTH'
-                      ? 'bg-surface text-accent shadow-xs font-bold'
-                      : 'text-fg-subtle hover:text-fg'
-                  }`}
-                >
-                  По месяцам
-                </button>
+                {/* Period Filter */}
+                <div className="flex items-center gap-0.5 bg-surface-raised border border-border p-0.5 rounded-xl shrink-0">
+                  <button
+                    type="button"
+                    onClick={() => setPeriodFilter('ALL')}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      periodFilter === 'ALL'
+                        ? 'bg-surface text-accent shadow-xs font-bold'
+                        : 'text-fg-subtle hover:text-fg'
+                    }`}
+                  >
+                    Все
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPeriodFilter('SPECIFIC_MONTH')}
+                    className={`px-2 py-1 rounded-lg text-xs font-semibold transition-all cursor-pointer ${
+                      periodFilter === 'SPECIFIC_MONTH'
+                        ? 'bg-surface text-accent shadow-xs font-bold'
+                        : 'text-fg-subtle hover:text-fg'
+                    }`}
+                  >
+                    Месяц
+                  </button>
+                </div>
+
+                {periodFilter === 'SPECIFIC_MONTH' && (
+                  <MonthPicker
+                    value={selectedMonth}
+                    onChange={setSelectedMonth}
+                    className="h-7 px-2 rounded-xl border border-accent bg-surface text-xs font-semibold text-accent focus:outline-none shrink-0"
+                  />
+                )}
+
+                {(searchQuery || typeFilter !== 'ALL' || selectedOwnerFilter !== 'ALL' || selectedStoreFilter !== 'ALL' || periodFilter !== 'ALL') && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setTypeFilter('ALL');
+                      setSelectedOwnerFilter('ALL');
+                      setSelectedStoreFilter('ALL');
+                      setPeriodFilter('ALL');
+                    }}
+                    className="p-1.5 text-fg-subtle hover:text-danger hover:bg-danger/10 rounded-xl transition-colors shrink-0 cursor-pointer"
+                    title="Сбросить все фильтры"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-
-              {periodFilter === 'SPECIFIC_MONTH' && (
-                <MonthPicker
-                  value={selectedMonth}
-                  onChange={setSelectedMonth}
-                  className="h-8 px-2 rounded-xl border border-accent bg-surface text-xs font-semibold text-accent focus:outline-none shrink-0"
-                />
-              )}
-
-              {(searchQuery || typeFilter !== 'ALL' || selectedOwnerFilter !== 'ALL' || selectedStoreFilter !== 'ALL' || periodFilter !== 'ALL') && (
-                <button
-                  onClick={() => {
-                    setSearchQuery('');
-                    setTypeFilter('ALL');
-                    setSelectedOwnerFilter('ALL');
-                    setSelectedStoreFilter('ALL');
-                    setPeriodFilter('ALL');
-                  }}
-                  className="p-1.5 text-fg-subtle hover:text-danger hover:bg-danger/10 rounded-xl transition-colors shrink-0 cursor-pointer"
-                  title="Сбросить все фильтры"
-                >
-                  <X className="w-4 h-4" />
-                </button>
-              )}
             </div>
 
             {/* Operation Type Pills */}
             <div className="flex items-center gap-1.5 overflow-x-auto scrollbar-none pb-0.5">
               {[
-                { id: 'ALL', label: 'Все операции' },
+                { id: 'ALL', label: 'Все' },
                 { id: 'INVESTMENT', label: '+ Вложения' },
                 { id: 'REINVEST', label: 'Реинвест' },
-                { id: 'PROFIT_PAYOUT', label: '↑ Выплаты прибыли' },
-                { id: 'WITHDRAWAL', label: 'Вывод капитала' },
+                { id: 'PROFIT_PAYOUT', label: '↑ Выплаты' },
+                { id: 'WITHDRAWAL', label: 'Вывод' },
               ].map((pill) => {
                 const isActive = typeFilter === pill.id;
                 const count =
@@ -1170,7 +1177,7 @@ export const OwnersPage: React.FC = () => {
                   <button
                     key={pill.id}
                     onClick={() => setTypeFilter(pill.id as typeof typeFilter)}
-                    className={`px-2.5 py-1 rounded-xl text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
+                    className={`px-2 py-1 rounded-xl text-xs whitespace-nowrap transition-all flex items-center gap-1.5 shrink-0 cursor-pointer ${
                       isActive
                         ? 'bg-accent text-accent-fg font-bold shadow-xs'
                         : 'bg-surface-raised border border-border text-fg-subtle hover:text-fg font-medium'
@@ -1178,7 +1185,7 @@ export const OwnersPage: React.FC = () => {
                   >
                     <span>{pill.label}</span>
                     <span
-                      className={`text-[10px] px-1.5 py-0.2 rounded-full ${
+                      className={`text-[10px] px-1.5 py-0.2 rounded-full font-mono ${
                         isActive ? 'bg-accent-fg/20 text-accent-fg font-bold' : 'bg-surface text-fg-subtle'
                       }`}
                     >
@@ -1191,9 +1198,9 @@ export const OwnersPage: React.FC = () => {
           </div>
 
           {/* Transactions List */}
-          <div className="space-y-2 pt-1">
+          <div className="space-y-1.5 pt-0.5">
             {filteredTransactions.length === 0 ? (
-              <div className="p-8 text-center text-fg-subtle text-xs space-y-1">
+              <div className="p-6 text-center text-fg-subtle text-xs space-y-1">
                 <CreditCard className="w-6 h-6 mx-auto opacity-40 text-fg-subtle" />
                 <p className="font-semibold text-fg">Нет операций по выбранным критериям</p>
                 <p className="text-[11px]">Попробуйте сбросить фильтры или добавьте новую операцию.</p>
@@ -1209,11 +1216,11 @@ export const OwnersPage: React.FC = () => {
                 return (
                   <div
                     key={tx.id}
-                    className="p-3 rounded-xl bg-surface-raised border border-border hover:border-fg-subtle/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                    className="p-2 sm:p-2.5 rounded-xl bg-surface-raised border border-border hover:border-fg-subtle/40 transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-1.5 sm:gap-2 text-xs"
                   >
-                    <div className="flex items-start gap-3 min-w-0">
+                    <div className="flex items-start gap-2 min-w-0">
                       <div
-                        className={`p-2 rounded-xl shrink-0 border ${
+                        className={`p-1.5 rounded-lg shrink-0 border ${
                           isReinvest
                             ? 'bg-warning/10 border-warning/30 text-warning'
                             : isDeposit
@@ -1224,20 +1231,20 @@ export const OwnersPage: React.FC = () => {
                         }`}
                       >
                         {isReinvest ? (
-                          <Coins className="w-4 h-4" />
+                          <Coins className="w-3.5 h-3.5" />
                         ) : isDeposit ? (
-                          <ArrowDownLeft className="w-4 h-4" />
+                          <ArrowDownLeft className="w-3.5 h-3.5" />
                         ) : isPayout ? (
-                          <ArrowUpRight className="w-4 h-4" />
+                          <ArrowUpRight className="w-3.5 h-3.5" />
                         ) : (
-                          <Wallet className="w-4 h-4" />
+                          <Wallet className="w-3.5 h-3.5" />
                         )}
                       </div>
 
-                      <div className="space-y-1 min-w-0">
-                        <div className="flex flex-wrap items-center gap-2">
+                      <div className="space-y-0.5 min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
                           <span
-                            className={`text-[10px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider ${
+                            className={`text-[9px] font-bold px-1.5 py-0.2 rounded border uppercase tracking-wider ${
                               isReinvest
                                 ? 'bg-warning/10 border-warning/30 text-warning'
                                 : isDeposit
@@ -1256,28 +1263,28 @@ export const OwnersPage: React.FC = () => {
                               : 'Вывод'}
                           </span>
 
-                          <span className="font-bold text-fg">{tx.ownerName}</span>
+                          <span className="font-bold text-fg truncate">{tx.ownerName}</span>
 
                           {tx.sourceOrDestination && (
-                            <span className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-surface border border-border text-fg-muted flex items-center gap-1">
+                            <span className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-surface border border-border text-fg-muted flex items-center gap-1 truncate">
                               {mainWarehouse &&
                               (tx.sourceOrDestination === mainWarehouse.name || tx.sourceOrDestination === mainWarehouse.id) ? (
-                                <Warehouse className="w-3 h-3 text-warning" />
+                                <Warehouse className="w-3 h-3 text-warning shrink-0" />
                               ) : (
-                                <Store className="w-3 h-3 text-accent" />
+                                <Store className="w-3 h-3 text-accent shrink-0" />
                               )}
-                              <span>{tx.sourceOrDestination}</span>
+                              <span className="truncate">{tx.sourceOrDestination}</span>
                             </span>
                           )}
                         </div>
 
                         {tx.note && (
-                          <p className="text-xs text-fg-muted">
+                          <p className="text-[11px] text-fg-muted truncate">
                             {tx.note}
                           </p>
                         )}
 
-                        <div className="flex items-center gap-2 text-[10px] text-fg-subtle">
+                        <div className="flex items-center gap-1.5 text-[10px] text-fg-subtle">
                           <span>{tx.date}</span>
                           <span>•</span>
                           <span>Провел: <strong className="text-fg-muted font-medium">{tx.createdByName || 'Администратор'}</strong></span>
@@ -1285,15 +1292,15 @@ export const OwnersPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="text-right shrink-0 border-t sm:border-t-0 border-border pt-2 sm:pt-0">
+                    <div className="text-left sm:text-right shrink-0 border-t sm:border-t-0 border-border pt-1 sm:pt-0 flex items-center justify-between sm:block">
                       <span
-                        className={`text-sm font-bold block ${
+                        className={`text-xs sm:text-sm font-bold font-mono ${
                           isCapitalIncrease ? 'text-accent' : 'text-warning'
                         }`}
                       >
                         {isCapitalIncrease ? '+' : '-'}${tx.amountUsd?.toLocaleString()} USD
                       </span>
-                      <span className="text-[10px] text-fg-subtle block mt-0.5">
+                      <span className="text-[10px] text-fg-subtle block font-mono">
                         ≈ {isCapitalIncrease ? '+' : '-'}{tjsVal.toLocaleString()} TJS (курс {tx.exchangeRate})
                       </span>
                     </div>
@@ -1305,16 +1312,16 @@ export const OwnersPage: React.FC = () => {
 
           {/* Pagination */}
           {totalTransactionsPages > 1 && (
-            <div className="flex items-center justify-between gap-2 pt-3 border-t border-border text-xs">
-              <span className="text-fg-subtle">
-                Страница <strong className="text-fg">{transactionsPage}</strong> из <strong className="text-fg">{totalTransactionsPages}</strong>
+            <div className="flex items-center justify-between gap-2 pt-2 border-t border-border text-xs">
+              <span className="text-fg-subtle text-[11px]">
+                Страница <strong className="text-fg font-mono">{transactionsPage}</strong> из <strong className="text-fg font-mono">{totalTransactionsPages}</strong>
               </span>
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => setTransactionsPage(p => Math.max(1, p - 1))}
                   disabled={transactionsPage === 1}
-                  className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="px-2 py-1 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg font-bold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   ← Назад
                 </button>
@@ -1322,7 +1329,7 @@ export const OwnersPage: React.FC = () => {
                   type="button"
                   onClick={() => setTransactionsPage(p => Math.min(totalTransactionsPages, p + 1))}
                   disabled={transactionsPage === totalTransactionsPages}
-                  className="px-3 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg font-bold disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                  className="px-2 py-1 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg font-bold text-xs disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
                 >
                   Вперед →
                 </button>
@@ -1334,8 +1341,8 @@ export const OwnersPage: React.FC = () => {
 
       {/* MODAL: Edit Shares */}
       {isSharesModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <form onSubmit={handleSaveShares} className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4 text-xs">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs">
+          <form onSubmit={handleSaveShares} className="w-full max-w-md max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-4 sm:p-5 text-fg shadow-2xl space-y-3.5 text-xs">
             {/* Header */}
             <div className="flex items-center justify-between pb-2.5 border-b border-border">
               <div className="flex items-center gap-2">
@@ -1424,7 +1431,7 @@ export const OwnersPage: React.FC = () => {
                         value={adminShareVal}
                         onChange={(e) => handleAdminShareInputChange(e.target.value)}
                         placeholder="60"
-                        className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-accent font-bold focus:border-accent focus:outline-none pr-8"
+                        className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-accent font-bold focus:border-accent focus:outline-none pr-8 font-mono"
                       />
                       <span className="absolute right-3 top-2.5 text-fg-subtle font-bold text-sm">%</span>
                     </div>
@@ -1453,7 +1460,7 @@ export const OwnersPage: React.FC = () => {
                         value={partnerShareVal}
                         onChange={(e) => handlePartnerShareInputChange(e.target.value)}
                         placeholder="40"
-                        className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-info font-bold focus:border-info focus:outline-none pr-8"
+                        className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-base text-info font-bold focus:border-info focus:outline-none pr-8 font-mono"
                       />
                       <span className="absolute right-3 top-2.5 text-fg-subtle font-bold text-sm">%</span>
                     </div>
@@ -1469,7 +1476,7 @@ export const OwnersPage: React.FC = () => {
                   const pVal = Math.max(0, Math.min(100, parseFloat(partnerShareVal) || 0));
                   return (
                     <div className="space-y-1">
-                      <div className="w-full h-3 rounded-full bg-surface-raised border border-border overflow-hidden flex">
+                      <div className="w-full h-2.5 rounded-full bg-surface-raised border border-border overflow-hidden flex">
                         <div
                           className="bg-accent h-full transition-all duration-300"
                           style={{ width: `${aVal}%` }}
@@ -1481,7 +1488,7 @@ export const OwnersPage: React.FC = () => {
                           title={`Партнёр: ${pVal}%`}
                         />
                       </div>
-                      <div className="flex justify-between text-[10px] text-fg-subtle font-medium">
+                      <div className="flex justify-between text-[10px] text-fg-subtle font-medium font-mono">
                         <span>{formatUserName(adminOwner.name)}: <strong className="text-accent">{aVal}%</strong></span>
                         <span>{formatUserName(currentStorePartner.name)}: <strong className="text-info">{pVal}%</strong></span>
                       </div>
@@ -1557,9 +1564,9 @@ export const OwnersPage: React.FC = () => {
 
       {/* MODAL: Transaction */}
       {isTxModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <form onSubmit={handleCreateTx} className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg shadow-2xl space-y-4 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs">
+          <form onSubmit={handleCreateTx} className="w-full max-w-sm max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-border p-4 sm:p-5 text-fg shadow-2xl space-y-3.5 text-xs">
+            <div className="flex items-center justify-between pb-2.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <CreditCard className="w-4 h-4 text-accent" />
                 <h4 className="text-sm font-bold text-fg uppercase">
@@ -1621,7 +1628,6 @@ export const OwnersPage: React.FC = () => {
                 </select>
               </div>
 
-
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Сумма ($ USD) *</label>
                 <div className="relative">
@@ -1633,12 +1639,12 @@ export const OwnersPage: React.FC = () => {
                     value={amountUsd ?? ''}
                     onChange={(e) => setAmountUsd(e.target.value)}
                     placeholder="1000"
-                    className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent text-sm font-bold focus:border-accent focus:outline-none pr-8"
+                    className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent text-sm font-bold font-mono focus:border-accent focus:outline-none pr-8"
                   />
-                  <span className="absolute right-3 top-2.5 text-fg-subtle font-bold">$</span>
+                  <span className="absolute right-3 top-2 text-fg-subtle font-bold">$</span>
                 </div>
                 {amountUsd && parseFloat(amountUsd) > 0 && (
-                  <span className="text-[11px] text-accent font-semibold block mt-1">
+                  <span className="text-[11px] text-accent font-semibold block mt-1 font-mono">
                     ≈ {formatMoney((parseFloat(amountUsd) || 0) * rate)} TJS (по курсу {rate})
                   </span>
                 )}
@@ -1656,7 +1662,7 @@ export const OwnersPage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex space-x-2 pt-2 border-t border-border">
+            <div className="flex space-x-2 pt-1 border-t border-border">
               <button
                 type="button"
                 disabled={isSubmitting}
@@ -1680,9 +1686,9 @@ export const OwnersPage: React.FC = () => {
 
       {/* MODAL: Quarterly Report */}
       {isQuarterModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-2xl rounded-2xl bg-surface border border-warning/40 p-5 text-fg shadow-2xl space-y-4 text-xs">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3 sm:p-4 backdrop-blur-xs">
+          <div className="w-full max-w-2xl max-h-[90vh] overflow-y-auto rounded-2xl bg-surface border border-warning/40 p-4 sm:p-5 text-fg shadow-2xl space-y-3.5 text-xs">
+            <div className="flex items-center justify-between pb-2.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <FileText className="w-4 h-4 text-warning" />
                 <h4 className="text-sm font-bold text-warning uppercase tracking-wide">
@@ -1699,13 +1705,13 @@ export const OwnersPage: React.FC = () => {
             </div>
 
             {/* Quarter / Year */}
-            <div className="grid grid-cols-2 gap-3 bg-surface-raised p-3 rounded-xl border border-border">
+            <div className="grid grid-cols-2 gap-2.5 bg-surface-raised p-2.5 rounded-xl border border-border">
               <div>
                 <label className="block text-[11px] text-fg-subtle uppercase mb-1 font-semibold">Отчетный квартал</label>
                 <select
                   value={selectedQuarter}
                   onChange={(e) => setSelectedQuarter(e.target.value as any)}
-                  className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-xs text-warning font-bold focus:border-warning focus:outline-none cursor-pointer"
+                  className="w-full rounded-xl bg-surface border border-border px-2.5 py-1.5 text-xs text-warning font-bold focus:border-warning focus:outline-none cursor-pointer"
                 >
                   <option value="Q1">Q1 (1-й Квартал: Январь - Март)</option>
                   <option value="Q2">Q2 (2-й Квартал: Апрель - Июнь)</option>
@@ -1719,7 +1725,7 @@ export const OwnersPage: React.FC = () => {
                 <select
                   value={selectedQuarterYear}
                   onChange={(e) => setSelectedQuarterYear(parseInt(e.target.value))}
-                  className="w-full rounded-xl bg-surface border border-border px-3 py-2 text-xs text-fg font-bold focus:border-warning focus:outline-none cursor-pointer"
+                  className="w-full rounded-xl bg-surface border border-border px-2.5 py-1.5 text-xs text-fg font-bold focus:border-warning focus:outline-none cursor-pointer"
                 >
                   <option value={2026}>2026 год</option>
                   <option value={2025}>2025 год</option>
@@ -1729,42 +1735,42 @@ export const OwnersPage: React.FC = () => {
             </div>
 
             {/* Breakdown Table */}
-            <div className="space-y-2">
+            <div className="space-y-1.5">
               <span className="font-bold text-fg uppercase text-xs">Сводная ведомость по партнерам ($ USD):</span>
               <div className="overflow-x-auto rounded-xl border border-border bg-surface-raised">
                 <table className="w-full text-left text-xs">
                   <thead className="bg-surface text-[10px] text-fg-subtle uppercase border-b border-border">
                     <tr>
-                      <th className="p-2.5">Партнер</th>
-                      <th className="p-2.5 text-center">Доля</th>
-                      <th className="p-2.5 text-right">Начислено ($)</th>
-                      <th className="p-2.5 text-right">Выплачено ($)</th>
-                      <th className="p-2.5 text-right">Реинвест ($)</th>
-                      <th className="p-2.5 text-right text-warning">Остаток ($)</th>
-                      <th className="p-2.5 text-right">Капитал ($)</th>
+                      <th className="p-2 sm:p-2.5">Партнер</th>
+                      <th className="p-2 sm:p-2.5 text-center">Доля</th>
+                      <th className="p-2 sm:p-2.5 text-right">Начислено ($)</th>
+                      <th className="p-2 sm:p-2.5 text-right">Выплачено ($)</th>
+                      <th className="p-2 sm:p-2.5 text-right">Реинвест ($)</th>
+                      <th className="p-2 sm:p-2.5 text-right text-warning">Остаток ($)</th>
+                      <th className="p-2 sm:p-2.5 text-right">Капитал ($)</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-border text-xs">
                     {displayOwners.map((o) => (
-                      <tr key={o.id} className="hover:bg-surface/50">
-                        <td className="p-2.5 font-bold text-fg">{getOwnerDetails(o).name}</td>
-                        <td className="p-2.5 text-center text-fg-subtle">{ownerShareLabel(o.id)}</td>
-                        <td className="p-2.5 text-right font-semibold text-fg">${formatMoney(o.totalAccruedProfitUsd)}</td>
-                        <td className="p-2.5 text-right text-info">${formatMoney(o.totalPaidProfitUsd)}</td>
-                        <td className="p-2.5 text-right text-accent">${formatMoney(o.totalReinvestedUsd)}</td>
-                        <td className="p-2.5 text-right font-bold text-warning">${formatMoney(o.availableProfitUsd)}</td>
-                        <td className="p-2.5 text-right font-semibold text-fg">${formatMoney(o.capitalBalanceUsd)}</td>
+                      <tr key={o.id} className="hover:bg-surface/50 font-mono">
+                        <td className="p-2 sm:p-2.5 font-bold font-sans text-fg">{getOwnerDetails(o).name}</td>
+                        <td className="p-2 sm:p-2.5 text-center text-fg-subtle font-sans">{ownerShareLabel(o.id)}</td>
+                        <td className="p-2 sm:p-2.5 text-right font-semibold text-fg">${formatMoney(o.totalAccruedProfitUsd)}</td>
+                        <td className="p-2 sm:p-2.5 text-right text-info">${formatMoney(o.totalPaidProfitUsd)}</td>
+                        <td className="p-2 sm:p-2.5 text-right text-accent">${formatMoney(o.totalReinvestedUsd)}</td>
+                        <td className="p-2 sm:p-2.5 text-right font-bold text-warning">${formatMoney(o.availableProfitUsd)}</td>
+                        <td className="p-2 sm:p-2.5 text-right font-semibold text-fg">${formatMoney(o.capitalBalanceUsd)}</td>
                       </tr>
                     ))}
                   </tbody>
-                  <tfoot className="bg-surface font-bold border-t border-border text-xs">
+                  <tfoot className="bg-surface font-bold border-t border-border text-xs font-mono">
                     <tr>
-                      <td colSpan={2} className="p-2.5 uppercase text-fg-subtle">ИТОГО:</td>
-                      <td className="p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalAccruedProfitUsd || 0), 0))}</td>
-                      <td className="p-2.5 text-right text-info">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalPaidProfitUsd || 0), 0))}</td>
-                      <td className="p-2.5 text-right text-accent">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalReinvestedUsd || 0), 0))}</td>
-                      <td className="p-2.5 text-right text-warning">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.availableProfitUsd || 0), 0))}</td>
-                      <td className="p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.capitalBalanceUsd || 0), 0))}</td>
+                      <td colSpan={2} className="p-2 sm:p-2.5 uppercase font-sans text-fg-subtle">ИТОГО:</td>
+                      <td className="p-2 sm:p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalAccruedProfitUsd || 0), 0))}</td>
+                      <td className="p-2 sm:p-2.5 text-right text-info">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalPaidProfitUsd || 0), 0))}</td>
+                      <td className="p-2 sm:p-2.5 text-right text-accent">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.totalReinvestedUsd || 0), 0))}</td>
+                      <td className="p-2 sm:p-2.5 text-right text-warning">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.availableProfitUsd || 0), 0))}</td>
+                      <td className="p-2 sm:p-2.5 text-right text-fg">${formatMoney(displayOwners.reduce((sum, o) => sum + (o.capitalBalanceUsd || 0), 0))}</td>
                     </tr>
                   </tfoot>
                 </table>
@@ -1772,7 +1778,7 @@ export const OwnersPage: React.FC = () => {
             </div>
 
             {/* Sweep option */}
-            <div className="p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-2">
+            <div className="p-2.5 sm:p-3 rounded-xl bg-warning/10 border border-warning/30 space-y-1.5">
               <label className="flex items-start space-x-2.5 cursor-pointer text-fg text-xs">
                 <input
                   type="checkbox"

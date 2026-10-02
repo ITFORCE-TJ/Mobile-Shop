@@ -571,9 +571,6 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
                   <span>Прибыль бонусных телефонов</span>
                   <span className="font-medium text-fg-muted">{usd(data.bonusDeviceProfitUsd || 0)}</span>
                 </div>
-                <p className="text-[11px] text-fg-subtle leading-snug">
-                  Никому не начисляются; деньги на Бонусном счёте, ими распоряжается администратор. Счётчики обнуляются при закрытии квартала на странице «Бонусы».
-                </p>
               </div>
             </div>
 

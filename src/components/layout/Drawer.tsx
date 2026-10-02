@@ -205,6 +205,19 @@ export const Drawer: React.FC = () => {
     ];
   }, [isSeller, isPartner, isCentralCashMode, activeRetailStore, userStoreName]);
 
+  React.useEffect(() => {
+    if (!drawerOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setDrawerOpen(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    document.documentElement.setAttribute('data-drawer-open', 'true');
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      document.documentElement.removeAttribute('data-drawer-open');
+    };
+  }, [drawerOpen, setDrawerOpen]);
+
   if (!drawerOpen) return null;
 
   return (
@@ -216,7 +229,7 @@ export const Drawer: React.FC = () => {
         aria-hidden="true"
       />
 
-      <div className="app-safe-area fixed inset-x-0 top-0 bottom-[calc(3.5rem+var(--bottom-nav-pb))] z-50 flex md:hidden flex-col bg-bg text-fg-muted w-full overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200">
+      <div className="app-safe-area fixed inset-0 z-50 flex md:hidden flex-col bg-bg text-fg-muted w-full h-full overflow-hidden shadow-2xl animate-in slide-in-from-top-2 duration-200">
         {/* Header */}
         <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
@@ -413,7 +426,7 @@ export const Drawer: React.FC = () => {
         </div>
 
         {/* Footer */}
-        <div className="p-4 border-t border-border bg-surface shrink-0 space-y-2">
+        <div className="p-4 pb-[calc(1rem+var(--bottom-nav-pb))] border-t border-border bg-surface shrink-0 space-y-2">
           <button
             type="button"
             onClick={logout}

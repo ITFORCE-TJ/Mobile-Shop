@@ -535,208 +535,198 @@ export const EmployeesPage: React.FC = () => {
 
   const renderUserCard = (u: User) => {
     const roleConf = ROLE_CONFIG[u.role] || ROLE_CONFIG.SELLER;
+    const stats = employeeLifetimeStatsById.get(u.id) ?? { totalAdvances: 0, salesRevTjs: 0, unitsSold: 0 };
+    const { totalAdvances, salesRevTjs, unitsSold } = stats;
+    const baseSal = u.baseSalaryTjs || 0;
+    const commPct = u.salesCommissionPercent || 0;
+
+    const resolvedStoreName = (() => {
+      const name = u.storeName || (u.storeId ? stores.find(s => s.id === u.storeId)?.name : undefined);
+      if (name) return name;
+      if (u.role === 'SELLER' || u.role === 'PARTNER') return 'Не привязан';
+      return 'Все филиалы';
+    })();
 
     return (
-            <div
-              key={u.id}
-              className={`p-5 rounded-2xl border transition-colors flex flex-col justify-between space-y-3 shadow-xs relative overflow-hidden group ${
-                u.isActive 
-                  ? 'bg-surface border-border hover:border-accent/40 shadow-xs' 
-                  : 'bg-surface/60 border-border/60 opacity-75'
-              }`}
-            >
-              {/* Card Header: Avatar, Name, Status & Edit Button */}
-              <div className="flex items-start justify-between gap-2 border-b border-border pb-3">
-                <div className="flex items-center space-x-3 min-w-0">
-                  <div className={`w-11 h-11 rounded-xl flex items-center justify-center font-bold text-base shrink-0 border shadow-inner ${
-                    u.role === 'ADMIN' ? 'bg-accent/10 text-accent border-accent/30' :
-                    u.role === 'PARTNER' ? 'bg-info/10 text-info border-info/30' :
-                    'bg-surface-raised text-fg-muted border-border'
-                  }`}>
-                    {u.name.charAt(0).toUpperCase()}
-                  </div>
+      <div
+        key={u.id}
+        className={`p-3 sm:p-3.5 rounded-xl sm:rounded-2xl border transition-all flex flex-col gap-2 shadow-2xs relative overflow-hidden group ${
+          u.isActive 
+            ? 'bg-surface border-border hover:border-accent/40' 
+            : 'bg-surface/60 border-border/60 opacity-75'
+        }`}
+      >
+        {/* Line 1: Avatar, Name, Role badge, Status & Action menu */}
+        <div className="flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border ${
+              u.role === 'ADMIN' ? 'bg-accent/15 text-accent border-accent/30' :
+              u.role === 'PARTNER' ? 'bg-info/15 text-info border-info/30' :
+              'bg-surface-raised text-fg-muted border-border'
+            }`}>
+              {u.name.charAt(0).toUpperCase()}
+            </div>
 
-                  <div className="min-w-0">
-                    <h4 className="text-base font-semibold text-fg truncate">
-                      {u.name}
-                    </h4>
-                    <span className={`inline-block text-xs px-2 py-0.5 rounded font-medium border mt-1 ${roleConf.bg} ${roleConf.color} ${roleConf.border}`}>
-                      {roleConf.label}
-                    </span>
-                  </div>
-                </div>
+            <div className="min-w-0 flex items-center gap-1.5 flex-wrap">
+              <h4 className="text-xs sm:text-sm font-bold text-fg truncate">
+                {u.name}
+              </h4>
+              <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold border shrink-0 ${roleConf.bg} ${roleConf.color} ${roleConf.border}`}>
+                {roleConf.label}
+              </span>
+              {u.isActive ? (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-accent/10 text-accent border border-accent/20 font-semibold inline-flex items-center gap-1 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+                  Активен
+                </span>
+              ) : (
+                <span className="text-[10px] px-1.5 py-0.2 rounded bg-danger/15 text-danger border border-danger/30 font-semibold shrink-0">
+                  Заблокирован
+                </span>
+              )}
+            </div>
+          </div>
 
-                {currentUser?.role === 'ADMIN' && (
-                  <ActionMenu label={`Действия: ${u.name}`} actions={[
-                    { label: 'Редактировать сотрудника', icon: Edit2, onSelect: () => handleOpenEdit(u) },
-                    ...(currentUser.id !== u.id ? [{ label: 'Удалить сотрудника', icon: Trash2, danger: true, onSelect: () => handleDeleteUserClick(u) }] : []),
-                  ]} />
-                )}
-              </div>
+          {currentUser?.role === 'ADMIN' && (
+            <div className="shrink-0">
+              <ActionMenu label={`Действия: ${u.name}`} actions={[
+                { label: 'Редактировать сотрудника', icon: Edit2, onSelect: () => handleOpenEdit(u) },
+                ...(currentUser.id !== u.id ? [{ label: 'Удалить сотрудника', icon: Trash2, danger: true, onSelect: () => handleDeleteUserClick(u) }] : []),
+              ]} />
+            </div>
+          )}
+        </div>
 
-              {/* Card Details: Login, Password, PIN, Store, Status */}
-              <div className="space-y-3 text-xs bg-bg p-3.5 rounded-xl">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-fg-subtle ">Логин</span>
-                  <strong className="text-fg-muted tabular-nums font-semibold">{u.login}</strong>
-                </div>
+        {/* Line 2: Details grid */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl bg-surface-raised/60 border border-border/50 text-[11px]">
+          <div className="min-w-0">
+            <span className="text-[10px] text-fg-subtle block">Логин</span>
+            <span className="font-mono font-semibold text-fg truncate block">{u.login}</span>
+          </div>
 
-                <div className="flex items-center justify-between">
-                  <span className="text-xs text-fg-subtle ">Магазин</span>
-                  <span className="text-fg-subtle tabular-nums text-xs truncate max-w-35 text-right">
-                    {(() => {
-                      const resolvedStoreName = u.storeName || (u.storeId ? stores.find(s => s.id === u.storeId)?.name : undefined);
-                      if (resolvedStoreName) {
-                        return (
-                          <span className="text-accent font-medium flex items-center justify-end space-x-1">
-                            <Store className="w-3 h-3 shrink-0" />
-                            <span className="truncate">{resolvedStoreName}</span>
-                          </span>
-                        );
-                      }
-                      if (u.role === 'SELLER' || u.role === 'PARTNER') {
-                        return <span className="text-danger font-medium">Магазин не привязан</span>;
-                      }
-                      return <span className="text-fg-muted">Все филиалы</span>;
-                    })()}
-                  </span>
-                </div>
+          <div className="min-w-0">
+            <span className="text-[10px] text-fg-subtle block">
+              {u.role === 'SELLER' ? 'Оклад / Комиссия' : 'Авансы / Вычеты'}
+            </span>
+            {u.role === 'SELLER' ? (
+              <span className="font-mono font-semibold text-accent truncate block">
+                {baseSal > 0 ? `${baseSal.toLocaleString()} TJS` : 'Без оклада'} {commPct > 0 ? `(+${commPct}%)` : ''}
+              </span>
+            ) : (
+              <span className={`font-mono font-bold block ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
+                {totalAdvances.toLocaleString()} TJS
+              </span>
+            )}
+          </div>
 
-                {/* Salary & Sales Stats */}
-                {(() => {
-                  const stats = employeeLifetimeStatsById.get(u.id) ?? { totalAdvances: 0, salesRevTjs: 0, unitsSold: 0 };
-                  const { totalAdvances, salesRevTjs, unitsSold } = stats;
-                  const baseSal = u.baseSalaryTjs || 0;
-                  const commPct = u.salesCommissionPercent || 0;
-
-                  return (
-                    <div className="pt-2 border-t border-border space-y-1.5 text-xs">
-                      {u.role === 'SELLER' && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-fg-subtle">Оклад / комиссия</span>
-                          <span className="tabular-nums text-accent font-semibold">
-                            {baseSal > 0 ? `${baseSal.toLocaleString()} TJS` : 'Без оклада'} {commPct > 0 ? `(+${commPct}%)` : ''}
-                          </span>
-                        </div>
-                      )}
-                      {u.role === 'SELLER' && (
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-fg-subtle">Продажи</span>
-                          <span className="tabular-nums text-fg-muted font-bold">
-                            {salesRevTjs.toLocaleString()} TJS ({unitsSold} шт)
-                          </span>
-                        </div>
-                      )}
-                      <div className="flex items-center justify-between">
-                        <span className="text-xs text-fg-subtle">Авансы / вычеты</span>
-                        <span className={`tabular-nums font-bold ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
-                          {totalAdvances.toLocaleString()} TJS
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-                <div className="flex items-center justify-between pt-1 border-t border-border">
-                  <span className="text-xs text-fg-subtle ">Статус</span>
-                  {u.isActive ? (
-                    <span className="text-xs px-2 py-0.5 rounded bg-accent/10 text-accent border border-accent/20 font-medium flex items-center space-x-1">
-                      <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-                      <span>Активен</span>
-                    </span>
-                  ) : (
-                    <span className="text-xs px-2 py-0.5 rounded bg-danger/15 text-danger border border-danger/30 font-medium">
-                      Заблокирован
-                    </span>
-                  )}
-                </div>
-              </div>
-
-              {/* Action Buttons: Advance, Salary Payout, Financial History */}
-              <div className="space-y-1.5 pt-1">
-                <div className="grid grid-cols-3 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setAdvanceIssueUser(u);
-                      setAdvanceAmountInput('');
-                      setAdvanceNoteInput('');
-                    }}
-                    className="min-h-11 py-2 px-2 rounded-xl bg-surface hover:bg-surface-raised text-fg-muted border border-border text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>Аванс</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const thisMonth = selectedPayrollMonth;
-                      const empSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
-                      const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
-                      const baseSal = u.baseSalaryTjs || 0;
-                      const commPct = u.salesCommissionPercent || 0;
-                      const commAmount = moneyNumber(decimal(salesRevTjs).mul(commPct).div(100));
-                      const autoGross = baseSal + commAmount;
-
-                      setSalaryPayoutUser(u);
-                      setGrossSalaryInput(autoGross > 0 ? autoGross.toString() : '');
-                      setPayoutNote('');
-                      setPayoutMonth(selectedPayrollMonth);
-                    }}
-                    className="min-h-11 py-2 px-2 rounded-xl bg-accent/10 hover:bg-accent/20 text-accent border border-accent/20 text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
-                  >
-                    <DollarSign className="w-3 h-3" />
-                    <span>Зарплата</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setFinancialHistoryUser(u)}
-                    className="min-h-11 py-2 px-2 rounded-xl bg-surface hover:bg-surface-raised text-fg-muted border border-border text-xs font-bold flex items-center justify-center space-x-1 transition-colors"
-                    title="Финансовая история выплат и авансов"
-                  >
-                    <Receipt className="w-3 h-3" />
-                    <span>История</span>
-                  </button>
-                </div>
-
+          {u.role === 'SELLER' ? (
+            <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:block border-t sm:border-t-0 border-border/40 pt-1 sm:pt-0 min-w-0">
+              <span className="text-[10px] text-fg-subtle block">Продажи (Авансы)</span>
+              <div className="flex items-center gap-1 font-mono text-fg font-semibold truncate">
+                <span>{salesRevTjs.toLocaleString()} TJS</span>
+                <span className="text-fg-subtle font-normal text-[10px]">({unitsSold} шт)</span>
+                <span className="text-fg-subtle">·</span>
+                <span className={`text-[10px] font-bold ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
+                  Ав: {totalAdvances.toLocaleString()}
+                </span>
               </div>
             </div>
+          ) : (
+            <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:block border-t sm:border-t-0 border-border/40 pt-1 sm:pt-0 min-w-0">
+              <span className="text-[10px] text-fg-subtle block">Привязка филиала</span>
+              <span className={`text-[11px] font-medium truncate block ${u.storeId ? 'text-accent' : 'text-fg-muted'}`}>
+                {resolvedStoreName}
+              </span>
+            </div>
+          )}
+        </div>
+
+        {/* Line 3: Action Buttons */}
+        <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+          <button
+            type="button"
+            onClick={() => {
+              setAdvanceIssueUser(u);
+              setAdvanceAmountInput('');
+              setAdvanceNoteInput('');
+            }}
+            className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <Plus className="w-3 h-3 text-fg-subtle" />
+            <span>Аванс</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              const thisMonth = selectedPayrollMonth;
+              const empSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
+              const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
+              const baseSal = u.baseSalaryTjs || 0;
+              const commPct = u.salesCommissionPercent || 0;
+              const commAmount = moneyNumber(decimal(salesRevTjs).mul(commPct).div(100));
+              const autoGross = baseSal + commAmount;
+
+              setSalaryPayoutUser(u);
+              setGrossSalaryInput(autoGross > 0 ? autoGross.toString() : '');
+              setPayoutNote('');
+              setPayoutMonth(selectedPayrollMonth);
+            }}
+            className="h-7.5 px-2 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/25 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+          >
+            <DollarSign className="w-3 h-3" />
+            <span>Зарплата</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => setFinancialHistoryUser(u)}
+            className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            title="Финансовая история выплат и авансов"
+          >
+            <Receipt className="w-3 h-3 text-fg-subtle" />
+            <span>История</span>
+          </button>
+        </div>
+      </div>
     );
   };
 
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       {/* Header Bar */}
-      <div className="p-4 md:px-6 border-b border-border bg-surface flex flex-wrap gap-3 items-center justify-between shrink-0">
-        <div>
-          <h3 className="text-xs sm:text-sm font-bold text-fg-muted flex items-center space-x-2 ">
-            <Users className="w-4 h-4 text-accent" />
-            <span>Сотрудники и оклады</span>
+      <div className="p-2.5 sm:p-3 md:px-5 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
+        <div className="flex items-center space-x-2 min-w-0">
+          <Users className="w-4 h-4 text-accent shrink-0" />
+          <h3 className="text-xs sm:text-sm font-bold text-fg truncate">
+            Сотрудники и оклады
           </h3>
         </div>
 
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
+            type="button"
             onClick={() => setIsPayrollReportModalOpen(true)}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-surface hover:bg-surface-raised border border-border text-fg-muted text-xs font-semibold transition-colors"
+            className="h-8 px-2.5 sm:px-3 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-colors cursor-pointer"
             title="Ежемесячная ведомость зарплат продавцов"
           >
-            <Briefcase className="w-4 h-4" />
-            <span>Зарплатный отчёт</span>
+            <Briefcase className="w-3.5 h-3.5 text-fg-subtle" />
+            <span><span className="hidden sm:inline">Зарплатный </span>отчёт</span>
           </button>
 
-          <button
-            hidden={currentUser?.role !== 'ADMIN'} onClick={handleOpenAdd}
-            className="px-3.5 py-2 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg   flex items-center space-x-1.5 transition-colors shadow-xs shrink-0"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Добавить сотрудника</span>
-          </button>
+          {currentUser?.role === 'ADMIN' && (
+            <button
+              type="button"
+              onClick={handleOpenAdd}
+              className="h-8 px-2.5 sm:px-3.5 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg text-xs font-semibold flex items-center gap-1 transition-all shadow-xs shrink-0 cursor-pointer"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span><span className="hidden sm:inline">Добавить </span>сотрудника</span>
+            </button>
+          )}
         </div>
       </div>
 
       {statusMessage && (
-        <div className={`mx-3 sm:mx-4 mt-3 p-2.5 rounded-lg text-xs flex items-center space-x-2 shrink-0 ${
+        <div className={`mx-3 sm:mx-4 mt-2.5 p-2 rounded-lg text-xs flex items-center space-x-2 shrink-0 ${
           statusMessage.type === 'success' ? 'bg-accent/15 text-accent border border-accent/30' : 'bg-danger/15 text-danger border border-danger/30'
         }`}>
           {statusMessage.type === 'success' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
@@ -746,96 +736,96 @@ export const EmployeesPage: React.FC = () => {
 
       {/* Quick Store Filter Pills (Central Cash only) */}
       {storeCtx.mode === 'CENTRAL' && (
-      <div className="px-4 md:px-6 py-2.5 border-b border-border bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none">
-        <button
-          type="button"
-          onClick={() => setSelectedStoreFilter('ALL')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-            selectedStoreFilter === 'ALL'
-              ? 'bg-accent text-accent-fg shadow-xs'
-              : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
-          }`}
-        >
-          Все ({users.length})
-        </button>
+        <div className="px-3 sm:px-5 py-2 border-b border-border bg-surface flex items-center gap-1.5 overflow-x-auto shrink-0 scrollbar-none">
+          <button
+            type="button"
+            onClick={() => setSelectedStoreFilter('ALL')}
+            className={`h-7 px-2.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
+              selectedStoreFilter === 'ALL'
+                ? 'bg-accent text-accent-fg shadow-xs'
+                : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
+            }`}
+          >
+            Все ({users.length})
+          </button>
 
-        <button
-          type="button"
-          onClick={() => setSelectedStoreFilter('ADMIN')}
-          className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
-            selectedStoreFilter === 'ADMIN'
-              ? 'bg-accent text-accent-fg shadow-xs'
-              : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
-          }`}
-        >
-          <Shield className="w-3.5 h-3.5" />
-          <span>Общий админ ({adminUsers.length})</span>
-        </button>
+          <button
+            type="button"
+            onClick={() => setSelectedStoreFilter('ADMIN')}
+            className={`h-7 px-2.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+              selectedStoreFilter === 'ADMIN'
+                ? 'bg-accent text-accent-fg shadow-xs'
+                : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
+            }`}
+          >
+            <Shield className="w-3.5 h-3.5" />
+            <span>Общий админ ({adminUsers.length})</span>
+          </button>
 
-        {retailStores.map(st => {
-          const count = storeStaffMap.get(st.id)?.length || 0;
-          const isActive = selectedStoreFilter === st.id;
-          return (
+          {retailStores.map(st => {
+            const count = storeStaffMap.get(st.id)?.length || 0;
+            const isActive = selectedStoreFilter === st.id;
+            return (
+              <button
+                key={st.id}
+                type="button"
+                onClick={() => setSelectedStoreFilter(st.id)}
+                className={`h-7 px-2.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                  isActive
+                    ? 'bg-accent text-accent-fg shadow-xs'
+                    : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
+                }`}
+              >
+                <Store className="w-3.5 h-3.5" />
+                <span>{st.name} ({count})</span>
+              </button>
+            );
+          })}
+
+          {warehouseUsers.length > 0 && (
             <button
-              key={st.id}
               type="button"
-              onClick={() => setSelectedStoreFilter(st.id)}
-              className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
-                isActive
+              onClick={() => setSelectedStoreFilter('WAREHOUSE')}
+              className={`h-7 px-2.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
+                selectedStoreFilter === 'WAREHOUSE'
                   ? 'bg-accent text-accent-fg shadow-xs'
-                  : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
+                  : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
               }`}
             >
-              <Store className="w-3.5 h-3.5" />
-              <span>{st.name} ({count})</span>
+              <span>Главный склад ({warehouseUsers.length})</span>
             </button>
-          );
-        })}
+          )}
 
-        {warehouseUsers.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setSelectedStoreFilter('WAREHOUSE')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer flex items-center gap-1.5 ${
-              selectedStoreFilter === 'WAREHOUSE'
-                ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
-            }`}
-          >
-            <span>Главный склад ({warehouseUsers.length})</span>
-          </button>
-        )}
-
-        {unassignedUsers.length > 0 && (
-          <button
-            type="button"
-            onClick={() => setSelectedStoreFilter('UNASSIGNED')}
-            className={`px-3 py-1.5 rounded-xl text-xs font-bold shrink-0 transition-colors cursor-pointer ${
-              selectedStoreFilter === 'UNASSIGNED'
-                ? 'bg-accent text-accent-fg shadow-xs'
-                : 'bg-surface-raised hover:bg-surface-raised/80 text-fg-muted border border-border'
-            }`}
-          >
-            Без привязки ({unassignedUsers.length})
-          </button>
-        )}
-      </div>
+          {unassignedUsers.length > 0 && (
+            <button
+              type="button"
+              onClick={() => setSelectedStoreFilter('UNASSIGNED')}
+              className={`h-7 px-2.5 rounded-xl text-xs font-semibold shrink-0 transition-colors cursor-pointer ${
+                selectedStoreFilter === 'UNASSIGNED'
+                  ? 'bg-accent text-accent-fg shadow-xs'
+                  : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
+              }`}
+            >
+              Без привязки ({unassignedUsers.length})
+            </button>
+          )}
+        </div>
       )}
 
       {/* Users List: Global Admin at top, then each retail store with its staff */}
-      <div className="flex-1 overflow-y-auto p-4 md:p-6 bg-bg space-y-7">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 md:p-5 bg-bg space-y-4 sm:space-y-5">
         {/* Section 1: Общий администратор */}
         {(selectedStoreFilter === 'ALL' || selectedStoreFilter === 'ADMIN') && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-accent/10 border border-accent/25 text-accent">
-                  <Shield className="w-4 h-4" />
+                <div className="p-1 rounded-lg bg-accent/10 border border-accent/25 text-accent">
+                  <Shield className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                  <h4 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
                     <span>Общий администратор</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent font-semibold">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-accent/15 border border-accent/30 text-accent font-semibold">
                       {adminUsers.length}
                     </span>
                   </h4>
@@ -847,11 +837,11 @@ export const EmployeesPage: React.FC = () => {
             </div>
 
             {adminUsers.length === 0 ? (
-              <div className="p-5 rounded-2xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
+              <div className="p-4 rounded-xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
                 Нет назначенных администраторов
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+              <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-2.5 sm:gap-3 items-start">
                 {adminUsers.map(renderUserCard)}
               </div>
             )}
@@ -863,16 +853,16 @@ export const EmployeesPage: React.FC = () => {
           if (selectedStoreFilter !== 'ALL' && selectedStoreFilter !== store.id) return null;
           const storeStaff = storeStaffMap.get(store.id) || [];
           return (
-            <div key={store.id} className="space-y-3">
+            <div key={store.id} className="space-y-2.5">
               <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
                 <div className="flex items-center gap-2">
-                  <div className="p-1.5 rounded-xl bg-accent/10 border border-accent/25 text-accent">
-                    <Store className="w-4 h-4" />
+                  <div className="p-1 rounded-lg bg-accent/10 border border-accent/25 text-accent">
+                    <Store className="w-3.5 h-3.5" />
                   </div>
                   <div>
-                    <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                    <h4 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
                       <span>{store.name}</span>
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                      <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
                         {storeStaff.length} {storeStaff.length === 1 ? 'сотрудник' : storeStaff.length < 5 ? 'сотрудника' : 'сотрудников'}
                       </span>
                     </h4>
@@ -884,11 +874,11 @@ export const EmployeesPage: React.FC = () => {
               </div>
 
               {storeStaff.length === 0 ? (
-                <div className="p-5 rounded-2xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
+                <div className="p-4 rounded-xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
                   В этом магазине пока нет назначенных сотрудников
                 </div>
               ) : (
-                <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+                <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-2.5 sm:gap-3 items-start">
                   {storeStaff.map(renderUserCard)}
                 </div>
               )}
@@ -898,16 +888,16 @@ export const EmployeesPage: React.FC = () => {
 
         {/* Section 3: Главный склад (если есть прикрепленный персонал) */}
         {warehouseUsers.length > 0 && (selectedStoreFilter === 'ALL' || selectedStoreFilter === 'WAREHOUSE') && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-amber-500/10 border border-amber-500/25 text-amber-500">
-                  <Store className="w-4 h-4" />
+                <div className="p-1 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-500">
+                  <Store className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                  <h4 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
                     <span>{mainWarehouse?.name || 'Главный склад'}</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
                       {warehouseUsers.length}
                     </span>
                   </h4>
@@ -918,7 +908,7 @@ export const EmployeesPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-2.5 sm:gap-3 items-start">
               {warehouseUsers.map(renderUserCard)}
             </div>
           </div>
@@ -926,16 +916,16 @@ export const EmployeesPage: React.FC = () => {
 
         {/* Section 4: Без привязки (если есть) */}
         {unassignedUsers.length > 0 && (selectedStoreFilter === 'ALL' || selectedStoreFilter === 'UNASSIGNED') && (
-          <div className="space-y-3">
+          <div className="space-y-2.5">
             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
               <div className="flex items-center gap-2">
-                <div className="p-1.5 rounded-xl bg-surface-raised border border-border text-fg-subtle">
-                  <Users className="w-4 h-4" />
+                <div className="p-1 rounded-lg bg-surface-raised border border-border text-fg-subtle">
+                  <Users className="w-3.5 h-3.5" />
                 </div>
                 <div>
-                  <h4 className="text-sm font-bold text-fg flex items-center gap-2">
+                  <h4 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
                     <span>Без привязки к магазину</span>
-                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
+                    <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-surface-raised border border-border text-fg-subtle font-semibold">
                       {unassignedUsers.length}
                     </span>
                   </h4>
@@ -946,7 +936,7 @@ export const EmployeesPage: React.FC = () => {
               </span>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-4 items-start">
+            <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-2.5 sm:gap-3 items-start">
               {unassignedUsers.map(renderUserCard)}
             </div>
           </div>

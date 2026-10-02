@@ -977,22 +977,23 @@ export const InventoryPage: React.FC = () => {
       <StatusBanner message={pageStatus} onDismiss={() => setPageStatus(null)} />
       {/* Top Header & Navigation Bar. On phones it scrolls away with the list (it is taller than
           half the screen there); from tablet width up it stays and only the list scrolls. */}
-      <div className="p-2.5 sm:p-3 border-b border-border bg-surface space-y-2.5 shrink-0 shadow-xs">
+      <div className="p-2 sm:p-3 border-b border-border bg-surface space-y-2 sm:space-y-2.5 shrink-0 shadow-xs">
         {/* Row 1: Mode Switcher (List of Goods vs Locations List) & Location Selector */}
-        <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className="flex items-center justify-between gap-2">
           {!isStoreScoped && storeCtx.mode === 'CENTRAL' ? (
-            <div className="flex items-center gap-1.5 p-1 rounded-xl bg-surface-raised border border-border shrink-0">
+            <div className="flex items-center gap-1 p-0.5 sm:p-1 rounded-xl bg-surface-raised border border-border shrink-0">
               <button
                 type="button"
                 onClick={() => setViewTab('DEVICES')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'DEVICES'
                     ? 'bg-accent text-accent-fg shadow-xs'
                     : 'text-fg-subtle hover:text-fg-muted'
                 }`}
               >
                 <List className="w-3.5 h-3.5" />
-                <span>Список товаров</span>
+                <span className="sm:hidden">Товары</span>
+                <span className="hidden sm:inline">Список товаров</span>
                 <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
                   viewTab === 'DEVICES' ? 'bg-accent-fg/20 text-accent-fg' : 'bg-surface text-fg-subtle'
                 }`}>
@@ -1003,7 +1004,7 @@ export const InventoryPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setViewTab('LOCATIONS')}
-                className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition-all cursor-pointer ${
                   viewTab === 'LOCATIONS'
                     ? 'bg-accent text-accent-fg shadow-xs'
                     : 'text-fg-subtle hover:text-fg-muted'
@@ -1023,7 +1024,7 @@ export const InventoryPage: React.FC = () => {
 
           {/* Quick Location Dropdown Filter */}
           {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
-            <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0 ml-auto">
               <span className="text-xs text-fg-subtle font-medium hidden sm:inline">Локация:</span>
               <select
                 value={selectedLocationId}
@@ -1033,7 +1034,7 @@ export const InventoryPage: React.FC = () => {
                     setSelectedStatusFilter('ALL');
                   }
                 }}
-                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
+                className="bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer max-w-[140px] sm:max-w-none truncate"
               >
                 <option value="ALL">Все локации</option>
                 {mainWarehouse && (
@@ -1047,8 +1048,8 @@ export const InventoryPage: React.FC = () => {
           )}
         </div>
 
-        {/* Row 2: Dynamic Summary Stats Cards */}
-        <div className={`grid gap-2 sm:gap-3 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+        {/* Desktop/Tablet Summary Stats Cards */}
+        <div className={`hidden sm:grid gap-2 sm:gap-3 ${isAdmin ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
           <StatCard
             label="Единиц в наличии"
             value={`${filteredUnitsCount} шт.`}
@@ -1079,9 +1080,33 @@ export const InventoryPage: React.FC = () => {
           )}
         </div>
 
+        {/* Mobile Sleek Compact Metric Bar (saves ~120px of vertical space) */}
+        <div className={`grid sm:hidden bg-surface-raised border border-border rounded-xl py-2 px-1 text-center divide-x divide-border shadow-2xs ${
+          isAdmin ? 'grid-cols-4' : 'grid-cols-3'
+        }`}>
+          <div className="px-1 min-w-0">
+            <span className="text-[9px] font-semibold text-fg-subtle uppercase tracking-wider block truncate">Наличие</span>
+            <span className="text-xs font-black text-fg block truncate mt-0.5">{filteredUnitsCount} шт.</span>
+          </div>
+          <div className="px-1 min-w-0">
+            <span className="text-[9px] font-semibold text-fg-subtle uppercase tracking-wider block truncate">Брендов</span>
+            <span className="text-xs font-black text-accent block truncate mt-0.5">{filteredDistinctBrandsCount}</span>
+          </div>
+          <div className="px-1 min-w-0">
+            <span className="text-[9px] font-semibold text-fg-subtle uppercase tracking-wider block truncate">Моделей</span>
+            <span className="text-xs font-black text-fg block truncate mt-0.5">{filteredDistinctModelsCount}</span>
+          </div>
+          {isAdmin && (
+            <div className="px-1 min-w-0">
+              <span className="text-[9px] font-semibold text-fg-subtle uppercase tracking-wider block truncate">Склад</span>
+              <span className="text-xs font-black text-accent block truncate mt-0.5 font-mono">{formatUsd(filteredStockValueUsd)}</span>
+            </div>
+          )}
+        </div>
+
         {/* Row 3: Professional Search, Filters & Grouping Toolbar */}
         {viewTab === 'DEVICES' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2 sm:space-y-2.5">
             {/* Search Bar + Controls */}
             <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
               <div className="flex-1 min-w-0">
@@ -1090,75 +1115,140 @@ export const InventoryPage: React.FC = () => {
                   onChange={setSearchQuery}
                   onScan={handleScanDevice}
                   onSubmit={(value) => { void openDeviceByCode(value, 'enter'); }}
-                  placeholder="Поиск по IMEI, штрихкоду, модели, бренду, цвету, поставщику..."
+                  placeholder="Поиск по IMEI, штрихкоду, модели, бренду, цвету..."
                 />
               </div>
 
-              {/* View Mode Switcher */}
-              <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border shrink-0 self-start sm:self-auto">
-                <button
-                  type="button"
-                  onClick={() => setInventoryViewMode('BY_BRAND')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    inventoryViewMode === 'BY_BRAND'
-                      ? 'bg-accent text-accent-fg shadow-xs'
-                      : 'text-fg-subtle hover:text-fg-muted'
-                  }`}
-                  title="Группировать по брендам"
-                >
-                  <Sparkles className="w-3.5 h-3.5" />
-                  <span>По брендам</span>
-                </button>
+              {/* Desktop view mode switcher + filter button */}
+              <div className="hidden sm:flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-1 bg-surface-raised p-1 rounded-xl border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('BY_BRAND')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'BY_BRAND'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                    title="Группировать по брендам"
+                  >
+                    <Sparkles className="w-3.5 h-3.5" />
+                    <span>По брендам</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('BY_MODEL')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'BY_MODEL'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                    title="Группировать по моделям"
+                  >
+                    <Layers className="w-3.5 h-3.5" />
+                    <span>По моделям</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('FLAT_LIST')}
+                    className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'FLAT_LIST'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                    title="Полный список товаров"
+                  >
+                    <List className="w-3.5 h-3.5" />
+                    <span>Список</span>
+                  </button>
+                </div>
 
                 <button
                   type="button"
-                  onClick={() => setInventoryViewMode('BY_MODEL')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    inventoryViewMode === 'BY_MODEL'
-                      ? 'bg-accent text-accent-fg shadow-xs'
-                      : 'text-fg-subtle hover:text-fg-muted'
+                  onClick={() => setShowAdvancedFilters(prev => !prev)}
+                  aria-expanded={showAdvancedFilters}
+                  className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer ${
+                    showAdvancedFilters || activeFiltersCount > 0
+                      ? 'bg-accent/15 border-accent text-accent shadow-xs'
+                      : 'bg-surface-raised border-border text-fg-muted hover:border-fg-subtle'
                   }`}
-                  title="Группировать по моделям"
                 >
-                  <Layers className="w-3.5 h-3.5" />
-                  <span>По моделям</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setInventoryViewMode('FLAT_LIST')}
-                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
-                    inventoryViewMode === 'FLAT_LIST'
-                      ? 'bg-accent text-accent-fg shadow-xs'
-                      : 'text-fg-subtle hover:text-fg-muted'
-                  }`}
-                  title="Полный список товаров"
-                >
-                  <List className="w-3.5 h-3.5" />
-                  <span>Список</span>
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Фильтры</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-accent text-accent-fg text-[9px] font-black flex items-center justify-center">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                  {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
                 </button>
               </div>
 
-              {/* Advanced Filter Toggle Button */}
-              <button
-                type="button"
-                onClick={() => setShowAdvancedFilters(prev => !prev)}
-                aria-expanded={showAdvancedFilters}
-                className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
-                  showAdvancedFilters || activeFiltersCount > 0
-                    ? 'bg-accent/15 border-accent text-accent shadow-xs'
-                    : 'bg-surface-raised border-border text-fg-muted hover:border-fg-subtle'
-                }`}
-              >
-                <SlidersHorizontal className="w-3.5 h-3.5" />
-                <span>Фильтры</span>
-                {activeFiltersCount > 0 && (
-                  <span className="w-4 h-4 rounded-full bg-accent text-accent-fg text-[9px] font-black flex items-center justify-center">
-                    {activeFiltersCount}
-                  </span>
-                )}
-                {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-              </button>
+              {/* Mobile Subrow: View Mode Switcher on Left + Filter Button on Right in ONE compact line */}
+              <div className="flex sm:hidden items-center justify-between gap-1.5">
+                <div className="flex items-center gap-0.5 bg-surface-raised p-0.5 rounded-xl border border-border">
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('BY_BRAND')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'BY_BRAND'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                  >
+                    <Sparkles className="w-3 h-3" />
+                    <span>Бренды</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('BY_MODEL')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'BY_MODEL'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                  >
+                    <Layers className="w-3 h-3" />
+                    <span>Модели</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setInventoryViewMode('FLAT_LIST')}
+                    className={`flex items-center gap-1 px-2.5 py-1.5 rounded-lg text-[11px] font-bold transition-all cursor-pointer ${
+                      inventoryViewMode === 'FLAT_LIST'
+                        ? 'bg-accent text-accent-fg shadow-xs'
+                        : 'text-fg-subtle hover:text-fg-muted'
+                    }`}
+                  >
+                    <List className="w-3 h-3" />
+                    <span>Список</span>
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => setShowAdvancedFilters(prev => !prev)}
+                  aria-expanded={showAdvancedFilters}
+                  className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl text-xs font-bold border transition-colors cursor-pointer shrink-0 ${
+                    showAdvancedFilters || activeFiltersCount > 0
+                      ? 'bg-accent/15 border-accent text-accent shadow-xs'
+                      : 'bg-surface-raised border-border text-fg-muted hover:border-fg-subtle'
+                  }`}
+                >
+                  <SlidersHorizontal className="w-3.5 h-3.5" />
+                  <span>Фильтры</span>
+                  {activeFiltersCount > 0 && (
+                    <span className="w-4 h-4 rounded-full bg-accent text-accent-fg text-[9px] font-black flex items-center justify-center">
+                      {activeFiltersCount}
+                    </span>
+                  )}
+                  {showAdvancedFilters ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                </button>
+              </div>
             </div>
 
             {/* Quick Horizontal Brand Chips */}
@@ -1166,7 +1256,7 @@ export const InventoryPage: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setSelectedBrand('ALL')}
-                className={`px-3 py-1 rounded-full text-xs font-bold border transition-colors whitespace-nowrap cursor-pointer shrink-0 ${
+                className={`px-2.5 py-1 rounded-full text-xs font-bold border transition-colors whitespace-nowrap cursor-pointer shrink-0 ${
                   selectedBrand === 'ALL'
                     ? 'bg-accent text-accent-fg border-accent shadow-xs'
                     : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
@@ -1184,7 +1274,7 @@ export const InventoryPage: React.FC = () => {
                       key={bName}
                       type="button"
                       onClick={() => setSelectedBrand(isSelected ? 'ALL' : bName)}
-                      className={`px-3 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1.5 ${
+                      className={`px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors whitespace-nowrap cursor-pointer shrink-0 flex items-center gap-1.5 ${
                         isSelected
                           ? 'bg-accent text-accent-fg border-accent shadow-xs font-bold'
                           : 'bg-surface-raised hover:bg-surface border-border text-fg-muted'
@@ -1201,7 +1291,7 @@ export const InventoryPage: React.FC = () => {
                 })}
             </div>
 
-            {/* Advanced Filters Panel */}
+            {/* Advanced Filters Panel (Desktop Inline) */}
             {showAdvancedFilters && !isMobileLayout && (
               <div className="p-3.5 sm:p-4 rounded-2xl bg-surface-raised border border-border space-y-3.5 shadow-xs">
                 <div className="flex items-center justify-between pb-2 border-b border-border">
@@ -1225,100 +1315,102 @@ export const InventoryPage: React.FC = () => {
               </div>
             )}
 
-            {/* Active Filters Badges & Summary Line */}
-            <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs">
-              <div className="flex items-center gap-1.5 flex-wrap min-w-0">
-                <span className="text-[11px] text-fg-subtle font-medium">
-                  Найдено: <strong className="text-accent font-bold">{filteredDevices.length}</strong> шт.
-                  {filteredDevices.length > 0 && (
-                    <span className="opacity-80">
-                      {' '}· {brandGroups.length} {brandGroups.length === 1 ? 'бренд' : 'брендов'}
+            {/* Active Filters Badges & Summary Line (only rendered when filters or search are active) */}
+            {activeFiltersCount > 0 && (
+              <div className="flex flex-wrap items-center justify-between gap-2 pt-0.5 text-xs">
+                <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+                  <span className="text-[11px] text-fg-subtle font-medium">
+                    Найдено: <strong className="text-accent font-bold">{filteredDevices.length}</strong> шт.
+                    {filteredDevices.length > 0 && (
+                      <span className="opacity-80">
+                        {' '}· {brandGroups.length} {brandGroups.length === 1 ? 'бренд' : 'брендов'}
+                      </span>
+                    )}
+                    {isAdmin && filteredDevices.length > 0 && (
+                      <span className="opacity-80">
+                        {' '}· {formatUsd(filteredStockValueUsd)}
+                      </span>
+                    )}
+                  </span>
+
+                  {/* Active filter badges */}
+                  {selectedBrand !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                      <span>Бренд: {selectedBrand}</span>
+                      <button type="button" onClick={() => setSelectedBrand('ALL')} className="hover:opacity-70 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
                     </span>
                   )}
-                  {isAdmin && filteredDevices.length > 0 && (
-                    <span className="opacity-80">
-                      {' '}· {formatUsd(filteredStockValueUsd)}
+
+                  {selectedRam !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                      <span>RAM: {selectedRam} GB</span>
+                      <button type="button" onClick={() => setSelectedRam('ALL')} className="hover:opacity-70 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
                     </span>
                   )}
-                </span>
 
-                {/* Active filter badges */}
-                {selectedBrand !== 'ALL' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                    <span>Бренд: {selectedBrand}</span>
-                    <button type="button" onClick={() => setSelectedBrand('ALL')} className="hover:opacity-70">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-
-                {selectedRam !== 'ALL' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                    <span>RAM: {selectedRam} GB</span>
-                    <button type="button" onClick={() => setSelectedRam('ALL')} className="hover:opacity-70">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-
-                {selectedStorage !== 'ALL' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                    <span>Память: {selectedStorage}</span>
-                    <button type="button" onClick={() => setSelectedStorage('ALL')} className="hover:opacity-70">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-
-                {selectedStatusFilter !== 'ALL' && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                    <span>
-                      {selectedStatusFilter === 'MAIN_WAREHOUSE' ? 'Центральный склад' :
-                       selectedStatusFilter === 'STORE_STOCK' ? 'В магазинах' :
-                       selectedStatusFilter === 'BONUS_ONLY' ? 'Бонусы' : 'После обмена'}
+                  {selectedStorage !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                      <span>Память: {selectedStorage}</span>
+                      <button type="button" onClick={() => setSelectedStorage('ALL')} className="hover:opacity-70 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
                     </span>
-                    <button type="button" onClick={() => setSelectedStatusFilter('ALL')} className="hover:opacity-70">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
+                  )}
 
-                {(minPriceUsd || maxPriceUsd) && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
-                    <span>Цена: ${minPriceUsd || '0'} – ${maxPriceUsd || '∞'}</span>
+                  {selectedStatusFilter !== 'ALL' && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                      <span>
+                        {selectedStatusFilter === 'MAIN_WAREHOUSE' ? 'Центральный склад' :
+                         selectedStatusFilter === 'STORE_STOCK' ? 'В магазинах' :
+                         selectedStatusFilter === 'BONUS_ONLY' ? 'Бонусы' : 'После обмена'}
+                      </span>
+                      <button type="button" onClick={() => setSelectedStatusFilter('ALL')} className="hover:opacity-70 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+
+                  {(minPriceUsd || maxPriceUsd) && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/30">
+                      <span>Цена: ${minPriceUsd || '0'} – ${maxPriceUsd || '∞'}</span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setMinPriceUsd('');
+                          setMaxPriceUsd('');
+                        }}
+                        className="hover:opacity-70 cursor-pointer"
+                      >
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+
+                  {searchQuery.trim() && (
+                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-raised border border-border text-fg-muted">
+                      <span>Поиск: «{searchQuery}»</span>
+                      <button type="button" onClick={() => setSearchQuery('')} className="hover:opacity-70 cursor-pointer">
+                        <X className="w-3 h-3" />
+                      </button>
+                    </span>
+                  )}
+
+                  {activeFiltersCount > 0 && (
                     <button
                       type="button"
-                      onClick={() => {
-                        setMinPriceUsd('');
-                        setMaxPriceUsd('');
-                      }}
-                      className="hover:opacity-70"
+                      onClick={handleResetAllFilters}
+                      className="text-[10px] font-bold text-accent hover:underline ml-1 cursor-pointer"
                     >
-                      <X className="w-3 h-3" />
+                      Сбросить все
                     </button>
-                  </span>
-                )}
-
-                {searchQuery.trim() && (
-                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-surface-raised border border-border text-fg-muted">
-                    <span>Поиск: «{searchQuery}»</span>
-                    <button type="button" onClick={() => setSearchQuery('')} className="hover:opacity-70">
-                      <X className="w-3 h-3" />
-                    </button>
-                  </span>
-                )}
-
-                {activeFiltersCount > 0 && (
-                  <button
-                    type="button"
-                    onClick={handleResetAllFilters}
-                    className="text-[10px] font-bold text-accent hover:underline ml-1 cursor-pointer"
-                  >
-                    Сбросить все
-                  </button>
-                )}
+                  )}
+                </div>
               </div>
-            </div>
+            )}
           </div>
         )}
       </div>
@@ -1512,7 +1604,7 @@ export const InventoryPage: React.FC = () => {
           /* GROUPED BY BRAND VIEW */
           <div className="divide-y divide-border">
             {/* Header controls: Expand/Collapse All */}
-            <div className="p-3 sm:px-4 bg-surface-raised/40 flex items-center justify-between gap-2 border-b border-border">
+            <div className="py-2 px-3 sm:py-2.5 sm:px-4 bg-surface-raised/40 flex items-center justify-between gap-2 border-b border-border">
               <span className="text-xs font-semibold text-fg-subtle flex items-center gap-1.5 flex-wrap">
                 <Sparkles className="w-3.5 h-3.5 text-accent" />
                 <span>Всего брендов: <strong className="text-fg">{brandGroups.length}</strong></span>
@@ -1535,9 +1627,10 @@ export const InventoryPage: React.FC = () => {
                   }
                   setExpandedBrandKeys(next);
                 }}
-                className="text-[11px] font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer"
+                className="text-[11px] font-bold text-accent hover:underline flex items-center gap-1 cursor-pointer shrink-0"
               >
-                {brandGroups.every(b => expandedBrandKeys[b.key]) ? 'Свернуть все бренды' : 'Развернуть все бренды'}
+                <span className="sm:hidden">{brandGroups.every(b => expandedBrandKeys[b.key]) ? 'Свернуть' : 'Развернуть'}</span>
+                <span className="hidden sm:inline">{brandGroups.every(b => expandedBrandKeys[b.key]) ? 'Свернуть все бренды' : 'Развернуть все бренды'}</span>
               </button>
             </div>
 
@@ -1567,7 +1660,7 @@ export const InventoryPage: React.FC = () => {
                             {bGroup.distinctModelsCount} {bGroup.distinctModelsCount === 1 ? 'модель' : bGroup.distinctModelsCount < 5 ? 'модели' : 'моделей'}
                           </span>
                         </div>
-                        {/* Progress bar and breakdown preview */}
+                        {/* Progress bar preview */}
                         <div className="flex items-center gap-2 mt-1">
                           <div className="w-24 sm:w-36 h-1.5 rounded-full bg-surface-raised overflow-hidden border border-border shrink-0">
                             <div
@@ -1575,9 +1668,6 @@ export const InventoryPage: React.FC = () => {
                               style={{ width: `${Math.max(percent, 4)}%` }}
                             />
                           </div>
-                          <span className="text-[10px] font-semibold text-fg-subtle whitespace-nowrap">
-                            {percent}% от {activeStore ? `остатка «${activeStore.name}»` : 'общего остатка'}
-                          </span>
                         </div>
                       </div>
                     </div>
