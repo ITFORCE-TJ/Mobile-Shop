@@ -494,18 +494,7 @@ export const SalesHistoryPage: React.FC = () => {
                 >
                   Показать продажи за месяц
                 </Button>
-              ) : (
-                <Button
-                  size="md"
-                  className="!h-9 !px-3 text-xs"
-                  onClick={() => {
-                    setActivePage('SALE');
-                    navigate('/');
-                  }}
-                >
-                  Перейти к кассе (POS)
-                </Button>
-              )
+              ) : undefined
             }
           />
         ) : (
