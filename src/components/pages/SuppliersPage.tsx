@@ -1,49 +1,23 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { formatMoney } from '../../utils/money';
 import { useAppFields } from '../../context/AppContext';
-import { Supplier, SupplierInvoice, Device } from '../../types';
+import { Supplier, SupplierInvoice } from '../../types';
 import {
   Truck,
   Plus,
-  DollarSign,
   AlertCircle,
-  FileText,
-  ChevronRight,
   X,
-  Building,
-  Edit,
-  Trash2,
-  Loader2,
-  Landmark,
   Search,
-  User,
-  Phone,
-  Calendar,
-  Hash,
-  Check,
-  Receipt,
-  Smartphone,
-  CheckCircle2,
-  Clock,
-  ArrowRight,
-  ChevronDown,
-  ChevronUp,
-  Copy,
-  MapPin,
-  Sparkles,
-  Package
 } from 'lucide-react';
-import { getPhoneColorHex, formatRam, formatStorage } from '../../utils/phoneSpecs';
-
-const formatDateStr = (dateVal?: string) => {
-  if (!dateVal) return '-';
-  const clean = dateVal.split('T')[0];
-  const parts = clean.split('-');
-  if (parts.length === 3) {
-    return `${parts[2]}.${parts[1]}.${parts[0]}`;
-  }
-  return clean;
-};
+import { SupplierCard } from '../suppliers/SupplierCard';
+import { SupplierDetailsPanel } from '../suppliers/SupplierDetailsPanel';
+import { PaySupplierModal } from '../suppliers/PaySupplierModal';
+import { PaySupplierInvoiceModal } from '../suppliers/PaySupplierInvoiceModal';
+import { SupplierModal } from '../suppliers/SupplierModal';
+import { DeleteSupplierConfirmModal } from '../suppliers/DeleteSupplierConfirmModal';
+import { SupplierInvoiceDetailsModal } from '../suppliers/SupplierInvoiceDetailsModal';
+import { EditSupplierInvoiceModal } from '../suppliers/EditSupplierInvoiceModal';
+import { DeleteSupplierInvoiceModal } from '../suppliers/DeleteSupplierInvoiceModal';
 
 export const SuppliersPage: React.FC = () => {
   const {
@@ -62,11 +36,26 @@ export const SuppliersPage: React.FC = () => {
     paySupplier,
     paySupplierInvoice,
     todayRate
-  } = useAppFields('currentUser', 'suppliers', 'supplierInvoices', 'fetchInvoicesRange', 'devices', 'findDevicesByInvoice', 'stores', 'createSupplier', 'updateSupplier', 'deleteSupplier', 'updateSupplierInvoice', 'deleteSupplierInvoice', 'paySupplier', 'paySupplierInvoice', 'todayRate');
+  } = useAppFields(
+    'currentUser',
+    'suppliers',
+    'supplierInvoices',
+    'fetchInvoicesRange',
+    'devices',
+    'findDevicesByInvoice',
+    'stores',
+    'createSupplier',
+    'updateSupplier',
+    'deleteSupplier',
+    'updateSupplierInvoice',
+    'deleteSupplierInvoice',
+    'paySupplier',
+    'paySupplierInvoice',
+    'todayRate'
+  );
 
   const [selectedSupplierId, setSelectedSupplierId] = useState<string | null>(null);
   const [selectedInvoiceId, setSelectedInvoiceId] = useState<string | null>(null);
-  const [expandedDeviceGroups, setExpandedDeviceGroups] = useState<Record<string, boolean>>({});
 
   const selectedSupplier = suppliers.find(s => s.id === selectedSupplierId) || null;
   const selectedInvoice = supplierInvoices.find(inv => inv.id === selectedInvoiceId) || null;
@@ -76,7 +65,9 @@ export const SuppliersPage: React.FC = () => {
   useEffect(() => {
     if (!selectedInvoiceId) return;
     let cancelled = false;
-    findDevicesByInvoice(selectedInvoiceId).catch((e) => { if (!cancelled) console.error('Failed to load invoice devices', e); });
+    findDevicesByInvoice(selectedInvoiceId).catch((e) => {
+      if (!cancelled) console.error('Failed to load invoice devices', e);
+    });
     return () => { cancelled = true; };
   }, [selectedInvoiceId, findDevicesByInvoice]);
 
@@ -86,9 +77,12 @@ export const SuppliersPage: React.FC = () => {
   useEffect(() => {
     if (!selectedSupplierId) return;
     let cancelled = false;
-    fetchInvoicesRange({ supplierId: selectedSupplierId }).catch((e) => { if (!cancelled) console.error('Failed to load supplier invoices', e); });
+    fetchInvoicesRange({ supplierId: selectedSupplierId }).catch((e) => {
+      if (!cancelled) console.error('Failed to load supplier invoices', e);
+    });
     return () => { cancelled = true; };
   }, [selectedSupplierId, fetchInvoicesRange]);
+
   // Filters/sorts the full (unbounded, grows with every purchase invoice ever
   // raised) supplierInvoices array — computed once per relevant change instead of
   // twice per render (desktop panel + mobile overlay both need the same list).
@@ -111,58 +105,28 @@ export const SuppliersPage: React.FC = () => {
   }, [suppliers, searchQuery]);
 
   const [isPayModalOpen, setIsPayModalOpen] = useState(false);
-  const [isAddSupplierOpen, setIsAddSupplierOpen] = useState(false);
+  const [isPayInvoiceModalOpen, setIsPayInvoiceModalOpen] = useState(false);
+  const [isSupplierModalOpen, setIsSupplierModalOpen] = useState(false);
+  const [supplierToEdit, setSupplierToEdit] = useState<Supplier | null>(null);
+  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
+
+  const [editingInvoice, setEditingInvoice] = useState<SupplierInvoice | null>(null);
+  const [deletingInvoice, setDeletingInvoice] = useState<SupplierInvoice | null>(null);
+
+  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Central Cash: all supplier payments strictly draw from the central cash register
   const centralCashStore = useMemo(() => {
     const warehouses = stores.filter(s => s.isMainWarehouse);
     if (warehouses.length === 0) return stores[0] || null;
-    return warehouses.reduce((best, cur) => (cur.cashBalanceUsd || 0) > (best.cashBalanceUsd || 0) ? cur : best, warehouses[0]);
+    return warehouses.reduce(
+      (best, cur) => (cur.cashBalanceUsd || 0) > (best.cashBalanceUsd || 0) ? cur : best,
+      warehouses[0]
+    );
   }, [stores]);
-  const defaultPaymentStoreId = centralCashStore?.id || '';
+
   const rateNumber = todayRate?.rate || 0;
-
-  // Pay form state
-  const [paymentAmountUsd, setPaymentAmountUsd] = useState('');
-  const [sourceAccountId, setSourceAccountId] = useState(defaultPaymentStoreId);
-  const [paymentNote, setPaymentNote] = useState('');
-
-  // Pay single invoice form state
-  const [isPayInvoiceModalOpen, setIsPayInvoiceModalOpen] = useState(false);
-  const [payInvoiceAmountUsd, setPayInvoiceAmountUsd] = useState('');
-  const [payInvoiceSourceAccountId, setPayInvoiceSourceAccountId] = useState(defaultPaymentStoreId);
-
-  // Add supplier state
-  const [newSupplierName, setNewSupplierName] = useState('');
-  const [newSupplierPhone, setNewSupplierPhone] = useState('');
-  const [newSupplierContact, setNewSupplierContact] = useState('');
-
-  // Edit & Delete Supplier state
-  const [editingSupplier, setEditingSupplier] = useState<Supplier | null>(null);
-  const [editSupplierName, setEditSupplierName] = useState('');
-  const [editSupplierPhone, setEditSupplierPhone] = useState('');
-  const [editSupplierContact, setEditSupplierContact] = useState('');
-  const [deletingSupplier, setDeletingSupplier] = useState<Supplier | null>(null);
-
-  // Edit & Delete Invoice state
-  const [editingInvoice, setEditingInvoice] = useState<SupplierInvoice | null>(null);
-  const [editInvoiceNumber, setEditInvoiceNumber] = useState('');
-  const [editInvoiceDate, setEditInvoiceDate] = useState('');
-  const [editInvoiceAmount, setEditInvoiceAmount] = useState('');
-  const [deletingInvoice, setDeletingInvoice] = useState<SupplierInvoice | null>(null);
-  const [copiedImei, setCopiedImei] = useState<string | null>(null);
-
-  const handleCopyText = (text: string) => {
-    if (!text || text === '—') return;
-    navigator.clipboard?.writeText(text);
-    setCopiedImei(text);
-    setTimeout(() => {
-      setCopiedImei(prev => (prev === text ? null : prev));
-    }, 2000);
-  };
-
-  const [statusMessage, setStatusMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   if (currentUser?.role !== 'ADMIN') {
     return (
@@ -175,121 +139,44 @@ export const SuppliersPage: React.FC = () => {
 
   const handleOpenPay = (supplier: Supplier) => {
     setSelectedSupplierId(supplier.id);
-    setPaymentAmountUsd(supplier.totalDebtUsd.toString());
-    setPaymentNote(`Оплата поставщику ${supplier.name}`);
-    setSourceAccountId(centralCashStore?.id || '');
     setIsPayModalOpen(true);
   };
 
-  const handleExecutePayment = async () => {
-    if (!selectedSupplier || isSubmitting) return;
-    const amt = parseFloat(paymentAmountUsd) || 0;
-    if (amt <= 0) {
-      setStatusMessage({ type: 'error', text: 'Укажите положительную сумму оплаты' });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await paySupplier({
-        supplierId: selectedSupplier.id,
-        amountUsd: amt,
-        sourceAccountId,
-        note: paymentNote.trim() || undefined
-      });
-
-      if (res.success) {
-        setIsPayModalOpen(false);
-        setStatusMessage(null);
-      } else {
-        setStatusMessage({ type: 'error', text: res.message || 'Ошибка оплаты' });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
   const handleOpenPayInvoice = (invoice: SupplierInvoice) => {
-    setPayInvoiceAmountUsd(invoice.remainingAmountUsd.toString());
-    setPayInvoiceSourceAccountId(centralCashStore?.id || '');
+    setSelectedInvoiceId(invoice.id);
     setIsPayInvoiceModalOpen(true);
   };
 
-  const handleExecuteInvoicePayment = async () => {
-    if (!selectedInvoice || isSubmitting) return;
-    const amt = parseFloat(payInvoiceAmountUsd) || 0;
-    if (amt <= 0) {
-      setStatusMessage({ type: 'error', text: 'Укажите положительную сумму оплаты' });
-      return;
-    }
-
-    setIsSubmitting(true);
-    try {
-      const res = await paySupplierInvoice({
-        invoiceId: selectedInvoice.id,
-        amountUsd: amt,
-        sourceAccountId: payInvoiceSourceAccountId,
-      });
-
-      if (res.success) {
-        setIsPayInvoiceModalOpen(false);
-        setStatusMessage(null);
-      } else {
-        setStatusMessage({ type: 'error', text: res.message || 'Ошибка оплаты' });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleAddSupplierSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!newSupplierName.trim() || isSubmitting) return;
-
-    setIsSubmitting(true);
-    try {
-      const res = await createSupplier({
-        name: newSupplierName.trim(),
-        phone: newSupplierPhone.trim() || undefined,
-        contactPerson: newSupplierContact.trim() || undefined
-      });
-
-      if (res.success) {
-        setIsAddSupplierOpen(false);
-        setNewSupplierName('');
-        setNewSupplierPhone('');
-        setNewSupplierContact('');
-        setStatusMessage(null);
-      } else {
-        setStatusMessage({ type: 'error', text: res.message || 'Ошибка добавления поставщика' });
-      }
-    } finally {
-      setIsSubmitting(false);
-    }
+  const handleStartAddSupplier = () => {
+    setSupplierToEdit(null);
+    setIsSupplierModalOpen(true);
   };
 
   const handleStartEditSupplier = (sup: Supplier, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
-    setEditingSupplier(sup);
-    setEditSupplierName(sup.name);
-    setEditSupplierPhone(sup.phone || '');
-    setEditSupplierContact(sup.contactPerson || '');
+    setSupplierToEdit(sup);
+    setIsSupplierModalOpen(true);
   };
 
-  const handleSaveEditSupplier = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingSupplier || !editSupplierName.trim() || isSubmitting) return;
+  const handleSaveSupplier = async (data: { name: string; phone?: string; contactPerson?: string }) => {
     setIsSubmitting(true);
     try {
-      const res = await updateSupplier(editingSupplier.id, {
-        name: editSupplierName.trim(),
-        phone: editSupplierPhone.trim() || undefined,
-        contactPerson: editSupplierContact.trim() || undefined,
-      });
-      if (res.success) {
-        setEditingSupplier(null);
+      if (supplierToEdit) {
+        const res = await updateSupplier(supplierToEdit.id, data);
+        if (res.success) {
+          setIsSupplierModalOpen(false);
+          setSupplierToEdit(null);
+        } else {
+          setStatusMessage({ type: 'error', text: res.message || 'Ошибка обновления поставщика' });
+        }
       } else {
-        setStatusMessage({ type: 'error', text: res.message || 'Ошибка обновления поставщика' });
+        const res = await createSupplier(data);
+        if (res.success) {
+          setIsSupplierModalOpen(false);
+          setStatusMessage(null);
+        } else {
+          setStatusMessage({ type: 'error', text: res.message || 'Ошибка добавления поставщика' });
+        }
       }
     } finally {
       setIsSubmitting(false);
@@ -318,21 +205,13 @@ export const SuppliersPage: React.FC = () => {
   const handleStartEditInvoice = (inv: SupplierInvoice, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingInvoice(inv);
-    setEditInvoiceNumber(inv.invoiceNumber);
-    setEditInvoiceDate(inv.date.split('T')[0]);
-    setEditInvoiceAmount(inv.totalAmountUsd.toString());
   };
 
-  const handleSaveEditInvoice = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingInvoice || !editInvoiceNumber.trim() || isSubmitting) return;
+  const handleSaveEditInvoice = async (data: { invoiceNumber: string; date: string; totalAmountUsd: number }) => {
+    if (!editingInvoice || isSubmitting) return;
     setIsSubmitting(true);
     try {
-      const res = await updateSupplierInvoice(editingInvoice.id, {
-        invoiceNumber: editInvoiceNumber.trim(),
-        date: editInvoiceDate,
-        totalAmountUsd: parseFloat(editInvoiceAmount) || 0,
-      });
+      const res = await updateSupplierInvoice(editingInvoice.id, data);
       if (res.success) {
         setEditingInvoice(null);
       } else {
@@ -341,6 +220,11 @@ export const SuppliersPage: React.FC = () => {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const handleStartDeleteInvoice = (inv: SupplierInvoice, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setDeletingInvoice(inv);
   };
 
   const handleConfirmDeleteInvoice = async () => {
@@ -382,7 +266,7 @@ export const SuppliersPage: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setIsAddSupplierOpen(true)}
+          onClick={handleStartAddSupplier}
           className="px-3 py-1.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg flex items-center gap-1.5 shrink-0 transition-all active:scale-95 shadow-xs cursor-pointer"
           title="Добавить поставщика"
         >
@@ -397,7 +281,7 @@ export const SuppliersPage: React.FC = () => {
             <AlertCircle className="w-4 h-4 shrink-0" />
             <span>{statusMessage.text}</span>
           </div>
-          <button onClick={() => setStatusMessage(null)} className="hover:text-fg-muted ml-2">
+          <button onClick={() => setStatusMessage(null)} className="hover:text-fg-muted ml-2 cursor-pointer">
             <X className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -441,1321 +325,105 @@ export const SuppliersPage: React.FC = () => {
                 {searchQuery && <p className="text-[11px] mt-0.5">Попробуйте изменить поисковый запрос</p>}
               </div>
             ) : (
-              filteredSuppliers.map((s) => {
-                const isSelected = selectedSupplier?.id === s.id;
-                const initials = (s.name || '').trim().substring(0, 2).toUpperCase() || 'П';
-                const hasDebt = s.totalDebtUsd > 0;
-
-                return (
-                  <div
-                    key={s.id}
-                    onClick={() => setSelectedSupplierId(s.id)}
-                    className={`group relative rounded-xl border transition-all text-left p-2.5 sm:p-3 cursor-pointer select-none active:scale-[0.99] flex items-center justify-between gap-2.5 ${
-                      isSelected
-                        ? 'bg-accent/10 border-accent/40 shadow-xs'
-                        : hasDebt
-                        ? 'bg-surface hover:bg-surface-raised/80 border-border/80'
-                        : 'bg-surface hover:bg-surface-raised/80 border-border/60 text-fg-muted'
-                    }`}
-                  >
-                    {/* Left: Avatar initials badge + details */}
-                    <div className="flex items-center gap-2.5 min-w-0">
-                      <div className="w-9 h-9 rounded-xl bg-accent/10 border border-accent/25 text-accent font-black text-xs flex items-center justify-center shrink-0 tracking-wider">
-                        {initials}
-                      </div>
-                      <div className="min-w-0">
-                        <h4 className="text-xs sm:text-sm font-bold text-fg truncate">
-                          {s.name}
-                        </h4>
-                        <div className="flex items-center gap-2 mt-0.5 text-[11px] text-fg-subtle flex-wrap">
-                          {s.contactPerson && (
-                            <span className="flex items-center gap-1 truncate text-fg-muted">
-                              <User className="w-3 h-3 text-fg-subtle shrink-0" />
-                              <span>{s.contactPerson}</span>
-                            </span>
-                          )}
-                          {s.phone && (
-                            <span className="flex items-center gap-1 font-mono text-[10px] text-fg-subtle">
-                              <Phone className="w-3 h-3 text-fg-subtle shrink-0" />
-                              <span>{s.phone}</span>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Right: Debt amount + Actions/Chevron */}
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        {hasDebt ? (
-                          <>
-                            <span className="text-xs sm:text-sm font-black text-danger font-mono block leading-none">
-                              ${formatMoney(s.totalDebtUsd)}
-                            </span>
-                            <span className="text-[10px] text-fg-subtle block font-medium mt-0.5">
-                              Долг
-                            </span>
-                          </>
-                        ) : (
-                          <span className="text-[10px] font-semibold text-success px-1.5 py-0.5 rounded-md bg-success/10 border border-success/20">
-                            Оплачено
-                          </span>
-                        )}
-                      </div>
-
-                      {/* Desktop hover actions */}
-                      <div className="hidden lg:flex items-center space-x-0.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button
-                          type="button"
-                          onClick={(e) => handleStartEditSupplier(s, e)}
-                          className="p-1 rounded-md text-fg-subtle hover:text-accent hover:bg-surface"
-                          title="Редактировать поставщика"
-                        >
-                          <Edit className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={(e) => { e.stopPropagation(); setDeletingSupplier(s); }}
-                          className="p-1 rounded-md text-fg-subtle hover:text-danger hover:bg-surface"
-                          title="Удалить поставщика"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-
-                      <div className="p-1 rounded-lg bg-surface-raised/60 text-fg-subtle group-hover:text-accent group-hover:translate-x-0.5 transition-all">
-                        <ChevronRight className="w-4 h-4" />
-                      </div>
-                    </div>
-                  </div>
-                );
-              })
+              filteredSuppliers.map((s) => (
+                <SupplierCard
+                  key={s.id}
+                  supplier={s}
+                  isSelected={selectedSupplier?.id === s.id}
+                  onSelect={(sup) => setSelectedSupplierId(sup.id)}
+                  onEdit={(sup, e) => handleStartEditSupplier(sup, e)}
+                  onDelete={(sup, e) => {
+                    e.stopPropagation();
+                    setDeletingSupplier(sup);
+                  }}
+                />
+              ))
             )}
           </div>
         </div>
 
-        {/* Right Column: Invoices & Payments for selected supplier (Desktop view) */}
-        <div className="hidden lg:flex lg:col-span-2 flex-col overflow-hidden bg-bg">
-          {selectedSupplier ? (
-            <div className="flex-1 flex flex-col overflow-hidden">
-              {/* Selected supplier summary header */}
-              <div className="p-4 border-b border-border bg-surface flex flex-col sm:flex-row sm:items-center justify-between gap-3 shrink-0">
-                <div>
-                  <h4 className="text-base font-bold text-fg-muted">{selectedSupplier.name}</h4>
-                  <div className="flex items-center space-x-3 text-xs mt-1">
-                    <span className="text-fg-muted">Закуплено: <strong className="text-fg-muted">${formatMoney(selectedSupplier.totalPurchasedUsd)}</strong></span>
-                    <span>•</span>
-                    <span className="text-fg-muted">Выплачено: <strong className="text-accent">${formatMoney(selectedSupplier.totalPaidUsd)}</strong></span>
-                    <span>•</span>
-                    <span className="text-fg-muted">Остаток долга: <strong className="text-danger">${formatMoney(selectedSupplier.totalDebtUsd)}</strong></span>
-                  </div>
-                </div>
-
-                <div className="flex items-center space-x-2">
-                  <button
-                    onClick={() => handleOpenPay(selectedSupplier)}
-                    disabled={selectedSupplier.totalDebtUsd <= 0}
-                    className="px-4 py-2 rounded-xl bg-accent hover:bg-accent-strong disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-accent-fg shadow-xs transition-colors flex items-center space-x-1.5"
-                  >
-                    <DollarSign className="w-4 h-4" />
-                    <span>Погасить долг (FIFO)</span>
-                  </button>
-                  <button
-                    onClick={() => handleStartEditSupplier(selectedSupplier)}
-                    className="p-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg-muted transition-colors"
-                    title="Редактировать поставщика"
-                  >
-                    <Edit className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setDeletingSupplier(selectedSupplier)}
-                    className="p-2 rounded-lg bg-surface-raised hover:bg-danger/15 text-fg-subtle hover:text-danger border border-border transition-colors"
-                    title="Удалить поставщика"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                  <button
-                    onClick={() => setSelectedSupplierId(null)}
-                    className="p-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg-muted"
-                    title="Закрыть"
-                  >
-                    <X className="w-4 h-4" />
-                  </button>
-                </div>
-              </div>
-
-              {/* Invoices List */}
-              <div className="p-3 border-b border-border bg-surface-raised text-xs font-semibold text-fg-muted">
-                Накладные и статус оплат
-              </div>
-
-              <div className="flex-1 overflow-y-auto divide-y divide-border bg-bg">
-                {selectedSupplierInvoices
-                  .map((inv) => {
-                    const isPaid = inv.status === 'PAID';
-                    const isPartial = inv.status === 'PARTIALLY_PAID';
-
-                    return (
-                      <div
-                        key={inv.id}
-                        onClick={() => setSelectedInvoiceId(inv.id)}
-                        className="p-4 hover:bg-surface-raised cursor-pointer transition-colors flex items-center justify-between group"
-                      >
-                        <div>
-                          <div className="flex items-center space-x-2">
-                            <span className="text-xs font-bold text-fg-muted group-hover:text-accent transition-colors">{inv.invoiceNumber}</span>
-                            <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
-                              isPaid ? 'bg-accent/15 text-accent border border-accent/30' :
-                              isPartial ? 'bg-warning/15 text-warning border border-warning/30' :
-                              'bg-danger/15 text-danger border border-danger/30'
-                            }`}>
-                              {isPaid ? 'Оплачена' : isPartial ? 'Частично' : 'Не оплачена'}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-fg-subtle mt-1">
-                            Дата: {formatDateStr(inv.date)} • Устройств: {inv.devicesCount ?? 0} шт.
-                          </p>
-                        </div>
-
-                        <div className="flex items-center space-x-2">
-                          <div className="text-right">
-                            <p className="text-xs font-bold text-fg-muted">
-                              Всего: ${formatMoney(inv.totalAmountUsd)}
-                            </p>
-                            <p className="text-[11px] text-danger">
-                              Долг: ${formatMoney(inv.remainingAmountUsd)}
-                            </p>
-                            <p className="text-[10px] text-accent">
-                              Оплачено: ${formatMoney(inv.paidAmountUsd)}
-                            </p>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => handleStartEditInvoice(inv, e)}
-                            className="p-1.5 rounded-lg bg-surface-raised text-fg-subtle hover:text-accent border border-border transition-colors"
-                            title="Редактировать накладную"
-                          >
-                            <Edit className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            onClick={(e) => { e.stopPropagation(); setDeletingInvoice(inv); }}
-                            className="p-1.5 rounded-lg bg-surface-raised text-fg-subtle hover:text-danger border border-border transition-colors"
-                            title="Удалить накладную"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
-                          <button
-                            type="button"
-                            className="p-1.5 rounded-lg bg-surface-raised text-fg-subtle group-hover:text-fg-muted border border-border"
-                            title="Детали накладной"
-                          >
-                            <ChevronRight className="w-4 h-4" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-              </div>
-            </div>
-          ) : (
-            <div className="flex-1 flex flex-col items-center justify-center p-8 text-fg-subtle text-xs">
-              <FileText className="w-8 h-8 opacity-30 mb-2" />
-              <p>Выберите поставщика слева для просмотра накладных и выплат</p>
-            </div>
-          )}
-        </div>
+        {/* Right Column: Invoices & Payments for selected supplier */}
+        <SupplierDetailsPanel
+          supplier={selectedSupplier}
+          invoices={selectedSupplierInvoices}
+          onClose={() => setSelectedSupplierId(null)}
+          onOpenPay={handleOpenPay}
+          onEditSupplier={(sup) => handleStartEditSupplier(sup)}
+          onDeleteSupplier={(sup) => setDeletingSupplier(sup)}
+          onSelectInvoice={(invoiceId) => setSelectedInvoiceId(invoiceId)}
+          onEditInvoice={handleStartEditInvoice}
+          onDeleteInvoice={handleStartDeleteInvoice}
+        />
       </div>
 
-      {/* MOBILE FULL-SCREEN MODAL FOR SELECTED SUPPLIER */}
-      {selectedSupplier && (
-        <div className="app-safe-area lg:hidden fixed inset-0 z-40 bg-bg flex flex-col pb-[var(--sa-bottom)]">
-          {/* Header with Title and prominent Close "X" Button */}
-          <div className="p-3.5 border-b border-border bg-surface flex items-center justify-between shrink-0">
-            <div className="flex items-center space-x-2">
-              <Truck className="w-4 h-4 text-accent" />
-              <h3 className="text-sm font-bold text-fg-muted truncate max-w-50">
-                {selectedSupplier.name}
-              </h3>
-            </div>
+      {/* MODAL: Pay supplier debt with FIFO */}
+      <PaySupplierModal
+        open={isPayModalOpen}
+        supplier={selectedSupplier}
+        centralCashStore={centralCashStore}
+        rateNumber={rateNumber}
+        onClose={() => setIsPayModalOpen(false)}
+        onPay={paySupplier}
+        onError={(text) => setStatusMessage({ type: 'error', text })}
+      />
 
-            <button
-              type="button"
-              onClick={() => setSelectedSupplierId(null)}
-              className="p-1.5 rounded-lg bg-surface-raised text-fg-muted hover:text-fg-muted hover:bg-surface transition-colors flex items-center justify-center border border-border"
-              title="Закрыть окно"
-            >
-              <X className="w-5 h-5" />
-            </button>
-          </div>
+      {/* MODAL: Pay a single invoice directly (no FIFO) */}
+      <PaySupplierInvoiceModal
+        open={isPayInvoiceModalOpen}
+        invoice={selectedInvoice}
+        centralCashStore={centralCashStore}
+        rateNumber={rateNumber}
+        onClose={() => setIsPayInvoiceModalOpen(false)}
+        onPay={paySupplierInvoice}
+        onError={(text) => setStatusMessage({ type: 'error', text })}
+      />
 
-          {/* Supplier Metrics */}
-          <div className="p-3.5 bg-surface-raised border-b border-border grid grid-cols-3 gap-2 text-center text-xs">
-            <div className="bg-surface p-2 rounded-lg border border-border">
-              <span className="block text-[10px] text-fg-subtle">Закуплено</span>
-              <strong className="text-fg-muted text-xs">
-                ${formatMoney(selectedSupplier.totalPurchasedUsd)}
-              </strong>
-            </div>
-            <div className="bg-surface p-2 rounded-lg border border-border">
-              <span className="block text-[10px] text-fg-subtle">Выплачено</span>
-              <strong className="text-accent text-xs">
-                ${formatMoney(selectedSupplier.totalPaidUsd)}
-              </strong>
-            </div>
-            <div className="bg-surface p-2 rounded-lg border border-border">
-              <span className="block text-[10px] text-fg-subtle">Долг</span>
-              <strong className="text-danger text-xs">
-                ${formatMoney(selectedSupplier.totalDebtUsd)}
-              </strong>
-            </div>
-          </div>
+      {/* MODAL: Add / Edit Supplier */}
+      <SupplierModal
+        open={isSupplierModalOpen}
+        supplier={supplierToEdit}
+        onClose={() => {
+          setIsSupplierModalOpen(false);
+          setSupplierToEdit(null);
+        }}
+        onSubmit={handleSaveSupplier}
+        isSubmitting={isSubmitting}
+      />
 
-          {/* Action button */}
-          <div className="p-3 bg-bg border-b border-border shrink-0">
-            <button
-              onClick={() => handleOpenPay(selectedSupplier)}
-              disabled={selectedSupplier.totalDebtUsd <= 0}
-              className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-strong disabled:opacity-40 disabled:cursor-not-allowed text-xs font-semibold text-accent-fg shadow-xs flex items-center justify-center space-x-1.5 transition-colors"
-            >
-              <DollarSign className="w-4 h-4" />
-              <span>Погасить долг поставщику (FIFO)</span>
-            </button>
-          </div>
+      {/* MODAL: Delete Supplier Confirmation */}
+      <DeleteSupplierConfirmModal
+        supplier={deletingSupplier}
+        onClose={() => setDeletingSupplier(null)}
+        onConfirm={handleConfirmDeleteSupplier}
+        isSubmitting={isSubmitting}
+      />
 
-          {/* Invoices List */}
-          <div className="p-2.5 bg-surface-raised border-b border-border text-xs font-semibold text-fg-muted flex items-center justify-between">
-            <span>Накладные поставщика</span>
-            <span className="text-[11px] text-fg-subtle">
-              {selectedSupplierInvoices.length} шт.
-            </span>
-          </div>
+      {/* MODAL: Invoice Details */}
+      <SupplierInvoiceDetailsModal
+        invoice={selectedInvoice}
+        suppliers={suppliers}
+        devices={devices}
+        onClose={() => setSelectedInvoiceId(null)}
+        onOpenPay={handleOpenPayInvoice}
+      />
 
-          <div className="flex-1 overflow-y-auto divide-y divide-border bg-bg p-1">
-            {selectedSupplierInvoices
-              .map((inv) => {
-                const isPaid = inv.status === 'PAID';
-                const isPartial = inv.status === 'PARTIALLY_PAID';
+      {/* MODAL: Edit Invoice */}
+      <EditSupplierInvoiceModal
+        invoice={editingInvoice}
+        supplierName={selectedSupplier?.name}
+        rateNumber={rateNumber}
+        onClose={() => setEditingInvoice(null)}
+        onSubmit={handleSaveEditInvoice}
+        isSubmitting={isSubmitting}
+      />
 
-                return (
-                  <div
-                    key={inv.id}
-                    onClick={() => setSelectedInvoiceId(inv.id)}
-                    className="p-3 hover:bg-surface-raised active:bg-surface cursor-pointer transition-colors flex items-center justify-between group border-b border-border"
-                  >
-                    <div>
-                      <div className="flex items-center space-x-2">
-                        <span className="text-xs font-bold text-fg-muted group-hover:text-accent transition-colors">{inv.invoiceNumber}</span>
-                        <span className={`text-[10px] px-2 py-0.5 rounded-md font-medium ${
-                          isPaid ? 'bg-accent/15 text-accent border border-accent/30' :
-                          isPartial ? 'bg-warning/15 text-warning border border-warning/30' :
-                          'bg-danger/15 text-danger border border-danger/30'
-                        }`}>
-                          {isPaid ? 'Оплачена' : isPartial ? 'Частично' : 'Не оплачена'}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-fg-subtle mt-0.5">
-                        {formatDateStr(inv.date)} • {inv.devicesCount ?? 0} устройств
-                      </p>
-                    </div>
-
-                    <div className="flex items-center space-x-3">
-                      <div className="text-right">
-                        <p className="text-xs font-bold text-fg-muted">
-                          ${formatMoney(inv.totalAmountUsd)}
-                        </p>
-                        <p className="text-[11px] text-danger">
-                          Долг: ${formatMoney(inv.remainingAmountUsd)}
-                        </p>
-                      </div>
-                      <button
-                        type="button"
-                        className="p-1 rounded-lg bg-surface-raised text-fg-subtle group-hover:text-fg-muted border border-border"
-                        title="Детали накладной"
-                      >
-                        <ChevronRight className="w-4 h-4" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-          </div>
-
-          {/* Mobile Footer with Close button */}
-          <div className="p-3 border-t border-border bg-surface shrink-0">
-            <button
-              type="button"
-              onClick={() => setSelectedSupplierId(null)}
-              className="w-full py-2 rounded-lg bg-surface-raised hover:bg-surface text-xs font-bold text-fg-muted flex items-center justify-center space-x-1.5 transition-colors border border-border"
-            >
-              <X className="w-4 h-4" />
-              <span>ЗАКРЫТЬ КАРТОЧКУ ПОСТАВЩИКА</span>
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Pay Supplier (FIFO auto distribution) */}
-      {isPayModalOpen && selectedSupplier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl">
-            <h4 className="text-sm font-bold text-fg-muted mb-1">Выплата поставщику</h4>
-            <p className="text-xs text-fg-subtle mb-4">{selectedSupplier.name} (Текущий долг: ${selectedSupplier.totalDebtUsd})</p>
-
-            <div className="space-y-3 text-xs mb-4">
-              <div>
-                <label className="block text-fg-subtle mb-1">Сумма оплаты ($ USD):</label>
-                <div className="relative">
-                  <input step="0.01"
-                    type="number"
-                    min="0.01"
-                    value={paymentAmountUsd ?? ''}
-                    onChange={(e) => setPaymentAmountUsd(e.target.value)}
-                    className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-accent text-sm font-bold focus:border-accent focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2 text-fg-subtle">$</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1">Касса списания:</label>
-                <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
-                      <Landmark className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
-                      <p className="text-[11px] text-fg-subtle">Оплата поставщикам производится исключительно из центральной кассы</p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-xs font-bold text-accent">
-                      ${formatMoney(centralCashStore?.cashBalanceUsd)}
-                    </span>
-                    <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
-                  </div>
-                </div>
-              </div>
-
-              {rateNumber > 0 && parseFloat(paymentAmountUsd) > 0 && (
-                <div className="flex items-center justify-between text-[11px] px-1 text-fg-subtle">
-                  <span>Сумма к списанию (курс {rateNumber.toFixed(2)}):</span>
-                  <span className="font-semibold text-fg-muted">
-                    ≈ {formatMoney(parseFloat(paymentAmountUsd) * rateNumber)} TJS
-                  </span>
-                </div>
-              )}
-
-              {parseFloat(paymentAmountUsd) > 0 && parseFloat(paymentAmountUsd) > (centralCashStore?.cashBalanceUsd ?? 0) && (
-                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                  Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(parseFloat(paymentAmountUsd) || 0)}).
-                </div>
-              )}
-
-              <div>
-                <label className="block text-fg-subtle mb-1">Примечание:</label>
-                <input
-                  type="text"
-                  value={paymentNote ?? ''}
-                  onChange={(e) => setPaymentNote(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <div className="p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-[11px] text-accent">
-                Автоматическое погашение: средства распределятся по старейшим неоплаченным накладным (FIFO).
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setIsPayModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={handleExecutePayment}
-                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmitting ? 'Оплата…' : 'Оплатить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: Pay a single invoice directly (no FIFO across other invoices) */}
-      {isPayInvoiceModalOpen && selectedInvoice && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl">
-            <h4 className="text-sm font-bold text-fg-muted mb-1">Оплата по накладной {selectedInvoice.invoiceNumber}</h4>
-            <p className="text-xs text-fg-subtle mb-4">Остаток по накладной: ${selectedInvoice.remainingAmountUsd}</p>
-
-            <div className="space-y-3 text-xs mb-4">
-              <div>
-                <label className="block text-fg-subtle mb-1">Сумма оплаты ($ USD):</label>
-                <div className="relative">
-                  <input step="0.01"
-                    type="number"
-                    min="0.01"
-                    max={selectedInvoice.remainingAmountUsd}
-                    value={payInvoiceAmountUsd ?? ''}
-                    onChange={(e) => setPayInvoiceAmountUsd(e.target.value)}
-                    className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-accent text-sm font-bold focus:border-accent focus:outline-none"
-                  />
-                  <span className="absolute right-3 top-2 text-fg-subtle">$</span>
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1">Касса списания:</label>
-                <div className="p-3 rounded-xl bg-surface-raised border border-border flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <div className="p-2 rounded-lg bg-accent/15 text-accent shrink-0">
-                      <Landmark className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <p className="text-xs font-semibold text-fg-muted">Центральная касса</p>
-                      <p className="text-[11px] text-fg-subtle">Оплата накладной производится исключительно из центральной кассы</p>
-                    </div>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <span className="text-xs font-bold text-accent">
-                      ${formatMoney(centralCashStore?.cashBalanceUsd)}
-                    </span>
-                    <p className="text-[10px] text-fg-subtle">Остаток в кассе</p>
-                  </div>
-                </div>
-              </div>
-
-              {rateNumber > 0 && parseFloat(payInvoiceAmountUsd) > 0 && (
-                <div className="flex items-center justify-between text-[11px] px-1 text-fg-subtle">
-                  <span>Сумма к списанию (курс {rateNumber.toFixed(2)}):</span>
-                  <span className="font-semibold text-fg-muted">
-                    ≈ {formatMoney(parseFloat(payInvoiceAmountUsd) * rateNumber)} TJS
-                  </span>
-                </div>
-              )}
-
-              {parseFloat(payInvoiceAmountUsd) > 0 && parseFloat(payInvoiceAmountUsd) > (centralCashStore?.cashBalanceUsd ?? 0) && (
-                <div className="p-2.5 rounded-lg bg-danger/10 border border-danger/30 text-[11px] text-danger">
-                  Внимание: в Центральной кассе недостаточно средств (Остаток: ${formatMoney(centralCashStore?.cashBalanceUsd)}, требуется: ${formatMoney(parseFloat(payInvoiceAmountUsd) || 0)}).
-                </div>
-              )}
-
-              <div className="p-2.5 rounded-lg bg-accent/10 border border-accent/30 text-[11px] text-accent">
-                Оплата будет применена только к этой накладной, независимо от других долгов поставщика.
-              </div>
-            </div>
-
-            <div className="flex space-x-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setIsPayInvoiceModalOpen(false)}
-                className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={handleExecuteInvoicePayment}
-                className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmitting ? 'Оплата…' : 'Оплатить'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: ADD SUPPLIER */}
-      {isAddSupplierOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 shadow-2xl text-xs">
-            <div className="flex items-center justify-between mb-4 border-b border-border pb-3">
-              <h3 className="text-sm font-bold text-fg-muted flex items-center space-x-2">
-                <Building className="w-4 h-4 text-accent" />
-                <span>Добавить нового поставщика</span>
-              </h3>
-              <button
-                onClick={() => setIsAddSupplierOpen(false)}
-                className="p-1 rounded text-fg-subtle hover:text-fg-muted"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            <form onSubmit={handleAddSupplierSubmit} className="space-y-4">
-              <div>
-                <label className="block text-fg-subtle mb-1">Название поставщика *</label>
-                <input
-                  type="text"
-                  required
-                  value={newSupplierName ?? ''}
-                  onChange={(e) => setNewSupplierName(e.target.value)}
-                  placeholder="Например: Xiaomi Tech Hub"
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1">Контактное лицо</label>
-                <input
-                  type="text"
-                  value={newSupplierContact ?? ''}
-                  onChange={(e) => setNewSupplierContact(e.target.value)}
-                  placeholder="Фарход"
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <div>
-                <label className="block text-fg-subtle mb-1">Телефон</label>
-                <input
-                  type="tel"
-                  value={newSupplierPhone ?? ''}
-                  onChange={(e) => setNewSupplierPhone(e.target.value)}
-                  placeholder="+992 90 000 0000"
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-
-              <div className="flex space-x-2 pt-2">
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => setIsAddSupplierOpen(false)}
-                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
-                >
-                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isSubmitting ? 'Добавление…' : 'Добавить'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: INVOICE DETAILS */}
-      {selectedInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-3 sm:p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-3xl rounded-2xl bg-surface border border-border/80 shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
-            {/* Modal Header */}
-            <div className="p-4 sm:p-5 border-b border-border/70 bg-surface flex items-center justify-between shrink-0">
-              <div className="flex items-center gap-3">
-                <div className="w-10 h-10 rounded-xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 shadow-2xs">
-                  <Receipt className="w-5 h-5" />
-                </div>
-                <div>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <h3 className="text-sm sm:text-base font-bold text-fg flex items-center gap-2">
-                      <span>Накладная #{selectedInvoice.invoiceNumber}</span>
-                    </h3>
-                    {(selectedInvoice.totalAmountUsd === 0 || selectedInvoice.invoiceNumber.includes('BONUS')) ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-highlight/20 text-highlight border border-highlight/40 font-bold">
-                        🎯 Target Bonus ($0)
-                      </span>
-                    ) : selectedInvoice.remainingAmountUsd === 0 ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-accent/15 text-accent border border-accent/30 font-bold flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" />
-                        Оплачена
-                      </span>
-                    ) : selectedInvoice.paidAmountUsd > 0 ? (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-warning/15 text-warning border border-warning/30 font-bold flex items-center gap-1">
-                        <Clock className="w-3 h-3" />
-                        Частично
-                      </span>
-                    ) : (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-danger/15 text-danger border border-danger/30 font-bold flex items-center gap-1">
-                        <AlertCircle className="w-3 h-3" />
-                        Не оплачена
-                      </span>
-                    )}
-                  </div>
-                  <p className="text-xs text-fg-subtle mt-0.5 flex items-center gap-1.5 flex-wrap">
-                    <span>Поставщик: <strong className="text-fg font-semibold">{suppliers.find(s => s.id === selectedInvoice.supplierId)?.name || 'Поставщик'}</strong></span>
-                    <span>•</span>
-                    <span className="flex items-center gap-1">
-                      <Calendar className="w-3 h-3 text-fg-subtle" />
-                      {formatDateStr(selectedInvoice.date)}
-                    </span>
-                  </p>
-                </div>
-              </div>
-
-              <button
-                type="button"
-                onClick={() => setSelectedInvoiceId(null)}
-                className="p-2 rounded-xl bg-surface-raised hover:bg-surface text-fg-subtle hover:text-fg border border-border transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Financial Breakdown Cards */}
-            <div className="p-3.5 sm:p-4 bg-surface-raised/40 border-b border-border/70 grid grid-cols-1 sm:grid-cols-3 gap-2.5 sm:gap-3 shrink-0">
-              {/* Total Card */}
-              <div className="p-3 rounded-xl bg-surface border border-border/80 shadow-2xs flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider block">
-                    Сумма накладной
-                  </span>
-                  <strong className={`text-sm sm:text-base font-bold font-mono mt-0.5 block ${selectedInvoice.totalAmountUsd === 0 ? "text-highlight" : "text-fg"}`}>
-                    {selectedInvoice.totalAmountUsd === 0 ? '$0.00 (БОНУС)' : `$${formatMoney(selectedInvoice.totalAmountUsd)}`}
-                  </strong>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border flex items-center justify-center text-fg-subtle shrink-0">
-                  <DollarSign className="w-4 h-4" />
-                </div>
-              </div>
-
-              {/* Paid Card */}
-              <div className="p-3 rounded-xl bg-surface border border-border/80 shadow-2xs flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider block">
-                    Оплачено
-                  </span>
-                  <strong className="text-sm sm:text-base font-bold font-mono text-accent mt-0.5 block">
-                    ${formatMoney(selectedInvoice.paidAmountUsd)}
-                  </strong>
-                </div>
-                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/25 flex items-center justify-center text-accent shrink-0">
-                  <CheckCircle2 className="w-4 h-4" />
-                </div>
-              </div>
-
-              {/* Debt Card */}
-              <div className="p-3 rounded-xl bg-surface border border-border/80 shadow-2xs flex items-center justify-between">
-                <div>
-                  <span className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider block">
-                    Остаток долга
-                  </span>
-                  <strong className={`text-sm sm:text-base font-bold font-mono mt-0.5 block ${selectedInvoice.remainingAmountUsd > 0 ? "text-danger" : "text-fg-subtle"}`}>
-                    ${formatMoney(selectedInvoice.remainingAmountUsd)}
-                  </strong>
-                </div>
-                <div className={`w-8 h-8 rounded-lg border flex items-center justify-center shrink-0 ${
-                  selectedInvoice.remainingAmountUsd > 0 ? "bg-danger/10 border-danger/25 text-danger" : "bg-surface-raised border-border text-fg-subtle"
-                }`}>
-                  <AlertCircle className="w-4 h-4" />
-                </div>
-              </div>
-            </div>
-
-            {/* Pay Button if remaining debt exists */}
-            {selectedInvoice.remainingAmountUsd > 0 && (
-              <div className="px-3.5 pb-3 sm:px-4 sm:pb-4 bg-surface-raised/40 border-b border-border/70 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => handleOpenPayInvoice(selectedInvoice)}
-                  className="w-full py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg shadow-xs hover:shadow-md transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <DollarSign className="w-4 h-4" />
-                  <span>Оплатить накладную (${formatMoney(selectedInvoice.remainingAmountUsd)})</span>
-                </button>
-              </div>
-            )}
-
-            {/* Invoice Groups (Summary of positions) */}
-            {selectedInvoice.groups && selectedInvoice.groups.length > 0 && (
-              <div className="p-3.5 sm:p-4 bg-surface-raised/30 border-b border-border/70 space-y-2 shrink-0">
-                <div className="flex items-center justify-between text-xs font-bold text-fg-muted">
-                  <span className="flex items-center gap-1.5">
-                    <Package className="w-3.5 h-3.5 text-accent" />
-                    <span>Позиции по накладной</span>
-                  </span>
-                  <span className="text-[11px] font-mono text-fg-subtle">
-                    Всего: {selectedInvoice.groups.reduce((acc: number, g: any) => acc + (g.quantity || 0), 0)} шт.
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-xs">
-                  {selectedInvoice.groups.map((grp: any, gIdx: number) => {
-                    const colorHex = getPhoneColorHex(grp.color);
-                    const formattedR = formatRam(grp.ram);
-                    const formattedS = formatStorage(grp.storage);
-                    return (
-                      <div
-                        key={gIdx}
-                        className="p-3 rounded-xl bg-surface border border-border/80 shadow-2xs hover:border-accent/40 transition-colors flex items-center justify-between gap-3"
-                      >
-                        <div className="flex items-center gap-2.5 min-w-0">
-                          <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border flex items-center justify-center text-accent shrink-0">
-                            <Smartphone className="w-4 h-4" />
-                          </div>
-                          <div className="min-w-0">
-                            <div className="font-bold text-fg text-xs truncate">
-                              {grp.brand} {grp.model}
-                            </div>
-                            <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
-                              {formattedS && (
-                                <span className="px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-[10px] font-bold font-mono text-fg">
-                                  {formattedS}
-                                </span>
-                              )}
-                              {formattedR && (
-                                <span className="px-1.5 py-0.2 rounded-md bg-accent/10 border border-accent/25 text-[10px] font-bold font-mono text-accent">
-                                  ОЗУ {formattedR}
-                                </span>
-                              )}
-                              {grp.color && (
-                                <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-surface-raised border border-border/60 text-[10px] text-fg-muted">
-                                  {colorHex && (
-                                    <span
-                                      className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                      style={{ backgroundColor: colorHex }}
-                                    />
-                                  )}
-                                  <span>{grp.color}</span>
-                                </span>
-                              )}
-                            </div>
-                          </div>
-                        </div>
-                        <div className="text-right shrink-0">
-                          <span className="font-bold font-mono text-accent text-xs block">
-                            {grp.quantity} шт.
-                          </span>
-                          <span className="text-[10px] font-mono text-fg-subtle block">
-                            ${formatMoney(grp.purchasePriceUsd)} / шт.
-                          </span>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {/* Contained Devices List */}
-            {(() => {
-              const containedDevices = devices.filter(d =>
-                d.purchaseInvoiceId === selectedInvoice.id ||
-                d.invoiceNumber === selectedInvoice.invoiceNumber
-              );
-
-              const renderDeviceRow = (dev: Device, idx: number) => {
-                const colorHex = getPhoneColorHex(dev.color);
-                const formattedR = formatRam(dev.ram);
-                const formattedS = formatStorage(dev.storage);
-
-                return (
-                  <div
-                    key={dev.id}
-                    className="p-2.5 sm:p-3 rounded-xl bg-surface border border-border/70 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5 text-xs hover:border-accent/40 transition-colors shadow-2xs"
-                  >
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-fg-subtle text-[10px] font-bold font-mono">#{idx + 1}</span>
-                        <strong className="text-fg font-bold text-xs">{dev.brand} {dev.model}</strong>
-                        {formattedS && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-[10px] font-bold font-mono text-fg">
-                            {formattedS}
-                          </span>
-                        )}
-                        {formattedR && (
-                          <span className="px-1.5 py-0.2 rounded-md bg-accent/10 border border-accent/25 text-[10px] font-bold font-mono text-accent">
-                            ОЗУ {formattedR}
-                          </span>
-                        )}
-                        {dev.color && (
-                          <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-surface-raised border border-border/60 text-[10px] text-fg-muted">
-                            {colorHex && (
-                              <span
-                                className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                style={{ backgroundColor: colorHex }}
-                              />
-                            )}
-                            <span>{dev.color}</span>
-                          </span>
-                        )}
-                        {(dev.purchaseCostUsd === 0 || dev.isBonus) && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-highlight/20 text-highlight border border-highlight/40 font-bold flex items-center gap-1">
-                            <Sparkles className="w-3 h-3" />
-                            Подарок ($0)
-                          </span>
-                        )}
-                      </div>
-
-                      {/* IMEI & Location Info */}
-                      <div className="text-[11px] text-fg-subtle mt-1.5 flex flex-wrap items-center gap-2">
-                        {/* IMEI with copy */}
-                        <button
-                          type="button"
-                          onClick={() => handleCopyText(dev.imei)}
-                          title="Скопировать IMEI"
-                          className="group inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-raised border border-border/80 hover:border-accent/50 text-[10px] font-mono text-fg-muted hover:text-fg transition-all cursor-pointer"
-                        >
-                          <span className="text-[9px] text-fg-subtle font-sans">IMEI:</span>
-                          <span className="font-bold text-fg">{dev.imei}</span>
-                          {copiedImei === dev.imei ? (
-                            <span className="text-accent flex items-center gap-0.5 text-[9px] font-sans font-bold">
-                              <Check className="w-2.5 h-2.5" />
-                              <span>Скопировано</span>
-                            </span>
-                          ) : (
-                            <Copy className="w-2.5 h-2.5 text-fg-subtle group-hover:text-accent transition-colors opacity-70 group-hover:opacity-100" />
-                          )}
-                        </button>
-
-                        {dev.imei2 && (
-                          <button
-                            type="button"
-                            onClick={() => handleCopyText(dev.imei2!)}
-                            title="Скопировать IMEI 2"
-                            className="group inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-raised border border-border/80 hover:border-accent/50 text-[10px] font-mono text-fg-muted hover:text-fg transition-all cursor-pointer"
-                          >
-                            <span className="text-[9px] text-fg-subtle font-sans">IMEI 2:</span>
-                            <span className="font-bold text-fg">{dev.imei2}</span>
-                            {copiedImei === dev.imei2 ? (
-                              <span className="text-accent flex items-center gap-0.5 text-[9px] font-sans font-bold">
-                                <Check className="w-2.5 h-2.5" />
-                              </span>
-                            ) : (
-                              <Copy className="w-2.5 h-2.5 text-fg-subtle group-hover:text-accent transition-colors opacity-70 group-hover:opacity-100" />
-                            )}
-                          </button>
-                        )}
-
-                        <span className="inline-flex items-center gap-1 text-[10px] text-fg-subtle bg-surface-raised px-2 py-0.5 rounded-md border border-border/60">
-                          <MapPin className="w-2.5 h-2.5 text-accent" />
-                          <span>{dev.locationName}</span>
-                        </span>
-                      </div>
-
-                      {dev.bonusCampaign && (
-                        <p className="text-[10px] text-highlight mt-1 font-medium">
-                          {dev.bonusCampaign}
-                        </p>
-                      )}
-                    </div>
-
-                    <div className="flex sm:flex-col items-center sm:items-end justify-between gap-1 shrink-0 pt-1 sm:pt-0 border-t sm:border-t-0 border-border/50">
-                      <span className={`text-xs font-bold font-mono ${dev.purchaseCostUsd === 0 ? 'text-highlight' : 'text-accent'}`}>
-                        {dev.purchaseCostUsd === 0 ? '$0 (Подарок)' : `$${formatMoney(dev.purchaseCostUsd)}`}
-                      </span>
-                      <span className={`inline-flex items-center gap-1 text-[10px] px-2 py-0.5 rounded-full font-bold border ${
-                        dev.status === 'SOLD'
-                          ? 'bg-warning/15 text-warning border-warning/30'
-                          : 'bg-accent/15 text-accent border-accent/30'
-                      }`}>
-                        {dev.status === 'SOLD' ? 'Продан' : 'На складе'}
-                      </span>
-                    </div>
-                  </div>
-                );
-              };
-
-              const hasGroups = Array.isArray(selectedInvoice.groups) && selectedInvoice.groups.length > 0;
-              const variantGroups = new Map<string, { brand: string; model: string; ram?: string; storage: string; color: string; devices: typeof containedDevices }>();
-              if (hasGroups) {
-                for (const dev of containedDevices) {
-                  const key = `${dev.brand}|${dev.model}|${dev.ram || ''}|${dev.storage}|${dev.color}`;
-                  let g = variantGroups.get(key);
-                  if (!g) {
-                    g = { brand: dev.brand, model: dev.model, ram: dev.ram, storage: dev.storage, color: dev.color, devices: [] };
-                    variantGroups.set(key, g);
-                  }
-                  g.devices.push(dev);
-                }
-              }
-
-              return (
-                <>
-                  <div className="p-3 sm:p-3.5 bg-surface-raised/50 border-b border-border/70 flex items-center justify-between text-xs font-bold text-fg-muted shrink-0">
-                    <span className="flex items-center gap-2">
-                      <Smartphone className="w-4 h-4 text-accent" />
-                      <span>Устройства в накладной</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded-md bg-surface border border-border font-bold font-mono text-accent text-xs">
-                      {containedDevices.length} шт.
-                    </span>
-                  </div>
-
-                  <div className="flex-1 overflow-y-auto p-3 sm:p-4 space-y-2.5 bg-surface-raised/20">
-                    {containedDevices.length === 0 ? (
-                      <div className="p-8 text-center text-fg-subtle text-xs">
-                        Нет детальных записей устройств для этой накладной
-                      </div>
-                    ) : hasGroups && variantGroups.size > 0 ? (
-                      Array.from(variantGroups.entries()).map(([key, group]) => {
-                        const isExpanded = expandedDeviceGroups[key] ?? false;
-                        const soldCount = group.devices.filter(d => d.status === 'SOLD').length;
-                        const colorHex = getPhoneColorHex(group.color);
-                        const formattedR = formatRam(group.ram);
-                        const formattedS = formatStorage(group.storage);
-
-                        return (
-                          <div key={key} className="rounded-xl border border-border/80 bg-surface overflow-hidden shadow-2xs">
-                            <button
-                              type="button"
-                              onClick={() => setExpandedDeviceGroups(prev => ({ ...prev, [key]: !isExpanded }))}
-                              className="w-full p-3 flex items-center justify-between text-xs hover:bg-surface-raised/60 transition-colors cursor-pointer"
-                            >
-                              <div className="flex items-center gap-2.5 text-left min-w-0">
-                                <div className="w-7 h-7 rounded-lg bg-surface-raised border border-border flex items-center justify-center text-accent shrink-0">
-                                  <Smartphone className="w-3.5 h-3.5" />
-                                </div>
-                                <div className="min-w-0">
-                                  <div className="flex items-center gap-1.5 flex-wrap">
-                                    <strong className="text-fg font-bold text-xs">{group.brand} {group.model}</strong>
-                                    {formattedS && (
-                                      <span className="px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-[10px] font-bold font-mono text-fg">
-                                        {formattedS}
-                                      </span>
-                                    )}
-                                    {formattedR && (
-                                      <span className="px-1.5 py-0.2 rounded-md bg-accent/10 border border-accent/25 text-[10px] font-bold font-mono text-accent">
-                                        ОЗУ {formattedR}
-                                      </span>
-                                    )}
-                                    {group.color && (
-                                      <span className="inline-flex items-center gap-1 px-1.5 py-0.2 rounded-md bg-surface-raised border border-border/60 text-[10px] text-fg-muted">
-                                        {colorHex && (
-                                          <span
-                                            className="w-2 h-2 rounded-full border border-black/20 shrink-0"
-                                            style={{ backgroundColor: colorHex }}
-                                          />
-                                        )}
-                                        <span>{group.color}</span>
-                                      </span>
-                                    )}
-                                  </div>
-                                </div>
-                              </div>
-                              <div className="flex items-center gap-2.5 shrink-0 ml-2">
-                                <span className="text-accent font-bold font-mono text-xs">{group.devices.length} шт.</span>
-                                {soldCount > 0 && (
-                                  <span className="text-[10px] px-1.5 py-0.2 rounded-md bg-warning/15 text-warning font-semibold">
-                                    {soldCount} продано
-                                  </span>
-                                )}
-                                <div className={`p-1 rounded-md text-fg-subtle transition-transform duration-200 ${isExpanded ? 'rotate-90 text-accent' : ''}`}>
-                                  <ChevronRight className="w-3.5 h-3.5" />
-                                </div>
-                              </div>
-                            </button>
-                            {isExpanded && (
-                              <div className="p-3 pt-0 space-y-2 border-t border-border/60 bg-surface-raised/40">
-                                {group.devices.map((dev, idx) => renderDeviceRow(dev, idx))}
-                              </div>
-                            )}
-                          </div>
-                        );
-                      })
-                    ) : (
-                      containedDevices.map((dev, idx) => renderDeviceRow(dev, idx))
-                    )}
-                  </div>
-                </>
-              );
-            })()}
-
-            {/* Modal Footer */}
-            <div className="p-3.5 sm:p-4 bg-surface border-t border-border/70 flex items-center justify-end shrink-0">
-              <button
-                type="button"
-                onClick={() => setSelectedInvoiceId(null)}
-                className="px-5 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted hover:text-fg transition-all cursor-pointer min-h-[38px]"
-              >
-                Закрыть
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-      {/* MODAL: EDIT SUPPLIER */}
-      {editingSupplier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-surface border border-border p-5 shadow-xl text-fg-muted">
-            <div className="flex items-center justify-between border-b border-border pb-3 mb-4">
-              <h3 className="text-sm font-bold text-fg-muted flex items-center space-x-2">
-                <Edit className="w-4 h-4 text-accent" />
-                <span>Редактировать поставщика</span>
-              </h3>
-              <button onClick={() => setEditingSupplier(null)} className="text-fg-subtle hover:text-fg-muted">
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-            <form onSubmit={handleSaveEditSupplier} className="space-y-3">
-              <div>
-                <label className="block text-xs text-fg-subtle mb-1">Название поставщика *</label>
-                <input
-                  type="text"
-                  required
-                  value={editSupplierName}
-                  onChange={(e) => setEditSupplierName(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-fg-subtle mb-1">Телефон</label>
-                <input
-                  type="text"
-                  value={editSupplierPhone}
-                  onChange={(e) => setEditSupplierPhone(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-              <div>
-                <label className="block text-xs text-fg-subtle mb-1">Контактное лицо</label>
-                <input
-                  type="text"
-                  value={editSupplierContact}
-                  onChange={(e) => setEditSupplierContact(e.target.value)}
-                  className="w-full rounded-lg bg-surface-raised border border-border px-3 py-2 text-xs text-fg-muted focus:border-accent focus:outline-none"
-                />
-              </div>
-              <div className="pt-2 flex items-center space-x-2">
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => setEditingSupplier(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg uppercase disabled:opacity-60 flex items-center justify-center gap-1.5"
-                >
-                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isSubmitting ? 'Сохранение…' : 'Сохранить'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: DELETE SUPPLIER CONFIRMATION */}
-      {deletingSupplier && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-surface border border-danger/40 p-5 shadow-2xl text-fg-muted space-y-4">
-            <div className="flex items-center space-x-3 text-danger">
-              <AlertCircle className="w-6 h-6 shrink-0" />
-              <h3 className="text-sm font-bold text-fg-muted">Удаление поставщика</h3>
-            </div>
-            <p className="text-xs text-fg-muted leading-relaxed">
-              Вы действительно хотите удалить поставщика <strong className="text-fg-muted">«{deletingSupplier.name}»</strong>? Все связанные накладные, выплатные записи и поставленные устройства будут безвозвратно удалены.
-            </p>
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setDeletingSupplier(null)}
-                className="px-4 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={handleConfirmDeleteSupplier}
-                className="px-4 py-2.5 rounded-xl bg-danger hover:opacity-90 text-xs font-bold text-white uppercase shadow-xs disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmitting ? 'Удаление…' : 'Удалить поставщика'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: EDIT INVOICE */}
-      {editingInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm animate-in fade-in duration-150">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border/80 p-5 sm:p-6 shadow-2xl text-fg-muted space-y-4">
-            {/* Header */}
-            <div className="flex items-center justify-between pb-3 border-b border-border/70">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 shadow-2xs">
-                  <Receipt className="w-4 h-4" />
-                </div>
-                <div>
-                  <h3 className="text-sm sm:text-base font-bold text-fg">
-                    Редактировать накладную
-                  </h3>
-                  <p className="text-[11px] text-fg-subtle">
-                    Изменение номера, даты и суммы закупки
-                  </p>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => setEditingInvoice(null)}
-                className="p-1.5 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
-              >
-                <X className="w-4 h-4" />
-              </button>
-            </div>
-
-            {/* Context Card: Supplier & Devices */}
-            <div className="p-3 rounded-xl bg-surface-raised/60 border border-border/80 flex items-center justify-between gap-3 text-xs">
-              <div className="min-w-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-fg-subtle">
-                  Поставщик
-                </div>
-                <div className="font-bold text-fg truncate">
-                  {editingInvoice.supplierName || selectedSupplier?.name || 'Поставщик'}
-                </div>
-              </div>
-              <div className="text-right shrink-0">
-                <div className="text-[10px] font-bold uppercase tracking-wider text-fg-subtle">
-                  Устройств в партии
-                </div>
-                <div className="font-bold font-mono text-accent">
-                  {editingInvoice.devicesCount || 0} шт.
-                </div>
-              </div>
-            </div>
-
-            <form onSubmit={handleSaveEditInvoice} className="space-y-3.5">
-              {/* Invoice Number */}
-              <div>
-                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
-                  <span>Номер накладной</span>
-                  <span className="text-[10px] text-accent font-semibold font-mono">Обязательно</span>
-                </label>
-                <div className="relative">
-                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
-                    <Hash className="w-4 h-4 text-accent" />
-                  </div>
-                  <input
-                    type="text"
-                    required
-                    value={editInvoiceNumber}
-                    onChange={(e) => setEditInvoiceNumber(e.target.value)}
-                    placeholder="Например, INV-0022"
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-raised border border-border text-xs sm:text-sm font-bold font-mono text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Invoice Date */}
-              <div>
-                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
-                  <span>Дата накладной</span>
-                  <span className="text-[10px] text-fg-subtle font-mono">ГГГГ-ММ-ДД</span>
-                </label>
-                <div className="relative">
-                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
-                    <Calendar className="w-4 h-4 text-accent" />
-                  </div>
-                  <input
-                    type="date"
-                    value={editInvoiceDate}
-                    onChange={(e) => setEditInvoiceDate(e.target.value)}
-                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-raised border border-border text-xs sm:text-sm font-semibold text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
-                  />
-                </div>
-              </div>
-
-              {/* Invoice Amount */}
-              <div>
-                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
-                  <span>Сумма накладной ($ USD)</span>
-                  {rateNumber > 0 && parseFloat(editInvoiceAmount) > 0 && (
-                    <span className="text-[10px] text-fg-subtle font-mono">
-                      ≈ {formatMoney((parseFloat(editInvoiceAmount) || 0) * rateNumber)} TJS
-                    </span>
-                  )}
-                </label>
-                <div className="relative">
-                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
-                    <DollarSign className="w-4 h-4 text-accent" />
-                  </div>
-                  <input
-                    type="number"
-                    step="0.01"
-                    min="0"
-                    value={editInvoiceAmount}
-                    onChange={(e) => setEditInvoiceAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="w-full pl-9 pr-14 py-2.5 rounded-xl bg-surface-raised border border-border text-sm sm:text-base font-bold font-mono text-accent focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
-                  />
-                  <div className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-surface border border-border text-[10px] font-bold font-mono text-fg-subtle pointer-events-none">
-                    USD
-                  </div>
-                </div>
-              </div>
-
-              {/* Actions Footer */}
-              <div className="pt-2 flex items-center gap-2.5 border-t border-border/70">
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={() => setEditingInvoice(null)}
-                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted hover:text-fg transition-all cursor-pointer min-h-[40px] disabled:opacity-50 flex items-center justify-center"
-                >
-                  Отмена
-                </button>
-                <button
-                  type="submit"
-                  disabled={isSubmitting}
-                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg shadow-xs hover:shadow-md transition-all cursor-pointer min-h-[40px] disabled:opacity-60 flex items-center justify-center gap-1.5"
-                >
-                  {isSubmitting ? (
-                    <>
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      <span>Сохранение…</span>
-                    </>
-                  ) : (
-                    <>
-                      <Check className="w-3.5 h-3.5" />
-                      <span>Сохранить</span>
-                    </>
-                  )}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* MODAL: DELETE INVOICE CONFIRMATION */}
-      {deletingInvoice && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-4 backdrop-blur-xs">
-          <div className="w-full max-w-sm rounded-2xl bg-surface border border-danger/40 p-5 shadow-2xl text-fg-muted space-y-4">
-            <div className="flex items-center space-x-3 text-danger">
-              <AlertCircle className="w-6 h-6 shrink-0" />
-              <h3 className="text-sm font-bold text-fg-muted">Удаление накладной</h3>
-            </div>
-            <p className="text-xs text-fg-muted leading-relaxed">
-              Вы действительно хотите удалить накладную <strong className="text-fg-muted">#{deletingInvoice.invoiceNumber}</strong>? Все привязанные к этой накладной устройства и расчеты будут удалены из системы.
-            </p>
-            <div className="flex items-center justify-end space-x-2 pt-2">
-              <button
-                disabled={isSubmitting}
-                onClick={() => setDeletingInvoice(null)}
-                className="px-4 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted uppercase disabled:opacity-50"
-              >
-                Отмена
-              </button>
-              <button
-                disabled={isSubmitting}
-                onClick={handleConfirmDeleteInvoice}
-                className="px-4 py-2.5 rounded-xl bg-danger hover:opacity-90 text-xs font-bold text-white uppercase shadow-xs disabled:opacity-60 flex items-center justify-center gap-1.5"
-              >
-                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                {isSubmitting ? 'Удаление…' : 'Удалить накладную'}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {/* MODAL: Delete Invoice Confirmation */}
+      <DeleteSupplierInvoiceModal
+        invoice={deletingInvoice}
+        onClose={() => setDeletingInvoice(null)}
+        onConfirm={handleConfirmDeleteInvoice}
+        isSubmitting={isSubmitting}
+      />
     </div>
   );
 };
