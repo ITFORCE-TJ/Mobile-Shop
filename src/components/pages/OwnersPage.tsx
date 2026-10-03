@@ -26,10 +26,12 @@ import {
   AlertCircle,
   Store,
   Warehouse,
-  FileText
+  FileText,
+  Building2
 } from 'lucide-react';
 import { StatusBanner, StatusMessage } from '../ui/StatusBanner';
 import { MonthPicker } from '../ui/MonthPicker';
+import { CustomSelect, CustomSelectOption } from '../ui/CustomSelect';
 import { useStoreContext, formatStoreName } from '../../utils/storeContext';
 
 function ownerCountLabel(count: number): string {
@@ -271,6 +273,33 @@ export const OwnersPage: React.FC = () => {
 
   const totalCapitalInvested = useMemo(() => owners.reduce((acc, o) => acc + (o.capitalBalanceUsd ?? 0), 0), [owners]);
   const totalAvailableProfit = useMemo(() => owners.reduce((acc, o) => acc + (o.availableProfitUsd ?? 0), 0), [owners]);
+
+  const ownerFilterOptions = useMemo<CustomSelectOption[]>(() => [
+    { value: 'ALL', label: 'Все учредители', icon: <Users className="w-3.5 h-3.5" /> },
+    ...displayOwners.map((o) => {
+      const details = getOwnerDetails(o);
+      return {
+        value: o.id,
+        label: details.name,
+        sublabel: details.roleTag,
+        icon: <Users className="w-3.5 h-3.5" />,
+      };
+    }),
+  ], [displayOwners]);
+
+  const storeFilterOptions = useMemo<CustomSelectOption[]>(() => [
+    { value: 'ALL', label: 'Все объекты', icon: <Building2 className="w-3.5 h-3.5" /> },
+    ...retailStores.map((s) => ({
+      value: s.id,
+      label: formatStoreName(s.name),
+      icon: <Store className="w-3.5 h-3.5" />,
+    })),
+    ...(mainWarehouse ? [{
+      value: mainWarehouse.id,
+      label: `Центральный склад (${mainWarehouse.name})`,
+      icon: <Warehouse className="w-3.5 h-3.5 text-warning" />,
+    }] : []),
+  ], [retailStores, mainWarehouse]);
 
   // Devices currently in stock across warehouses and stores
   const inStockDevices = useMemo(() => {
@@ -591,7 +620,7 @@ export const OwnersPage: React.FC = () => {
               className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[32px]"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Капитал</span>
+              <span>Капитал</span>
             </button>
 
             <button
@@ -1077,32 +1106,27 @@ export const OwnersPage: React.FC = () => {
               {/* Controls Row */}
               <div className="flex items-center gap-1.5 flex-wrap sm:flex-nowrap">
                 {/* Partner Dropdown */}
-                <select
+                <CustomSelect
                   value={selectedOwnerFilter}
-                  onChange={(e) => setSelectedOwnerFilter(e.target.value)}
-                  className="flex-1 sm:flex-initial bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
-                >
-                  <option value="ALL">Все учредители</option>
-                  {displayOwners.map((o) => (
-                    <option key={o.id} value={o.id}>{getOwnerDetails(o).name}</option>
-                  ))}
-                </select>
+                  onChange={setSelectedOwnerFilter}
+                  options={ownerFilterOptions}
+                  title="Учредители"
+                  icon={<Users className="w-3.5 h-3.5" />}
+                  className="flex-1 sm:flex-initial"
+                  triggerClassName="w-full sm:w-auto"
+                />
 
                 {/* Store Dropdown (Central Cash only) */}
                 {storeCtx.mode === 'CENTRAL' && (
-                  <select
+                  <CustomSelect
                     value={selectedStoreFilter}
-                    onChange={(e) => setSelectedStoreFilter(e.target.value)}
-                    className="flex-1 sm:flex-initial bg-surface-raised border border-border text-fg text-xs font-semibold rounded-xl px-2.5 py-1.5 focus:outline-none focus:border-accent cursor-pointer"
-                  >
-                    <option value="ALL">Все объекты</option>
-                    {retailStores.map((s) => (
-                      <option key={s.id} value={s.id}>{formatStoreName(s.name)}</option>
-                    ))}
-                    {mainWarehouse && (
-                      <option value={mainWarehouse.id}>Центральный склад ({mainWarehouse.name})</option>
-                    )}
-                  </select>
+                    onChange={setSelectedStoreFilter}
+                    options={storeFilterOptions}
+                    title="Объекты"
+                    icon={<Building2 className="w-3.5 h-3.5" />}
+                    className="flex-1 sm:flex-initial"
+                    triggerClassName="w-full sm:w-auto"
+                  />
                 )}
 
                 {/* Period Filter */}
@@ -1480,17 +1504,18 @@ export const OwnersPage: React.FC = () => {
                   <Store className="w-3.5 h-3.5 text-accent" />
                   <span>Магазин:</span>
                 </label>
-                <select
+                <CustomSelect
                   value={selectedSharesStoreId}
-                  onChange={(e) => handleSharesStoreChange(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-xs font-semibold text-fg focus:border-accent focus:outline-none transition-colors cursor-pointer"
-                >
-                  {retailStores.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
+                  onChange={handleSharesStoreChange}
+                  options={retailStores.map((s) => ({
+                    value: s.id,
+                    label: s.name,
+                    icon: <Store className="w-3.5 h-3.5 text-accent" />
+                  }))}
+                  title="Выберите магазин"
+                  className="w-full"
+                  triggerClassName="w-full justify-between"
+                />
               </div>
 
               {/* Partner separate indicator */}
@@ -1693,47 +1718,60 @@ export const OwnersPage: React.FC = () => {
             <div className="space-y-3">
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Учредитель *</label>
-                <select
+                <CustomSelect
                   value={selectedOwnerId ?? ''}
-                  onChange={(e) => setSelectedOwnerId(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                >
-                  {displayOwners.map((o) => (
-                    <option key={o.id} value={o.id}>{getOwnerDetails(o).name}</option>
-                  ))}
-                </select>
+                  onChange={setSelectedOwnerId}
+                  options={displayOwners.map((o) => {
+                    const details = getOwnerDetails(o);
+                    return {
+                      value: o.id,
+                      label: details.name,
+                      sublabel: details.roleTag,
+                      icon: <Users className="w-3.5 h-3.5 text-accent" />,
+                    };
+                  })}
+                  title="Выберите учредителя"
+                  className="w-full"
+                  triggerClassName="w-full justify-between"
+                />
               </div>
 
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Тип операции *</label>
-                <select
+                <CustomSelect
                   value={txType}
-                  onChange={(e) => setTxType(e.target.value as 'INVESTMENT' | 'WITHDRAWAL')}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                >
-                  <option value="INVESTMENT">Внесение капитала (Вложение)</option>
-                  <option value="WITHDRAWAL">Изъятие / вывод капитала</option>
-                </select>
+                  onChange={(val) => setTxType(val as 'INVESTMENT' | 'WITHDRAWAL')}
+                  options={[
+                    { value: 'INVESTMENT', label: 'Внесение капитала (Вложение)', icon: <ArrowDownLeft className="w-3.5 h-3.5 text-accent" /> },
+                    { value: 'WITHDRAWAL', label: 'Изъятие / вывод капитала', icon: <ArrowUpRight className="w-3.5 h-3.5 text-danger" /> },
+                  ]}
+                  title="Тип операции"
+                  className="w-full"
+                  triggerClassName="w-full justify-between"
+                />
               </div>
 
               <div>
                 <label className="block text-fg-subtle text-[11px] uppercase mb-1 font-semibold">Объект (магазин / склад) *</label>
-                <select
+                <CustomSelect
                   value={selectedTxStoreId}
-                  onChange={(e) => setSelectedTxStoreId(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg text-xs font-semibold focus:border-accent focus:outline-none cursor-pointer"
-                >
-                  {mainWarehouse && (
-                    <option value={mainWarehouse.id}>
-                      Центральный склад ({mainWarehouse.name})
-                    </option>
-                  )}
-                  {retailStores.map(store => (
-                    <option key={store.id} value={store.id}>
-                      {formatStoreName(store.name)}
-                    </option>
-                  ))}
-                </select>
+                  onChange={setSelectedTxStoreId}
+                  options={[
+                    ...(mainWarehouse ? [{
+                      value: mainWarehouse.id,
+                      label: `Центральный склад (${mainWarehouse.name})`,
+                      icon: <Warehouse className="w-3.5 h-3.5 text-warning" />,
+                    }] : []),
+                    ...retailStores.map(store => ({
+                      value: store.id,
+                      label: formatStoreName(store.name),
+                      icon: <Store className="w-3.5 h-3.5 text-accent" />,
+                    })),
+                  ]}
+                  title="Выберите объект"
+                  className="w-full"
+                  triggerClassName="w-full justify-between"
+                />
               </div>
 
               <div>
@@ -1842,15 +1880,17 @@ export const OwnersPage: React.FC = () => {
                 })}
               </div>
 
-              <select
-                value={selectedQuarterYear}
-                onChange={(e) => setSelectedQuarterYear(parseInt(e.target.value))}
-                className="rounded-lg bg-surface border border-border px-2 py-1 text-xs text-fg font-bold focus:outline-none focus:border-amber-500 cursor-pointer shrink-0"
-              >
-                <option value={2026}>2026 г.</option>
-                <option value={2025}>2025 г.</option>
-                <option value={2024}>2024 г.</option>
-              </select>
+              <CustomSelect
+                value={String(selectedQuarterYear)}
+                onChange={(val) => setSelectedQuarterYear(parseInt(val))}
+                options={[
+                  { value: '2026', label: '2026 г.' },
+                  { value: '2025', label: '2025 г.' },
+                  { value: '2024', label: '2024 г.' },
+                ]}
+                title="Выберите год"
+                className="shrink-0"
+              />
             </div>
 
             {/* Breakdown Table */}
