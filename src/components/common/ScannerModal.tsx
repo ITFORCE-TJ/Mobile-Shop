@@ -49,28 +49,25 @@ const SUPPORTED_FORMATS = [
   Html5QrcodeSupportedFormats.DATA_MATRIX,
 ];
 
-/** Aiming band in CSS pixels of the preview: narrow enough to isolate IMEI 1 from IMEI 2. */
-function aimingBand(previewWidth: number) {
-  const width = Math.min(420, previewWidth * 0.88);
-  return { width, height: Math.min(130, Math.max(70, width * 0.3)) };
+/** Aiming band in CSS pixels of the preview. Generous framing so barcodes anywhere on the box are scanned easily. */
+function aimingBand(previewWidth: number, previewHeight?: number) {
+  const width = Math.min(440, previewWidth * 0.9);
+  const height = Math.min(200, Math.max(120, (previewHeight || 280) * 0.6));
+  return { width, height };
 }
 
 /**
  * The single scanner surface for the whole app — every page's "Сканировать" button calls
  * openScanner(callback) from AppContext, which just flips isScannerOpen/scannerCallback.
  *
- * The camera loop is our own rather than html5-qrcode's: that one shrinks the scan box to
- * its on-screen size (~340px on a phone) before decoding, which merges the thin bars of a
- * 15-digit IMEI barcode. Here the band under the aiming frame is cropped from the camera
- * frame at full resolution and handed to the same html5-qrcode decoder (ZXing, or the
- * browser's BarcodeDetector where available).
+ * Uses browser-native hardware-accelerated BarcodeDetector (Chrome/Android/PWA) for instant
+ * full-frame barcode recognition under any angle, with graceful fallback to ZXing.
  */
 export const ScannerModal: React.FC = () => {
   const { isScannerOpen, scannerCallback, closeScanner } = useAppFields('isScannerOpen', 'scannerCallback', 'closeScanner');
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const trackRef = useRef<MediaStreamTrack | null>(null);
   const stopCameraRef = useRef<() => void>(() => {});
-  const pendingScanRef = useRef({ code: '', matches: 0, seenAt: 0 });
   const scanLockedRef = useRef(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [torchSupported, setTorchSupported] = useState(false);
@@ -81,7 +78,7 @@ export const ScannerModal: React.FC = () => {
   const [zoomValue, setZoomValue] = useState(1);
   const [scanHint, setScanHint] = useState(SCAN_HINTS.aim);
   const [manualCode, setManualCode] = useState('');
-  const [band, setBand] = useState(() => aimingBand(340));
+  const [band, setBand] = useState(() => aimingBand(340, 260));
 
   const resolveScan = (code: string) => {
     const trimmed = code.trim();
@@ -91,14 +88,20 @@ export const ScannerModal: React.FC = () => {
     stopCameraRef.current();
     soundEffects.playAddToCartSuccess();
     try {
+      if (typeof navigator !== 'undefined' && 'vibrate' in navigator) {
+        navigator.vibrate([40, 30, 40]);
+      }
+    } catch {
+      // Haptics not available
+    }
+    try {
       scannerCallback?.(trimmed);
     } finally {
       closeScanner();
     }
   };
 
-  // Camera scans accept IMEIs only (15 digits, valid check digit); anything else on the box
-  // is ignored with a hint. The manual field below stays free-form (e.g. receipt numbers).
+  // Instant recognition for valid barcodes
   const confirmScan = (decodedText: string) => {
     if (scanLockedRef.current) return;
     const imeis = extractImeis(decodedText);
@@ -106,22 +109,9 @@ export const ScannerModal: React.FC = () => {
       setScanHint(SCAN_HINTS.notImei);
       return;
     }
-    // A QR/DataMatrix listing both IMEIs yields IMEI 1.
     const code = imeis[0];
-
-    const now = Date.now();
-    const pending = pendingScanRef.current;
-    if (pending.code === code && now - pending.seenAt <= CONFIRMATION_WINDOW_MS) {
-      pending.matches += 1;
-      pending.seenAt = now;
-    } else {
-      pendingScanRef.current = { code, matches: 1, seenAt: now };
-      setScanHint(SCAN_HINTS.hold);
-    }
-
-    if (pendingScanRef.current.matches >= REQUIRED_MATCHING_FRAMES) {
-      resolveScan(code);
-    }
+    setScanHint(SCAN_HINTS.hold);
+    resolveScan(code);
   };
 
   const applyConstraint = (constraint: BarcodeCameraConstraint) =>
@@ -197,7 +187,6 @@ export const ScannerModal: React.FC = () => {
     };
     stopCameraRef.current = stopCamera;
     scanLockedRef.current = false;
-    pendingScanRef.current = { code: '', matches: 0, seenAt: 0 };
 
     const openCamera = async () => {
       if (!navigator.mediaDevices?.getUserMedia) throw Object.assign(new Error('no camera API'), { name: 'NotFoundError' });
@@ -219,6 +208,23 @@ export const ScannerModal: React.FC = () => {
       }
     };
 
+    // Native hardware-accelerated BarcodeDetector (Chrome on Android / PWA)
+    type BrowserBarcode = {
+      rawValue?: string;
+      boundingBox?: DOMRectReadOnly;
+      cornerPoints?: { x: number; y: number }[];
+    };
+    let nativeDetector: { detect: (source: HTMLVideoElement) => Promise<BrowserBarcode[]> } | null = null;
+    if (typeof window !== 'undefined' && 'BarcodeDetector' in window) {
+      try {
+        const formats = ['code_128', 'code_39', 'code_93', 'qr_code', 'data_matrix', 'ean_13', 'upc_a'];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        nativeDetector = new (window as any).BarcodeDetector({ formats });
+      } catch {
+        nativeDetector = null;
+      }
+    }
+
     const decoder = new Html5QrcodeShim(SUPPORTED_FORMATS, true, false, new BaseLoggger(false));
     const canvas = document.createElement('canvas');
     const context = canvas.getContext('2d', { willReadFrequently: true });
@@ -226,25 +232,70 @@ export const ScannerModal: React.FC = () => {
     const decodeLoop = async () => {
       const video = videoRef.current;
       if (cancelled) return;
-      if (video && context && video.readyState >= 2 && video.videoWidth && video.clientWidth) {
-        // Map the on-screen aiming band (video is object-cover) back to camera pixels.
-        const { videoWidth: vw, videoHeight: vh, clientWidth: cw, clientHeight: ch } = video;
-        const scale = Math.max(cw / vw, ch / vh);
-        const { width, height } = aimingBand(cw);
-        // Whole-pixel crop, copied 1:1 without smoothing: a fractional offset makes the
-        // browser resample the frame, which blurs 1–2px bars enough that ZXing misses them.
-        const cropW = Math.round(Math.min(vw, width / scale));
-        const cropH = Math.round(Math.min(vh, height / scale));
-        const outScale = Math.min(1, MAX_DECODE_WIDTH / cropW);
-        canvas.width = Math.round(cropW * outScale);
-        canvas.height = Math.round(cropH * outScale);
-        context.imageSmoothingEnabled = outScale < 1;
-        context.drawImage(video, Math.floor((vw - cropW) / 2), Math.floor((vh - cropH) / 2), cropW, cropH, 0, 0, canvas.width, canvas.height);
-        try {
-          const result = await decoder.decodeAsync(canvas);
-          if (!cancelled) confirmScan(result.text);
-        } catch {
-          // Per-frame "nothing decoded yet" — not an error.
+      if (video && video.readyState >= 2 && video.videoWidth && video.clientWidth) {
+        let detected = false;
+
+        // Path 1: Native BarcodeDetector (Instant, full-frame GPU scan on Android Chrome)
+        if (nativeDetector) {
+          try {
+            const barcodes = await nativeDetector.detect(video);
+            if (barcodes && barcodes.length > 0) {
+              const targetY = (video.videoHeight || video.clientHeight || 400) / 2;
+              const targetX = (video.videoWidth || video.clientWidth || 300) / 2;
+              const candidates: { code: string; distance: number }[] = [];
+
+              for (const b of barcodes) {
+                const imeis = extractImeis(b.rawValue || '');
+                for (const imei of imeis) {
+                  let centerX = targetX;
+                  let centerY = targetY;
+                  if (b.boundingBox) {
+                    centerX = b.boundingBox.left + b.boundingBox.width / 2;
+                    centerY = b.boundingBox.top + b.boundingBox.height / 2;
+                  }
+                  candidates.push({
+                    code: imei,
+                    distance: Math.hypot(centerX - targetX, centerY - targetY),
+                  });
+                }
+              }
+
+              if (candidates.length > 0) {
+                candidates.sort((a, b) => a.distance - b.distance);
+                setScanHint(SCAN_HINTS.hold);
+                resolveScan(candidates[0].code);
+                detected = true;
+              } else {
+                setScanHint(SCAN_HINTS.notImei);
+              }
+            }
+          } catch {
+            // Native detector busy or failed, fall through to canvas decoder
+          }
+        }
+
+        // Path 2: Wide-area Canvas fallback (ZXing)
+        if (!detected && context) {
+          const { videoWidth: vw, videoHeight: vh } = video;
+          const cropW = Math.round(vw * 0.92);
+          const cropH = Math.round(vh * 0.75);
+          const startX = Math.floor((vw - cropW) / 2);
+          const startY = Math.floor((vh - cropH) / 2);
+
+          const outScale = Math.min(1, MAX_DECODE_WIDTH / cropW);
+          canvas.width = Math.round(cropW * outScale);
+          canvas.height = Math.round(cropH * outScale);
+          context.imageSmoothingEnabled = outScale < 1;
+          context.drawImage(video, startX, startY, cropW, cropH, 0, 0, canvas.width, canvas.height);
+
+          try {
+            const result = await decoder.decodeAsync(canvas);
+            if (!cancelled && result?.text) {
+              confirmScan(result.text);
+            }
+          } catch {
+            // Per-frame "nothing decoded yet" — not an error.
+          }
         }
       }
       if (!cancelled) timer = window.setTimeout(() => void decodeLoop(), DECODE_INTERVAL_MS);
@@ -261,7 +312,7 @@ export const ScannerModal: React.FC = () => {
       video.srcObject = stream;
       await video.play().catch(() => {});
       if (cancelled) return;
-      setBand(aimingBand(video.clientWidth || 340));
+      setBand(aimingBand(video.clientWidth || 340, video.clientHeight || 280));
       void decodeLoop();
 
       try {
@@ -275,8 +326,8 @@ export const ScannerModal: React.FC = () => {
         if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max) && zoom.max > zoom.min) {
           const range = { min: zoom.min, max: zoom.max, step: zoom.step && zoom.step > 0 ? zoom.step : 0.1 };
           const currentZoom = (track?.getSettings() as BarcodeCameraSettings | undefined)?.zoom;
-          // A little zoom lets the phone stay far enough away to focus on the thin bars.
-          const preferredZoom = Math.min(range.max, Math.max(range.min, Math.max(currentZoom ?? range.min, 1.5)));
+          // Start at natural 1.0x optical zoom for sharp barcode lines
+          const preferredZoom = Math.min(range.max, Math.max(range.min, currentZoom ?? 1));
           setZoomRange(range);
           setZoomValue(preferredZoom);
           await applyConstraint({ zoom: preferredZoom }).catch(() => {});
@@ -315,9 +366,20 @@ export const ScannerModal: React.FC = () => {
       compact
     >
       <div className="space-y-2.5">
-        {/* Camera Viewport */}
-        <div className="relative aspect-[16/10] sm:aspect-[16/9] w-full max-h-[210px] overflow-hidden rounded-2xl bg-black border border-border shadow-inner">
+        {/* Camera Viewport with Tap-to-Focus */}
+        <div
+          onClick={refocus}
+          className="relative aspect-[4/3] sm:aspect-[16/9] w-full min-h-[250px] max-h-[300px] overflow-hidden rounded-2xl bg-black border border-border shadow-inner cursor-pointer"
+          title="Нажмите для фокусировки"
+        >
           <video ref={videoRef} className="absolute inset-0 h-full w-full object-cover" playsInline muted autoPlay />
+
+          {/* Tap-to-focus animation ring */}
+          {isFocusing && (
+            <div className="absolute inset-0 flex items-center justify-center pointer-events-none z-30">
+              <div className="w-14 h-14 rounded-full border-2 border-accent animate-ping" />
+            </div>
+          )}
 
           {!cameraError && (
             <div
@@ -325,7 +387,7 @@ export const ScannerModal: React.FC = () => {
               style={{
                 width: band.width,
                 height: band.height,
-                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.52)',
+                boxShadow: '0 0 0 9999px rgba(0, 0, 0, 0.42)',
               }}
               aria-hidden="true"
             >
@@ -340,25 +402,25 @@ export const ScannerModal: React.FC = () => {
               {/* 4 Precision Corner Guides / Reticles */}
               <div
                 className={cn(
-                  'absolute -top-[1px] -left-[1px] w-4 h-4 border-t-2 border-l-2 rounded-tl-lg transition-all duration-200',
+                  'absolute -top-[1px] -left-[1px] w-5 h-5 border-t-2 border-l-2 rounded-tl-lg transition-all duration-200',
                   isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
                 )}
               />
               <div
                 className={cn(
-                  'absolute -top-[1px] -right-[1px] w-4 h-4 border-t-2 border-r-2 rounded-tr-lg transition-all duration-200',
+                  'absolute -top-[1px] -right-[1px] w-5 h-5 border-t-2 border-r-2 rounded-tr-lg transition-all duration-200',
                   isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
                 )}
               />
               <div
                 className={cn(
-                  'absolute -bottom-[1px] -left-[1px] w-4 h-4 border-b-2 border-l-2 rounded-bl-lg transition-all duration-200',
+                  'absolute -bottom-[1px] -left-[1px] w-5 h-5 border-b-2 border-l-2 rounded-bl-lg transition-all duration-200',
                   isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
                 )}
               />
               <div
                 className={cn(
-                  'absolute -bottom-[1px] -right-[1px] w-4 h-4 border-b-2 border-r-2 rounded-br-lg transition-all duration-200',
+                  'absolute -bottom-[1px] -right-[1px] w-5 h-5 border-b-2 border-r-2 rounded-br-lg transition-all duration-200',
                   isHolding ? 'border-emerald-300 shadow-[0_0_10px_rgba(52,211,153,0.9)]' : 'border-cyan-400 shadow-[0_0_6px_rgba(34,211,238,0.7)]'
                 )}
               />
