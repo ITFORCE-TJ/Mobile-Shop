@@ -13,8 +13,11 @@ import {
   Receipt,
   ArrowLeft,
   Store,
+  Smartphone,
+  User,
   X
 } from 'lucide-react';
+import { formatRam, formatStorage, getPhoneColorHex } from '../../utils/phoneSpecs';
 import { SearchBar } from '../ui/SearchBar';
 import { DateRangePicker } from '../ui/DateRangePicker';
 import { cn } from '../../utils/cn';
@@ -41,6 +44,7 @@ export const SalesHistoryPage: React.FC = () => {
     sales,
     fetchSalesRange,
     stores,
+    devices,
     openScanner,
     setActivePage,
     processRefund,
@@ -51,6 +55,7 @@ export const SalesHistoryPage: React.FC = () => {
     'sales',
     'fetchSalesRange',
     'stores',
+    'devices',
     'openScanner',
     'setActivePage',
     'processRefund',
@@ -677,39 +682,102 @@ export const SalesHistoryPage: React.FC = () => {
       >
         {!selectedSale ? null : dialogView === 'details' ? (
           <div className="space-y-3.5">
-            <div className="bg-surface p-3 rounded-lg border border-border space-y-1 text-sm">
-              {!isStoreScoped && <div className="text-fg-muted">{formatStoreName(selectedSale.storeName)}</div>}
-              <div className="text-accent font-semibold">Оператор: {selectedSale.sellerName}</div>
+            <div className="bg-surface p-3.5 rounded-xl border border-border space-y-2 text-sm shadow-2xs">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                {!isStoreScoped && (
+                  <span className="inline-flex items-center gap-1.5 font-bold text-fg text-xs">
+                    <Store className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <span>{formatStoreName(selectedSale.storeName)}</span>
+                  </span>
+                )}
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-accent/10 border border-accent/25 text-accent text-xs font-bold">
+                  <User className="w-3.5 h-3.5 shrink-0" />
+                  <span>Оператор: {selectedSale.sellerName}</span>
+                </span>
+              </div>
               {selectedSale.customerName && (
-                <div className="text-fg-subtle text-xs pt-1 border-t border-border mt-1">Клиент: {selectedSale.customerName}</div>
+                <div className="text-fg-subtle text-xs pt-1.5 border-t border-border/60 flex items-center gap-1.5">
+                  <span className="font-semibold text-fg-muted">Клиент:</span>
+                  <span>{selectedSale.customerName}</span>
+                </div>
               )}
             </div>
 
             <div className="space-y-2">
-              <p className="text-xs font-semibold text-fg-muted tracking-wide">Товары в чеке</p>
-              <div className="divide-y divide-border border border-border rounded-lg bg-surface">
-                {selectedSale.items.map((item, i) => (
-                  <div key={i} className="p-3 flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="text-sm font-semibold text-fg-muted">{item.brand} {item.model}</p>
-                      <p className="text-xs text-fg-subtle">{item.ram ? `${item.ram} · ` : ''}{item.storage} · {item.color}</p>
-                      <p className="text-xs text-fg-subtle mt-0.5">
-                        IMEI: {item.imei}{item.imei2 ? ` / ${item.imei2}` : ''}
-                      </p>
+              <p className="text-xs font-bold uppercase tracking-wider text-fg-subtle">Товары в чеке</p>
+              <div className="divide-y divide-border border border-border rounded-xl bg-surface overflow-hidden shadow-2xs">
+                {selectedSale.items.map((item, i) => {
+                  const ram = item.ram || devices?.find(d => d.id === item.deviceId || d.imei === item.imei)?.ram;
+                  const formattedRam = formatRam(ram);
+                  const formattedStorage = formatStorage(item.storage);
+                  const colorHex = getPhoneColorHex(item.color);
+
+                  return (
+                    <div key={i} className="p-3 sm:p-3.5 flex items-center justify-between gap-3 hover:bg-surface-raised/40 transition-colors">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="w-10 h-10 rounded-xl bg-surface-raised border border-border/80 flex items-center justify-center shrink-0 text-accent shadow-2xs">
+                          <Smartphone className="w-5 h-5" />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-extrabold text-fg truncate">
+                            {item.brand} {item.model}
+                          </p>
+
+                          <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                            {formattedStorage && (
+                              <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-xs font-black font-mono text-fg shadow-2xs shrink-0">
+                                {formattedStorage}
+                              </span>
+                            )}
+
+                            {formattedRam && (
+                              <span className="px-1.5 py-0.5 rounded-md bg-surface-raised/80 border border-border/70 text-[10px] font-bold font-mono text-fg-subtle shrink-0">
+                                {formattedRam}
+                              </span>
+                            )}
+
+                            {item.color && (
+                              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-raised/60 border border-border/60 text-[11px] font-medium text-fg-muted shrink-0">
+                                {colorHex && (
+                                  <span
+                                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                                    style={{ backgroundColor: colorHex }}
+                                  />
+                                )}
+                                <span>{item.color}</span>
+                              </span>
+                            )}
+                          </div>
+
+                          <div className="mt-1.5">
+                            <span className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-[11px] bg-surface-raised/80 px-2 py-0.5 rounded-md border border-border/60 text-fg-muted">
+                              <span className="text-[9px] font-bold text-fg-subtle uppercase tracking-wider">IMEI</span>
+                              <span className="font-semibold text-fg tracking-wide">{item.imei}</span>
+                              {item.imei2 && <span className="opacity-60 text-[10px]">/{item.imei2}</span>}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="text-right shrink-0">
+                        <p className="text-sm sm:text-base font-extrabold text-fg font-mono leading-tight">
+                          {formatMoney(item.salePriceTjs)} TJS
+                        </p>
+                        <p className="text-[11px] text-fg-subtle font-mono mt-0.5 font-medium">
+                          ≈ ${formatMoney(item.salePriceUsd)}
+                        </p>
+                      </div>
                     </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-sm font-semibold text-fg-muted">{formatMoney(item.salePriceTjs)} TJS</p>
-                      <p className="text-xs text-fg-subtle">≈ ${formatMoney(item.salePriceUsd)}</p>
-                    </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
             {selectedSale.exchangeEvents && selectedSale.exchangeEvents.length > 0 && (
               <div className="space-y-2">
                 <p className="text-xs font-semibold text-accent tracking-wide">История обменов</p>
-                <div className="p-3 bg-accent/10 border border-accent/30 rounded-lg space-y-2 text-sm">
+                <div className="p-3 bg-accent/10 border border-accent/30 rounded-xl space-y-2 text-sm shadow-2xs">
                   {selectedSale.exchangeEvents.map((ev, i) => (
                     <div key={i} className="border-b border-accent/20 pb-2 last:border-b-0 last:pb-0">
                       <p className="text-accent font-semibold text-xs">Обмен от {new Date(ev.date).toLocaleDateString('ru-RU')}</p>
@@ -724,34 +792,36 @@ export const SalesHistoryPage: React.FC = () => {
               </div>
             )}
 
-            <div className="bg-surface p-3 rounded-lg border border-border space-y-1.5 text-sm">
-              <div className="flex justify-between">
-                <span className="text-fg-subtle text-xs ">Способ оплаты</span>
-                <span className="font-semibold text-fg-muted">
+            <div className="bg-surface p-3.5 rounded-xl border border-border space-y-2 text-sm shadow-2xs">
+              <div className="flex justify-between items-center pb-1.5 border-b border-border/60">
+                <span className="text-fg-subtle text-xs font-semibold">Способ оплаты</span>
+                <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-xs font-bold text-fg">
                   {selectedSale.paymentMethod === 'CASH' ? 'Наличные' : selectedSale.paymentMethod === 'CARD' ? 'Карта' : selectedSale.paymentMethod === 'DEBT' ? 'В долг' : 'Смешанная'}
                 </span>
               </div>
               {selectedSale.cashAmountTjs > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-fg-subtle ">Наличными</span>
-                  <span className="text-fg-muted">{formatMoney(selectedSale.cashAmountTjs)} TJS</span>
+                  <span className="text-fg-subtle">Наличными</span>
+                  <span className="text-fg font-mono font-bold">{formatMoney(selectedSale.cashAmountTjs)} TJS</span>
                 </div>
               )}
               {selectedSale.cardAmountTjs > 0 && (
                 <div className="flex justify-between text-xs">
-                  <span className="text-fg-subtle ">Картой</span>
-                  <span className="text-fg-muted">{formatMoney(selectedSale.cardAmountTjs)} TJS</span>
+                  <span className="text-fg-subtle">Картой</span>
+                  <span className="text-fg font-mono font-bold">{formatMoney(selectedSale.cardAmountTjs)} TJS</span>
                 </div>
               )}
               {(selectedSale.debtAmountTjs ?? 0) > 0 && (
-                <div className="flex justify-between text-xs">
-                  <span className="text-danger ">Остаток долга</span>
-                  <span className="text-danger font-semibold">{formatMoney(selectedSale.debtAmountTjs ?? 0)} TJS</span>
+                <div className="flex justify-between text-xs pt-1 border-t border-border/60">
+                  <span className="text-danger font-semibold">Остаток долга</span>
+                  <span className="text-danger font-mono font-bold">{formatMoney(selectedSale.debtAmountTjs ?? 0)} TJS</span>
                 </div>
               )}
-              <div className="flex justify-between pt-2 border-t border-border font-semibold">
-                <span className="text-fg-muted text-xs">Итого</span>
-                <span className="text-accent text-base">{formatMoney(selectedSale.totalTjs)} TJS</span>
+              <div className="flex justify-between items-center pt-2 border-t border-border">
+                <span className="text-xs font-bold uppercase tracking-wider text-fg-subtle">Итого</span>
+                <span className="text-base sm:text-lg font-black font-mono text-accent">
+                  {formatMoney(selectedSale.totalTjs)} TJS
+                </span>
               </div>
             </div>
 

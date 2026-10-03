@@ -55,6 +55,7 @@ function mapSaleItem(i: any): SaleItem {
     imei2: i.imei2 ?? undefined,
     brand: i.brand,
     model: i.model,
+    ram: i.ram ?? i.device?.ram ?? undefined,
     storage: i.storage,
     color: i.color,
     salePriceTjs: i.salePriceTjs,

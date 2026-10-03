@@ -19,6 +19,7 @@ import {
   Share2,
 } from 'lucide-react';
 import { SearchBar } from '../ui/SearchBar';
+import { formatRam, formatStorage, getPhoneColorHex } from '../../utils/phoneSpecs';
 import { FilterPillGroup } from '../ui/FilterPillGroup';
 import { Button } from '../ui/Button';
 import { IconButton } from '../ui/IconButton';
@@ -567,10 +568,28 @@ export const SalePage: React.FC = () => {
                           <p className="text-xs font-bold text-fg truncate">
                             {item.device.brand} {item.device.model}
                           </p>
-                          <p className="text-[11px] text-fg-subtle truncate">
-                            {item.device.ram ? `${item.device.ram} · ` : ''}{item.device.storage} · {item.device.color}
-                          </p>
-                          <p className="text-[10px] text-fg-subtle font-mono truncate">
+                          <div className="flex items-center gap-1.5 flex-wrap mt-0.5">
+                            {item.device.storage && (
+                              <span className="px-1.5 py-0.2 rounded bg-surface-raised border border-border text-[10px] font-black font-mono text-fg shadow-2xs">
+                                {formatStorage(item.device.storage)}
+                              </span>
+                            )}
+                            {item.device.ram && (
+                              <span className="px-1.5 py-0.2 rounded bg-surface-raised/80 border border-border/70 text-[10px] font-bold font-mono text-fg-subtle">
+                                {formatRam(item.device.ram)}
+                              </span>
+                            )}
+                            {item.device.color && (() => {
+                              const colorHex = getPhoneColorHex(item.device.color);
+                              return (
+                                <span className="inline-flex items-center gap-1 text-[11px] text-fg-subtle">
+                                  {colorHex && <span className="w-2 h-2 rounded-full border border-black/20 shrink-0" style={{ backgroundColor: colorHex }} />}
+                                  <span>{item.device.color}</span>
+                                </span>
+                              );
+                            })()}
+                          </div>
+                          <p className="text-[10px] text-fg-subtle font-mono truncate mt-0.5">
                             IMEI: {item.device.imei}
                           </p>
                         </div>

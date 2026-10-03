@@ -136,7 +136,11 @@ export class SalesService {
           hasBelowCostItem,
           saleItems: { create: saleItemsData },
         },
-        include: { saleItems: true },
+        include: {
+          saleItems: { include: { device: { select: { ram: true } } } },
+          store: true,
+          user: { select: { id: true, name: true, role: true } },
+        },
       });
 
       const bonusItems = saleItemsData.filter((i) => i.isBonus);
@@ -248,7 +252,13 @@ export class SalesService {
         },
       });
 
-      return sale;
+      return {
+        ...sale,
+        saleItems: sale.saleItems.map((item: any) => ({
+          ...item,
+          ram: item.device?.ram || undefined,
+        })),
+      };
     }, { maxWait: 10000, timeout: 20000 });
   }
 }
