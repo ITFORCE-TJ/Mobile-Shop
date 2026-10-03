@@ -530,7 +530,7 @@ export const TransferPage: React.FC = () => {
                   </div>
                 </div>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-2.5">
                   {availableDevicesAtFromLocation.map((dev) => {
                     const isChecked = selectedDeviceIds.includes(dev.id);
 
@@ -585,9 +585,9 @@ export const TransferPage: React.FC = () => {
 
             {/* Bottom Floating Bar */}
             {selectedDeviceIds.length > 0 && (
-              <div className="absolute bottom-2.5 inset-x-2.5 z-30">
+              <div className="absolute bottom-2.5 inset-x-2.5 sm:inset-x-auto sm:left-1/2 sm:-translate-x-1/2 sm:w-full sm:max-w-2xl z-30 pointer-events-none">
                 <div className={cn(
-                  'p-2.5 sm:p-3 rounded-2xl bg-surface/95 border shadow-2xl flex items-center justify-between gap-2.5 backdrop-blur-md transition-all',
+                  'pointer-events-auto p-2.5 sm:p-3 rounded-2xl bg-surface/95 border shadow-2xl flex items-center justify-between gap-2.5 backdrop-blur-md transition-all',
                   !toLocationId ? 'border-warning/60 shadow-warning/5' : 'border-accent/40'
                 )}>
                   <div className="flex items-center gap-2.5 min-w-0">
@@ -628,7 +628,7 @@ export const TransferPage: React.FC = () => {
           </div>
         ) : (
           /* HISTORY & APPROVALS TAB */
-          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 space-y-2.5 bg-bg flex flex-col">
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 lg:p-6 space-y-2.5 bg-bg flex flex-col max-w-4xl xl:max-w-5xl mx-auto w-full">
             {!isStoreScoped && storeCtx.mode === 'CENTRAL' && (
               <div className="flex items-center justify-between pb-2 border-b border-border text-xs shrink-0">
                 <span className="text-fg-muted font-medium">Фильтр по локации:</span>

@@ -514,9 +514,10 @@ export const ExpensesPage: React.FC = () => {
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      <div className="border-b border-border bg-surface shrink-0 p-2 sm:p-2.5 space-y-2">
-        {/* Row 1: KPI Summary + Action Buttons */}
-        <div className="flex items-center justify-between gap-2 flex-wrap">
+      <div className="border-b border-border bg-surface shrink-0 p-2 sm:p-2.5">
+        <div className="max-w-6xl xl:max-w-7xl mx-auto w-full space-y-2">
+          {/* Row 1: KPI Summary + Action Buttons */}
+          <div className="flex items-center justify-between gap-2 flex-wrap">
           <div className="flex items-center gap-2 min-w-0">
             <div className="w-7 h-7 rounded-lg bg-danger/10 text-danger flex items-center justify-center shrink-0">
               <TrendingDown className="w-3.5 h-3.5" />
@@ -893,143 +894,270 @@ export const ExpensesPage: React.FC = () => {
             </div>
           </div>
         )}
+        </div>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-2 sm:p-2.5 max-w-4xl mx-auto w-full">
-        {isInitialLoading ? (
-          <LoadingState label="Загрузка расходов…" />
-        ) : filteredExpenses.length === 0 ? (
-          <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[220px]">
-            <div className="w-12 h-12 rounded-2xl bg-danger/10 border border-danger/20 flex items-center justify-center text-danger mb-3 shadow-xs">
-              <Receipt className="w-6 h-6" />
-            </div>
-            <h3 className="text-sm font-bold text-fg">Расходов не найдено</h3>
-            <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
-              {searchQuery
-                ? `По запросу «${searchQuery}» ничего не найдено.`
-                : 'За выбранный период или фильтры расходы отсутствуют.'}
-            </p>
-            <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
-              {hasActiveFilters && (
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-6">
+        <div className="max-w-6xl xl:max-w-7xl mx-auto w-full">
+          {isInitialLoading ? (
+            <LoadingState label="Загрузка расходов…" />
+          ) : filteredExpenses.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[220px]">
+              <div className="w-12 h-12 rounded-2xl bg-danger/10 border border-danger/20 flex items-center justify-center text-danger mb-3 shadow-xs">
+                <Receipt className="w-6 h-6" />
+              </div>
+              <h3 className="text-sm font-bold text-fg">Расходов не найдено</h3>
+              <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                {searchQuery
+                  ? `По запросу «${searchQuery}» ничего не найдено.`
+                  : 'За выбранный период или фильтры расходы отсутствуют.'}
+              </p>
+              <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                {hasActiveFilters && (
+                  <Button
+                    variant="secondary"
+                    size="md"
+                    className="!h-8 !px-3 text-xs"
+                    onClick={handleResetFilters}
+                  >
+                    <RotateCcw className="w-3.5 h-3.5 mr-1" />
+                    Сбросить фильтры
+                  </Button>
+                )}
                 <Button
-                  variant="secondary"
+                  variant="danger"
                   size="md"
                   className="!h-8 !px-3 text-xs"
-                  onClick={handleResetFilters}
+                  onClick={() => setIsModalOpen(true)}
                 >
-                  <RotateCcw className="w-3.5 h-3.5 mr-1" />
-                  Сбросить фильтры
+                  <Plus className="w-3.5 h-3.5 mr-1" />
+                  Добавить расход
                 </Button>
+              </div>
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {/* 1. Desktop Data Table (>= 768px, laptops & wide desktop monitors) */}
+              <div className="hidden md:block rounded-xl border border-border bg-surface shadow-2xs overflow-hidden">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-raised text-[10px] font-bold text-fg-subtle border-b border-border sticky top-0 z-10 uppercase tracking-wider select-none">
+                    <tr>
+                      <th className="py-2.5 px-3.5 whitespace-nowrap">Дата</th>
+                      <th className="py-2.5 px-3">Категория</th>
+                      <th className="py-2.5 px-3">Описание / Назначение</th>
+                      {!isStoreScoped && <th className="py-2.5 px-3 whitespace-nowrap">Точка</th>}
+                      <th className="py-2.5 px-3 whitespace-nowrap">Источник списания</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap">Сотрудник</th>
+                      <th className="py-2.5 px-3 whitespace-nowrap text-center">Статус</th>
+                      <th className="py-2.5 px-3.5 whitespace-nowrap text-right">Сумма</th>
+                      <th className="py-2.5 px-3.5 whitespace-nowrap text-right">Действия</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-border/80">
+                    {filteredExpenses.map((exp) => {
+                      const Icon = getCategoryIcon(exp.category);
+                      const label = getCategoryLabel(exp.category, customCategories);
+                      const formattedDate = exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—';
+                      const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
+                      const storeCleanName = formatStoreName(exp.storeName);
+
+                      return (
+                        <tr key={exp.id} className="hover:bg-surface-raised/40 transition-colors">
+                          <td className="py-3 px-3.5 whitespace-nowrap font-mono text-[11px] text-fg-subtle">
+                            {formattedDate}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap">
+                            <span className="inline-flex items-center gap-1.5 font-bold text-fg">
+                              <span className="w-6 h-6 rounded-md bg-surface-raised border border-border/80 text-fg-subtle flex items-center justify-center shrink-0">
+                                <Icon className="w-3.5 h-3.5" />
+                              </span>
+                              <span>{label}</span>
+                            </span>
+                          </td>
+                          <td className="py-3 px-3 text-fg-muted max-w-xs truncate" title={exp.comment || exp.description || 'Операционный расход'}>
+                            {exp.comment || exp.description || 'Операционный расход'}
+                          </td>
+                          {!isStoreScoped && (
+                            <td className="py-3 px-3 whitespace-nowrap text-fg-muted">
+                              {storeCleanName ? (
+                                <span className="inline-flex items-center gap-1 text-[11px]">
+                                  <StoreIcon className="w-3 h-3 text-accent shrink-0" />
+                                  <span>{storeCleanName}</span>
+                                </span>
+                              ) : (
+                                <span className="text-fg-subtle opacity-60">—</span>
+                              )}
+                            </td>
+                          )}
+                          <td className="py-3 px-3 whitespace-nowrap text-[11px]">
+                            {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') ? (
+                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-medium bg-surface-raised text-fg-muted border border-border/80">
+                                {exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}
+                              </span>
+                            ) : (
+                              <span className="text-fg-subtle opacity-60">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap text-[11px]">
+                            {exp.employeeName ? (
+                              <span className="px-1.5 py-0.5 rounded-md text-[10px] font-semibold bg-accent/10 text-accent border border-accent/20">
+                                {exp.employeeName}
+                              </span>
+                            ) : exp.createdByName ? (
+                              <span className="text-fg-subtle">{exp.createdByName}</span>
+                            ) : (
+                              <span className="text-fg-subtle opacity-60">—</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 whitespace-nowrap text-center">
+                            {exp.status === 'UNPAID' ? (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-warning/15 text-warning border border-warning/30">
+                                Не оплачено
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-accent/15 text-accent border border-accent/25">
+                                Оплачено
+                              </span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap text-right font-mono">
+                            <span className="font-black text-danger text-xs sm:text-sm block">
+                              -{formatMoney(exp.amountTjs)} TJS
+                            </span>
+                            <span className="text-[10px] text-fg-subtle block">
+                              ≈ -${formatMoney(costUsd)}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3.5 whitespace-nowrap text-right">
+                            <div className="flex items-center justify-end gap-1">
+                              {isAdmin && exp.status === 'UNPAID' && (
+                                <button
+                                  type="button"
+                                  onClick={() => handleStartPay(exp)}
+                                  className="px-2 py-1 rounded-lg bg-accent/10 hover:bg-accent/20 text-accent border border-accent/25 text-[11px] font-bold flex items-center gap-1 cursor-pointer transition-colors"
+                                  title="Оплатить расход"
+                                >
+                                  <Banknote className="w-3.5 h-3.5" />
+                                  <span>Оплатить</span>
+                                </button>
+                              )}
+                              {(isAdmin || isPartner) && (
+                                <ActionMenu
+                                  label="Действия с расходом"
+                                  actions={[
+                                    { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                                    { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                                  ]}
+                                />
+                              )}
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+
+              {/* 2. Mobile Cards View (< 768px, phones & small tablets) */}
+              <div className="md:hidden rounded-xl border border-border bg-surface divide-y divide-border/80 shadow-2xs overflow-hidden">
+                {filteredExpenses.map((exp) => {
+                  const Icon = getCategoryIcon(exp.category);
+                  const label = getCategoryLabel(exp.category, customCategories);
+                  const formattedDate = exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—';
+                  const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
+                  const storeCleanName = formatStoreName(exp.storeName);
+
+                  return (
+                    <div key={exp.id} className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 hover:bg-surface-raised/40 transition-colors">
+                      <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                        <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border/80 text-fg-subtle flex items-center justify-center shrink-0">
+                          <Icon className="w-4 h-4" />
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-xs sm:text-sm font-bold text-fg truncate">{label}</span>
+                            {exp.status === 'UNPAID' ? (
+                              <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-warning/15 text-warning border border-warning/30">
+                                Не оплачено
+                              </span>
+                            ) : (
+                              <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-accent/15 text-accent border border-accent/25">
+                                Оплачено
+                              </span>
+                            )}
+                            {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && (
+                              <span className="px-1.5 py-0.2 rounded-md text-[10px] font-medium bg-surface-raised text-fg-muted border border-border/80">
+                                {exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}
+                              </span>
+                            )}
+                            {exp.employeeName && (
+                              <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-accent/10 text-accent border border-accent/20">
+                                {exp.employeeName}
+                              </span>
+                            )}
+                          </div>
+
+                          <p className="text-[11px] sm:text-xs text-fg-muted mt-0.5 line-clamp-1">
+                            {exp.comment || exp.description || 'Операционный расход'}
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-1 text-[10px] text-fg-subtle mt-0.5">
+                            {!isStoreScoped && storeCleanName && (
+                              <>
+                                <StoreIcon className="w-2.5 h-2.5 opacity-70" />
+                                <span>{storeCleanName}</span>
+                                <span>•</span>
+                              </>
+                            )}
+                            <Calendar className="w-2.5 h-2.5 opacity-70" />
+                            <span>{formattedDate}</span>
+                            {exp.createdByName && (
+                              <>
+                                <span>•</span>
+                                <span>{exp.createdByName}</span>
+                              </>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 shrink-0">
+                        <div className="text-right">
+                          <p className="text-xs sm:text-sm font-black text-danger font-mono tracking-tight">
+                            -{formatMoney(exp.amountTjs)} TJS
+                          </p>
+                          <p className="text-[10px] text-fg-subtle font-mono">
+                            ≈ -${formatMoney(costUsd)}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center gap-0.5">
+                          {isAdmin && exp.status === 'UNPAID' && (
+                            <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
+                          )}
+                          {(isAdmin || isPartner) && (
+                            <ActionMenu label="Действия с расходом" actions={[
+                              { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                              { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                            ]} />
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {filteredExpenses.length > 0 && (
+                <p className="text-center text-[10px] text-fg-subtle pt-2 pb-1">
+                  Показано {filteredExpenses.length} из {expenses.length} записей
+                </p>
               )}
-              <Button
-                variant="danger"
-                size="md"
-                className="!h-8 !px-3 text-xs"
-                onClick={() => setIsModalOpen(true)}
-              >
-                <Plus className="w-3.5 h-3.5 mr-1" />
-                Добавить расход
-              </Button>
             </div>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            <div className="rounded-xl border border-border bg-surface divide-y divide-border/80 shadow-2xs overflow-hidden">
-              {filteredExpenses.map((exp) => {
-                const Icon = getCategoryIcon(exp.category);
-                const label = getCategoryLabel(exp.category, customCategories);
-                const formattedDate = exp.date ? new Date(exp.date).toLocaleDateString('ru-RU') : '—';
-                const costUsd = exp.amountUsd ?? +(exp.amountTjs / (exp.exchangeRate || rate)).toFixed(2);
-                const storeCleanName = formatStoreName(exp.storeName);
-
-                return (
-                  <div key={exp.id} className="p-2.5 sm:p-3 flex items-center justify-between gap-2.5 hover:bg-surface-raised/40 transition-colors">
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-lg bg-surface-raised border border-border/80 text-fg-subtle flex items-center justify-center shrink-0">
-                        <Icon className="w-4 h-4" />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-1.5">
-                          <span className="text-xs sm:text-sm font-bold text-fg truncate">{label}</span>
-                          {exp.status === 'UNPAID' ? (
-                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-warning/15 text-warning border border-warning/30">
-                              Не оплачено
-                            </span>
-                          ) : (
-                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-bold bg-accent/15 text-accent border border-accent/25">
-                              Оплачено
-                            </span>
-                          )}
-                          {exp.status === 'PAID' && exp.sourceAccount?.toLowerCase().includes('касса') && (
-                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-medium bg-surface-raised text-fg-muted border border-border/80">
-                              {exp.sourceAccount === 'Центральная касса' ? 'Центральная касса' : 'Из кассы'}
-                            </span>
-                          )}
-                          {exp.employeeName && (
-                            <span className="px-1.5 py-0.2 rounded-md text-[10px] font-semibold bg-accent/10 text-accent border border-accent/20">
-                              {exp.employeeName}
-                            </span>
-                          )}
-                        </div>
-
-                        <p className="text-[11px] sm:text-xs text-fg-muted mt-0.5 line-clamp-1">
-                          {exp.comment || exp.description || 'Операционный расход'}
-                        </p>
-
-                        <div className="flex flex-wrap items-center gap-1 text-[10px] text-fg-subtle mt-0.5">
-                          {!isStoreScoped && storeCleanName && (
-                            <>
-                              <StoreIcon className="w-2.5 h-2.5 opacity-70" />
-                              <span>{storeCleanName}</span>
-                              <span>•</span>
-                            </>
-                          )}
-                          <Calendar className="w-2.5 h-2.5 opacity-70" />
-                          <span>{formattedDate}</span>
-                          {exp.createdByName && (
-                            <>
-                              <span>•</span>
-                              <span>{exp.createdByName}</span>
-                            </>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center gap-2 shrink-0">
-                      <div className="text-right">
-                        <p className="text-xs sm:text-sm font-black text-danger font-mono tracking-tight">
-                          -{formatMoney(exp.amountTjs)} TJS
-                        </p>
-                        <p className="text-[10px] text-fg-subtle font-mono">
-                          ≈ -${formatMoney(costUsd)}
-                        </p>
-                      </div>
-
-                      <div className="flex items-center gap-0.5">
-                        {isAdmin && exp.status === 'UNPAID' && (
-                          <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
-                        )}
-                        {(isAdmin || isPartner) && (
-                          <ActionMenu label="Действия с расходом" actions={[
-                            { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
-                            { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
-                          ]} />
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-            {filteredExpenses.length > 0 && (
-              <p className="text-center text-[10px] text-fg-subtle pt-1 pb-1">
-                Показано {filteredExpenses.length} из {expenses.length} записей
-              </p>
-            )}
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
       <ConfirmDialog

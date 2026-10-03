@@ -441,12 +441,7 @@ export const SalesHistoryPage: React.FC = () => {
               </span>
             )}
           </div>
-        ) : (
-          <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle">
-            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-fg-muted font-medium">0 чеков</span>
-            <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border font-semibold text-fg">0.00 TJS</span>
-          </div>
-        )}
+        ) : null}
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-border">

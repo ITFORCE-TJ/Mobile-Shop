@@ -908,7 +908,7 @@ export const RepairPage: React.FC = () => {
                 )}
               </div>
             ) : (
-              <div className="space-y-2">
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-2.5">
                 {filteredRepairs.map((ticket: RepairTicket) => {
                   const conf = getStatusBadge(ticket.status);
                   const isAccepted = ticket.status === 'ACCEPTED';

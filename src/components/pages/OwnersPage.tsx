@@ -565,60 +565,63 @@ export const OwnersPage: React.FC = () => {
       <StatusBanner message={statusBanner} onDismiss={() => setStatusBanner(null)} />
 
       {/* Top Header Bar */}
-      <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border bg-surface flex flex-wrap sm:flex-nowrap items-center justify-between gap-2 shrink-0">
-        <div className="flex items-center gap-2 min-w-0">
-          <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-            <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-1.5">
-              <h1 className="text-sm sm:text-base font-bold text-fg leading-tight">Партнеры и капитал</h1>
-              <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-fg-subtle">
-                {owners.length} {ownerCountLabel(owners.length)}
-              </span>
+      <div className="px-3 sm:px-4 py-2 sm:py-2.5 border-b border-border bg-surface shrink-0">
+        <div className="max-w-6xl xl:max-w-7xl mx-auto w-full flex flex-wrap sm:flex-nowrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+              <PieChart className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
             </div>
-            <p className="text-[10px] text-fg-subtle hidden sm:block truncate">
-              Учет долей, инвестиций и распределение прибыли
-            </p>
+            <div className="min-w-0">
+              <div className="flex items-center gap-1.5">
+                <h1 className="text-sm sm:text-base font-bold text-fg leading-tight">Партнеры и капитал</h1>
+                <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-md bg-surface-raised border border-border text-fg-subtle">
+                  {owners.length} {ownerCountLabel(owners.length)}
+                </span>
+              </div>
+              <p className="text-[10px] text-fg-subtle hidden sm:block truncate">
+                Учет долей, инвестиций и распределение прибыли
+              </p>
+            </div>
           </div>
-        </div>
 
-        <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end">
-          <button
-            type="button"
-            onClick={() => openTxModalForOwner(displayOwners[0]?.id || '', 'INVESTMENT')}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[32px]"
-          >
-            <Plus className="w-3.5 h-3.5" />
-            <span>+ Капитал</span>
-          </button>
+          <div className="flex items-center gap-1.5 sm:gap-2 shrink-0 w-full sm:w-auto justify-end">
+            <button
+              type="button"
+              onClick={() => openTxModalForOwner(displayOwners[0]?.id || '', 'INVESTMENT')}
+              className="flex-1 sm:flex-initial flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold transition-all shadow-xs cursor-pointer min-h-[32px]"
+            >
+              <Plus className="w-3.5 h-3.5" />
+              <span>+ Капитал</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => openSharesModal()}
-            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
-          >
-            <Percent className="w-3.5 h-3.5 text-accent" />
-            <span>Доли</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => openSharesModal()}
+              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
+            >
+              <Percent className="w-3.5 h-3.5 text-accent" />
+              <span>Доли</span>
+            </button>
 
-          <button
-            type="button"
-            onClick={() => {
-              setStatusBanner(null);
-              setIsQuarterModalOpen(true);
-            }}
-            className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
-          >
-            <FileText className="w-3.5 h-3.5 text-warning" />
-            <span className="hidden sm:inline">Квартальный отчет</span>
-            <span className="sm:hidden">Квартал</span>
-          </button>
+            <button
+              type="button"
+              onClick={() => {
+                setStatusBanner(null);
+                setIsQuarterModalOpen(true);
+              }}
+              className="flex items-center justify-center gap-1 px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg-muted hover:text-fg text-xs font-semibold transition-colors cursor-pointer min-h-[32px]"
+            >
+              <FileText className="w-3.5 h-3.5 text-warning" />
+              <span className="hidden sm:inline">Квартальный отчет</span>
+              <span className="sm:hidden">Квартал</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Scrollable Content */}
-      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-5 space-y-3 sm:space-y-4 bg-bg">
+      <div className="flex-1 overflow-y-auto p-2.5 sm:p-4 lg:p-6 bg-bg">
+        <div className="max-w-6xl xl:max-w-7xl mx-auto w-full space-y-3 sm:space-y-4">
         {/* Top 4 Stat Cards */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3">
           {/* Total Capital */}
@@ -1440,6 +1443,7 @@ export const OwnersPage: React.FC = () => {
               </div>
             </div>
           )}
+        </div>
         </div>
       </div>
 

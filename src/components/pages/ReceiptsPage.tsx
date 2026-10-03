@@ -13,7 +13,8 @@ import {
   Info,
   ArrowRight,
   Search,
-  X
+  X,
+  Store as StoreIcon
 } from 'lucide-react';
 import { useAppFields } from '../../context/AppContext';
 import { apiClient } from '../../api/client';
@@ -500,103 +501,405 @@ export const ReceiptsPage: React.FC = () => {
         </div>
 
         {/* Content list */}
-        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 max-w-3xl w-full mx-auto flex flex-col">{list}</div>
+        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 max-w-4xl xl:max-w-5xl w-full mx-auto flex flex-col">{list}</div>
         <ReceiptDialog receiptId={openReceiptId} isAdmin onClose={closeReceipt} onChanged={() => setRevision((v) => v + 1)} />
       </div>
     );
   }
 
+  const currentStoreName = formatStoreName(
+    currentUser?.storeName || (currentUser?.storeId ? stores.find((s) => s.id === currentUser.storeId)?.name : undefined)
+  ) || 'Магазин';
+
   return (
     <div className="work-screen flex-1 flex flex-col h-full overflow-hidden bg-bg text-fg-muted">
       <StatusBanner message={status} onDismiss={() => setStatus(null)} />
 
-      <div className="p-2.5 sm:p-3 border-b border-border shrink-0 space-y-2.5 bg-surface">
-        <FilterPillGroup options={[{ value: 'NEW', label: 'Новый приход' }, { value: 'HISTORY', label: 'Мои приходы' }]} value={tab} onChange={setTab} />
-        {tab === 'NEW' && (
-          <div className="space-y-2">
-            <Button fullWidth size="md" leftIcon={Scan} onClick={startScan} className="h-10 text-xs sm:text-sm font-bold shadow-xs">Сканировать IMEI</Button>
-            <div className="flex items-center gap-1.5">
-              <input
-                ref={manualInput}
-                type="text"
-                inputMode="numeric"
-                autoComplete="off"
-                enterKeyHint="done"
-                value={manualCode}
-                onChange={(e) => setManualCode(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key !== 'Enter') return;
-                  e.preventDefault();
-                  const code = manualCode;
-                  setManualCode('');
-                  void addCode(code);
-                }}
-                placeholder="IMEI вручную или ручным сканером"
-                aria-label="IMEI вручную или ручным сканером"
-                className="flex-1 min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
-              />
-              <Button size="md" variant="secondary" disabled={!manualCode.trim()} onClick={() => { const code = manualCode; setManualCode(''); void addCode(code); manualInput.current?.focus(); }} className="!h-9 !px-3 text-xs">Добавить</Button>
+      {/* ================================================================ */}
+      {/* 1. DESKTOP WORKSPACE (>= 1024px, laptops & wide desktop monitors) */}
+      {/* ================================================================ */}
+      <div className="hidden lg:flex flex-1 min-h-0 overflow-hidden">
+        {tab === 'NEW' ? (
+          <div className="flex-1 flex min-h-0 overflow-hidden">
+            {/* Left Column: Scanning Station & Control Panel */}
+            <div className="w-80 xl:w-96 shrink-0 border-r border-border bg-surface flex flex-col justify-between overflow-y-auto p-4 space-y-4">
+              <div className="space-y-4">
+                <FilterPillGroup
+                  options={[
+                    { value: 'NEW', label: 'Новый приход' },
+                    { value: 'HISTORY', label: 'Мои приходы' },
+                  ]}
+                  value={tab}
+                  onChange={setTab}
+                />
+
+                {/* Scanning Controls Box */}
+                <div className="rounded-2xl border border-border bg-surface-raised/40 p-3.5 space-y-3 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-fg flex items-center gap-1.5">
+                      <Scan className="w-3.5 h-3.5 text-accent" />
+                      Сканирование товара
+                    </span>
+                    <span className="text-[10px] font-semibold text-accent bg-accent/10 border border-accent/20 px-1.5 py-0.2 rounded-md">
+                      Камера / Сканер
+                    </span>
+                  </div>
+
+                  <Button
+                    fullWidth
+                    size="md"
+                    leftIcon={Scan}
+                    onClick={startScan}
+                    className="h-10 text-xs sm:text-sm font-bold shadow-xs cursor-pointer"
+                  >
+                    Сканировать IMEI
+                  </Button>
+
+                  <div className="space-y-1.5">
+                    <label className="block text-[11px] font-semibold text-fg-subtle">
+                      Ручной ввод или сканер штрихкода:
+                    </label>
+                    <div className="flex items-center gap-1.5">
+                      <input
+                        ref={manualInput}
+                        type="text"
+                        inputMode="numeric"
+                        autoComplete="off"
+                        enterKeyHint="done"
+                        value={manualCode}
+                        onChange={(e) => setManualCode(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key !== 'Enter') return;
+                          e.preventDefault();
+                          const code = manualCode;
+                          setManualCode('');
+                          void addCode(code);
+                        }}
+                        placeholder="Введите IMEI и нажмите Enter"
+                        aria-label="IMEI вручную или ручным сканером"
+                        className="flex-1 min-w-0 h-9 rounded-xl bg-surface border border-border px-3 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
+                      />
+                      <Button
+                        size="md"
+                        variant="secondary"
+                        disabled={!manualCode.trim()}
+                        onClick={() => {
+                          const code = manualCode;
+                          setManualCode('');
+                          void addCode(code);
+                          manualInput.current?.focus();
+                        }}
+                        className="!h-9 !px-3 text-xs shrink-0 cursor-pointer"
+                      >
+                        Добавить
+                      </Button>
+                    </div>
+                  </div>
+
+                  <label className="flex items-center gap-2 text-[11px] text-fg-subtle select-none cursor-pointer pt-0.5">
+                    <input
+                      type="checkbox"
+                      checked={continuous}
+                      onChange={(e) => setContinuous(e.target.checked)}
+                      className="w-3.5 h-3.5 accent-[var(--color-accent)] cursor-pointer"
+                    />
+                    <Repeat className="w-3 h-3 text-accent shrink-0" />
+                    <span>Непрерывное сканирование</span>
+                  </label>
+                </div>
+
+                {/* Receipt Summary Card */}
+                <div className="rounded-2xl border border-accent/25 bg-accent/5 p-3.5 space-y-2.5 shadow-2xs">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] font-bold text-fg-muted uppercase tracking-wider flex items-center gap-1">
+                      <StoreIcon className="w-3 h-3 text-accent" />
+                      {currentStoreName}
+                    </span>
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-accent/15 text-accent font-mono">
+                      Приёмка
+                    </span>
+                  </div>
+
+                  <div>
+                    <p className="text-2xl font-black font-mono text-accent">
+                      {scanned.length}{' '}
+                      <span className="text-xs font-semibold text-fg-muted">шт.</span>
+                    </p>
+                    <p className="text-xs text-fg-subtle mt-0.5">
+                      {scanned.length === 0
+                        ? 'Ожидание сканирования устройств'
+                        : 'Готово к оприходованию на баланс'}
+                    </p>
+                  </div>
+
+                  <p className="text-[11px] text-fg-subtle leading-relaxed border-t border-accent/15 pt-2">
+                    Каждый IMEI сверяется с базой склада. После подтверждения устройства сразу появятся на витрине и в кассе.
+                  </p>
+                </div>
+              </div>
+
+              {/* Submit Button inside left control panel on Desktop */}
+              <div className="pt-3 border-t border-border">
+                <Button
+                  fullWidth
+                  size="md"
+                  leftIcon={PackageCheck}
+                  loading={submitting}
+                  disabled={scanned.length === 0 || submitting}
+                  onClick={submit}
+                  className="h-11 text-xs sm:text-sm font-bold shadow-xs cursor-pointer"
+                >
+                  {submitting ? 'Оприходование…' : `Оприходовать ${scanned.length} шт.`}
+                </Button>
+              </div>
             </div>
-            <label className="flex items-center gap-2 text-[11px] text-fg-subtle select-none cursor-pointer">
-              <input type="checkbox" checked={continuous} onChange={(e) => setContinuous(e.target.checked)} className="w-3.5 h-3.5 accent-[var(--color-accent)]" />
-              <Repeat className="w-3 h-3 text-accent" /> Непрерывное сканирование (камера открывается снова после каждого телефона)
-            </label>
+
+            {/* Right Column: Scanned Devices Review Grid / Empty State */}
+            <div className="flex-1 min-w-0 bg-bg p-5 xl:p-6 overflow-y-auto flex flex-col">
+              <div className="flex items-center justify-between pb-3 mb-4 border-b border-border/80">
+                <div className="flex items-center gap-2">
+                  <h2 className="text-sm font-bold text-fg">Список поступивших устройств</h2>
+                  <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent font-mono">
+                    {scanned.length} шт.
+                  </span>
+                </div>
+
+                {scanned.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setScanned([])}
+                    className="text-xs text-fg-subtle hover:text-danger flex items-center gap-1.5 transition-colors cursor-pointer"
+                    title="Очистить весь список приёмки"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    <span>Очистить всё</span>
+                  </button>
+                )}
+              </div>
+
+              {scanned.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-8 text-center my-auto min-h-[300px] max-w-md mx-auto">
+                  <div className="w-14 h-14 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3.5 shadow-xs">
+                    <Smartphone className="w-7 h-7" />
+                  </div>
+                  <h3 className="text-base font-bold text-fg">Список приёмки пуст</h3>
+                  <p className="text-xs text-fg-subtle mt-1.5 max-w-sm leading-relaxed">
+                    Отсканируйте телефоны, которые поступили со склада. Каждый телефон автоматически сверяется с базой.
+                  </p>
+                  <Button
+                    size="md"
+                    leftIcon={Scan}
+                    onClick={startScan}
+                    className="mt-4 !h-9 !px-4 text-xs font-bold shadow-xs cursor-pointer"
+                  >
+                    Начать сканирование
+                  </Button>
+                  <p className="text-[11px] text-fg-subtle/80 mt-4 leading-normal">
+                    💡 Поддерживаются проводные и Bluetooth сканеры штрихкодов в режиме HID-клавиатуры.
+                  </p>
+                </div>
+              ) : (
+                <ul className="grid grid-cols-1 xl:grid-cols-2 2xl:grid-cols-3 gap-3">
+                  {scanned.map((d, index) => (
+                    <li
+                      key={d.id}
+                      className="p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/40 transition-all flex items-start justify-between gap-3 shadow-2xs group"
+                    >
+                      <div className="min-w-0 flex items-start gap-2.5">
+                        <span className="w-5 h-5 rounded-md bg-surface-raised border border-border/80 text-[10px] font-bold font-mono text-fg-subtle flex items-center justify-center shrink-0 mt-0.5">
+                          #{index + 1}
+                        </span>
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-fg truncate">
+                            {d.brand} {d.model}
+                          </p>
+                          <p className="text-[11px] text-fg-muted truncate mt-0.5">
+                            {specLine(d)}
+                          </p>
+                          <div className="mt-1 flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[10px] text-accent font-mono bg-accent/10 border border-accent/20 px-1.5 py-0.2 rounded-md">
+                              IMEI: {d.imei}
+                            </span>
+                            {d.imei2 && (
+                              <span className="text-[10px] text-fg-subtle font-mono bg-surface-raised border border-border/60 px-1.5 py-0.2 rounded-md">
+                                IMEI 2: {d.imei2}
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setScanned((prev) => prev.filter((x) => x.id !== d.id))}
+                        aria-label={`Убрать ${d.brand} ${d.model} (${d.imei}) из прихода`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                        title="Удалить из списка"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          </div>
+        ) : (
+          /* Desktop tab === 'HISTORY' */
+          <div className="flex-1 flex flex-col min-h-0 overflow-y-auto p-6 max-w-4xl mx-auto w-full space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-border">
+              <FilterPillGroup
+                options={[
+                  { value: 'NEW', label: 'Новый приход' },
+                  { value: 'HISTORY', label: 'Мои приходы' },
+                ]}
+                value={tab}
+                onChange={setTab}
+              />
+              <span className="text-xs font-semibold text-fg-subtle">
+                Точка: <strong className="text-fg">{currentStoreName}</strong>
+              </span>
+            </div>
+            <div className="flex-1 flex flex-col">{list}</div>
           </div>
         )}
       </div>
 
-      {tab === 'NEW' ? (
-        <>
-          <div className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 flex flex-col">
-            <div className="flex items-center justify-between mb-2">
-              <h2 className="text-xs font-bold text-fg-muted">Отсканировано</h2>
-              <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent font-mono" aria-live="polite">{scanned.length} шт.</span>
-            </div>
-            {scanned.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[240px]">
-                <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
-                  <Smartphone className="w-6 h-6" />
-                </div>
-                <h3 className="text-sm font-bold text-fg">Список приёмки пуст</h3>
-                <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
-                  Отсканируйте телефоны, которые поступили со склада. Каждый телефон автоматически сверяется с базой.
-                </p>
-                <Button size="md" leftIcon={Scan} onClick={startScan} className="mt-4 !h-8.5 !px-3.5 text-xs shadow-xs">
-                  Начать сканирование
+      {/* ================================================================ */}
+      {/* 2. MOBILE / TABLET WORKSPACE (< 1024px)                          */}
+      {/* ================================================================ */}
+      <div className="lg:hidden flex flex-col flex-1 min-h-0 overflow-hidden">
+        <div className="p-2.5 sm:p-3 border-b border-border shrink-0 space-y-2.5 bg-surface">
+          <FilterPillGroup
+            options={[
+              { value: 'NEW', label: 'Новый приход' },
+              { value: 'HISTORY', label: 'Мои приходы' },
+            ]}
+            value={tab}
+            onChange={setTab}
+          />
+          {tab === 'NEW' && (
+            <div className="space-y-2">
+              <Button
+                fullWidth
+                size="md"
+                leftIcon={Scan}
+                onClick={startScan}
+                className="h-10 text-xs sm:text-sm font-bold shadow-xs"
+              >
+                Сканировать IMEI
+              </Button>
+              <div className="flex items-center gap-1.5">
+                <input
+                  ref={manualInput}
+                  type="text"
+                  inputMode="numeric"
+                  autoComplete="off"
+                  enterKeyHint="done"
+                  value={manualCode}
+                  onChange={(e) => setManualCode(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key !== 'Enter') return;
+                    e.preventDefault();
+                    const code = manualCode;
+                    setManualCode('');
+                    void addCode(code);
+                  }}
+                  placeholder="IMEI вручную или ручным сканером"
+                  aria-label="IMEI вручную или ручным сканером"
+                  className="flex-1 min-w-0 h-9 rounded-xl bg-surface-raised border border-border px-3 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
+                />
+                <Button
+                  size="md"
+                  variant="secondary"
+                  disabled={!manualCode.trim()}
+                  onClick={() => {
+                    const code = manualCode;
+                    setManualCode('');
+                    void addCode(code);
+                    manualInput.current?.focus();
+                  }}
+                  className="!h-9 !px-3 text-xs"
+                >
+                  Добавить
                 </Button>
               </div>
-            ) : (
-              <ul className="space-y-1.5">
-                {scanned.map((d) => (
-                  <li key={d.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-surface border border-border shadow-2xs">
-                    <div className="min-w-0">
-                      <p className="text-xs font-bold text-fg truncate">{d.brand} {d.model}</p>
-                      <p className="text-[11px] text-fg-muted truncate">{specLine(d)}</p>
-                      <p className="text-[10px] text-fg-subtle font-mono">IMEI: {d.imei}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setScanned((prev) => prev.filter((x) => x.id !== d.id))}
-                      aria-label={`Убрать ${d.brand} ${d.model} (${d.imei}) из прихода`}
-                      className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-          {/* In-flow bottom bar (above the bottom nav and its safe area, clear of its raised button). */}
-          <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-surface/80 backdrop-blur-xs">
-            <Button fullWidth size="md" leftIcon={PackageCheck} loading={submitting} disabled={scanned.length === 0 || submitting} onClick={submit} className="h-10 text-xs sm:text-sm font-bold max-w-2xl mx-auto shadow-xs">
-              {submitting ? 'Оприходование…' : `Оприходовать ${scanned.length} шт.`}
-            </Button>
-          </div>
-        </>
-      ) : (
-        <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 flex flex-col">{list}</div>
-      )}
+              <label className="flex items-center gap-2 text-[11px] text-fg-subtle select-none cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={continuous}
+                  onChange={(e) => setContinuous(e.target.checked)}
+                  className="w-3.5 h-3.5 accent-[var(--color-accent)]"
+                />
+                <Repeat className="w-3 h-3 text-accent" /> Непрерывное сканирование (камера открывается снова после каждого телефона)
+              </label>
+            </div>
+          )}
+        </div>
+
+        {tab === 'NEW' ? (
+          <>
+            <div className="flex-1 min-h-0 overflow-y-auto p-2.5 sm:p-3 flex flex-col">
+              <div className="flex items-center justify-between mb-2">
+                <h2 className="text-xs font-bold text-fg-muted">Отсканировано</h2>
+                <span className="text-xs font-bold px-2 py-0.5 rounded-full bg-accent/10 border border-accent/20 text-accent font-mono" aria-live="polite">
+                  {scanned.length} шт.
+                </span>
+              </div>
+              {scanned.length === 0 ? (
+                <div className="flex-1 flex flex-col items-center justify-center p-6 text-center my-auto min-h-[240px]">
+                  <div className="w-12 h-12 rounded-2xl bg-accent/10 border border-accent/20 flex items-center justify-center text-accent mb-3 shadow-xs">
+                    <Smartphone className="w-6 h-6" />
+                  </div>
+                  <h3 className="text-sm font-bold text-fg">Список приёмки пуст</h3>
+                  <p className="text-xs text-fg-subtle mt-1.5 max-w-xs leading-relaxed">
+                    Отсканируйте телефоны, которые поступили со склада. Каждый телефон автоматически сверяется с базой.
+                  </p>
+                  <Button size="md" leftIcon={Scan} onClick={startScan} className="mt-4 !h-8.5 !px-3.5 text-xs shadow-xs">
+                    Начать сканирование
+                  </Button>
+                </div>
+              ) : (
+                <ul className="space-y-1.5">
+                  {scanned.map((d) => (
+                    <li key={d.id} className="flex items-center justify-between gap-2 p-2.5 rounded-xl bg-surface border border-border shadow-2xs">
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-fg truncate">{d.brand} {d.model}</p>
+                        <p className="text-[11px] text-fg-muted truncate">{specLine(d)}</p>
+                        <p className="text-[10px] text-fg-subtle font-mono">IMEI: {d.imei}</p>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setScanned((prev) => prev.filter((x) => x.id !== d.id))}
+                        aria-label={`Убрать ${d.brand} ${d.model} (${d.imei}) из прихода`}
+                        className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+            {/* In-flow bottom bar */}
+            <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-surface/80 backdrop-blur-xs">
+              <Button
+                fullWidth
+                size="md"
+                leftIcon={PackageCheck}
+                loading={submitting}
+                disabled={scanned.length === 0 || submitting}
+                onClick={submit}
+                className="h-10 text-xs sm:text-sm font-bold max-w-2xl mx-auto shadow-xs"
+              >
+                {submitting ? 'Оприходование…' : `Оприходовать ${scanned.length} шт.`}
+              </Button>
+            </div>
+          </>
+        ) : (
+          <div className="flex-1 overflow-y-auto p-2.5 sm:p-3 flex flex-col">{list}</div>
+        )}
+      </div>
 
       <Dialog
         open={completed !== null}
