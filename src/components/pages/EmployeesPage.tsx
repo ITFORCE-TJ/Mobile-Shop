@@ -534,7 +534,6 @@ export const EmployeesPage: React.FC = () => {
   }, [users, stores]);
 
   const renderUserCard = (u: User) => {
-    const roleConf = ROLE_CONFIG[u.role] || ROLE_CONFIG.SELLER;
     const stats = employeeLifetimeStatsById.get(u.id) ?? { totalAdvances: 0, salesRevTjs: 0, unitsSold: 0 };
     const { totalAdvances, salesRevTjs, unitsSold } = stats;
     const baseSal = u.baseSalaryTjs || 0;
@@ -556,14 +555,10 @@ export const EmployeesPage: React.FC = () => {
             : 'bg-surface/60 border-border/60 opacity-75'
         }`}
       >
-        {/* Line 1: Avatar, Name, Role badge, Status & Action menu */}
+        {/* Line 1: Avatar, Name, Status & Action menu */}
         <div className="flex items-center justify-between gap-2">
           <div className="flex items-center gap-2.5 min-w-0">
-            <div className={`w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 border ${
-              u.role === 'ADMIN' ? 'bg-accent/15 text-accent border-accent/30' :
-              u.role === 'PARTNER' ? 'bg-info/15 text-info border-info/30' :
-              'bg-surface-raised text-fg-muted border-border'
-            }`}>
+            <div className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-xs shrink-0 bg-surface-raised text-fg border border-border">
               {u.name.charAt(0).toUpperCase()}
             </div>
 
@@ -571,9 +566,6 @@ export const EmployeesPage: React.FC = () => {
               <h4 className="text-xs sm:text-sm font-bold text-fg truncate">
                 {u.name}
               </h4>
-              <span className={`text-[10px] px-1.5 py-0.2 rounded font-semibold border shrink-0 ${roleConf.bg} ${roleConf.color} ${roleConf.border}`}>
-                {roleConf.label}
-              </span>
               {u.isActive ? (
                 <span className="text-[10px] px-1.5 py-0.2 rounded bg-accent/10 text-accent border border-accent/20 font-semibold inline-flex items-center gap-1 shrink-0">
                   <span className="w-1.5 h-1.5 rounded-full bg-accent" />
@@ -759,8 +751,8 @@ export const EmployeesPage: React.FC = () => {
                 : 'bg-surface-raised hover:bg-surface text-fg-muted border border-border'
             }`}
           >
-            <Shield className="w-3.5 h-3.5" />
-            <span>Общий админ ({adminUsers.length})</span>
+            <Building className="w-3.5 h-3.5" />
+            <span>Центральный офис ({adminUsers.length})</span>
           </button>
 
           {retailStores.map(st => {
@@ -821,11 +813,11 @@ export const EmployeesPage: React.FC = () => {
             <div className="flex items-center justify-between gap-2 pb-1.5 border-b border-border">
               <div className="flex items-center gap-2">
                 <div className="p-1 rounded-lg bg-accent/10 border border-accent/25 text-accent">
-                  <Shield className="w-3.5 h-3.5" />
+                  <Building className="w-3.5 h-3.5" />
                 </div>
                 <div>
                   <h4 className="text-xs sm:text-sm font-bold text-fg flex items-center gap-1.5">
-                    <span>Общий администратор</span>
+                    <span>Центральный офис</span>
                     <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-accent/15 border border-accent/30 text-accent font-semibold">
                       {adminUsers.length}
                     </span>
@@ -833,13 +825,13 @@ export const EmployeesPage: React.FC = () => {
                 </div>
               </div>
               <span className="text-[11px] text-fg-subtle hidden sm:inline">
-                Центральное руководство и полный доступ ко всем магазинам
+                Центральное управление и доступ
               </span>
             </div>
 
             {adminUsers.length === 0 ? (
               <div className="p-4 rounded-xl bg-surface border border-dashed border-border text-center text-xs text-fg-subtle">
-                Нет назначенных администраторов
+                Нет назначенных сотрудников
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 auto-rows-max gap-2.5 sm:gap-3 items-start">
@@ -1135,7 +1127,7 @@ export const EmployeesPage: React.FC = () => {
                 Вы действительно хотите навсегда удалить учетную запись сотрудника «<span className="text-danger">{deletingUserConfirm.name}</span>»?
               </p>
               <p className="text-[11px] text-fg-subtle">
-                Логин для входа: <strong className="text-fg-muted">{deletingUserConfirm.login}</strong> | Роль: <strong className="text-fg-muted">{deletingUserConfirm.role}</strong>
+                Логин для входа: <strong className="text-fg-muted">{deletingUserConfirm.login}</strong>
               </p>
             </div>
 
