@@ -184,6 +184,22 @@ const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device,
     ? (device.ram.toUpperCase().includes('GB') ? device.ram : `${device.ram} GB`)
     : null;
 
+  const storageStr = (device.storage || '').trim();
+  const ramClean = (device.ram || '').trim().toUpperCase().replace(/GB/gi, '').trim();
+  const isRamInStorage = Boolean(
+    formattedRam && storageStr && (
+      storageStr.toLowerCase().includes(formattedRam.toLowerCase()) ||
+      (ramClean && (
+        storageStr.toUpperCase().includes(`${ramClean} GB`) ||
+        storageStr.toUpperCase().includes(`${ramClean}GB`) ||
+        storageStr.toUpperCase().includes(`${ramClean}/`) ||
+        storageStr.toUpperCase().includes(`/${ramClean}`) ||
+        storageStr.toUpperCase().startsWith(`${ramClean} /`)
+      ))
+    )
+  );
+  const showRamBadge = Boolean(formattedRam && !isRamInStorage);
+
   return (
     <button
       ref={ref}
@@ -212,9 +228,9 @@ const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device,
               </span>
             )}
 
-            {formattedRam && (
-              <span className="px-1.5 py-0.5 rounded-md bg-surface-raised/80 border border-border/70 text-[10px] font-bold font-mono text-fg-subtle shrink-0">
-                {formattedRam}
+            {showRamBadge && (
+              <span className="px-1.5 py-0.5 rounded-md bg-accent/10 border border-accent/25 text-[10px] font-bold font-mono text-accent shrink-0">
+                ОЗУ {formattedRam}
               </span>
             )}
 
@@ -1684,8 +1700,6 @@ export const InventoryPage: React.FC = () => {
 
             {brandGroups.map((bGroup) => {
               const isBrandExpanded = !!expandedBrandKeys[bGroup.key];
-              const totalDevicesInView = filteredDevices.length || 1;
-              const percent = Math.round((bGroup.totalCount / totalDevicesInView) * 100);
               const brandBadgeStyle = getBrandBadgeStyle(bGroup.brand);
 
               return (
@@ -1708,22 +1722,7 @@ export const InventoryPage: React.FC = () => {
                           <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface-raised text-fg-subtle border border-border">
                             {bGroup.distinctModelsCount} {bGroup.distinctModelsCount === 1 ? 'модель' : bGroup.distinctModelsCount < 5 ? 'модели' : 'моделей'}
                           </span>
-                          {brandGroups.length > 1 && (
-                            <span className="text-[10px] font-semibold text-fg-subtle font-mono">
-                              · {percent}%
-                            </span>
-                          )}
                         </div>
-                        {brandGroups.length > 1 && (
-                          <div className="flex items-center gap-2 mt-1 max-w-[120px] sm:max-w-[160px]">
-                            <div className="flex-1 h-1 rounded-full bg-surface-raised overflow-hidden border border-border">
-                              <div
-                                className="h-full bg-accent rounded-full transition-all duration-300"
-                                style={{ width: `${Math.max(percent, 4)}%` }}
-                              />
-                            </div>
-                          </div>
-                        )}
                       </div>
                     </div>
 
@@ -1762,30 +1761,16 @@ export const InventoryPage: React.FC = () => {
                             <button
                               type="button"
                               onClick={() => setExpandedModelKeys(prev => ({ ...prev, [mGroup.key]: !prev[mGroup.key] }))}
-                              className="w-full py-2 px-3 rounded-xl flex items-center justify-between gap-2.5 bg-surface-raised/50 hover:bg-surface-raised active:bg-surface-raised border border-border/70 hover:border-border transition-colors text-left cursor-pointer"
+                              className="w-full py-2.5 px-3 rounded-xl flex items-center justify-between gap-3 bg-surface-raised/50 hover:bg-surface-raised active:bg-surface-raised border border-border/70 hover:border-border transition-colors text-left cursor-pointer"
                             >
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <div className="w-6 h-6 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 text-accent">
+                                <div className="flex items-center gap-2.5">
+                                  <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 text-accent">
                                     <Smartphone className="w-3.5 h-3.5" />
                                   </div>
-                                  <span className="text-xs sm:text-sm font-extrabold text-fg">
+                                  <span className="text-xs sm:text-sm font-extrabold text-fg truncate">
                                     {mGroup.model}
                                   </span>
-                                  {mGroup.ramList.length > 0 && (
-                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-surface-raised text-fg-subtle border border-border font-mono">
-                                      {mGroup.ramList.map(r => r.toUpperCase().includes('GB') ? r : `${r} GB`).join('/')}
-                                    </span>
-                                  )}
-                                  {/* Storages breakdown chips inline */}
-                                  {mGroup.storageList.map((sg) => (
-                                    <span
-                                      key={sg.storage}
-                                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-surface-raised text-fg-muted border border-border font-mono"
-                                    >
-                                      {sg.storage}{mGroup.storageList.length > 1 || sg.count > 1 ? `: ${sg.count}` : ''}
-                                    </span>
-                                  ))}
                                 </div>
                               </div>
 
@@ -1808,7 +1793,49 @@ export const InventoryPage: React.FC = () => {
 
                             {/* Specific Devices List for this Model */}
                             {isModelExpanded && (
-                              <div className="space-y-1.5 pl-2 sm:pl-3 my-1">
+                              <div className="space-y-2 pl-2 sm:pl-3 my-1">
+                                {/* Model Specifications Header (shown only when expanded) */}
+                                {(mGroup.ramList.length > 0 || mGroup.storageList.length > 0) && (
+                                  <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-surface-raised/60 border border-border/80 text-xs">
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                      <span className="text-[11px] font-bold text-fg-subtle flex items-center gap-1 uppercase tracking-wider">
+                                        <SlidersHorizontal className="w-3 h-3 text-accent" />
+                                        Спецификации:
+                                      </span>
+
+                                      {/* RAM configs */}
+                                      {mGroup.ramList.length > 0 && (
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-[10px] text-fg-subtle font-medium">ОЗУ:</span>
+                                          <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-accent/10 text-accent border border-accent/25 font-mono">
+                                            {mGroup.ramList.map(r => r.toUpperCase().includes('GB') ? r : `${r} GB`).join(' / ')}
+                                          </span>
+                                        </div>
+                                      )}
+
+                                      {/* Storage configs */}
+                                      {mGroup.storageList.length > 0 && (
+                                        <div className="flex items-center gap-1 flex-wrap">
+                                          <span className="text-[10px] text-fg-subtle font-medium">Память:</span>
+                                          {mGroup.storageList.map((sg) => (
+                                            <span
+                                              key={sg.storage}
+                                              className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-surface border border-border text-fg font-mono shadow-2xs"
+                                            >
+                                              {sg.storage}
+                                              <span className="text-accent ml-1 font-bold">({sg.count} шт.)</span>
+                                            </span>
+                                          ))}
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <div className="text-[11px] text-fg-subtle font-mono ml-auto">
+                                      Всего: <strong className="text-fg font-bold">{mGroup.count} шт.</strong>
+                                    </div>
+                                  </div>
+                                )}
+
                                 {mGroup.devices.map((dev) => {
                                   const store = stores.find(s => s.id === dev.locationId);
                                   const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
@@ -1853,16 +1880,8 @@ export const InventoryPage: React.FC = () => {
                       <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 text-accent">
                         <Smartphone className="w-4 h-4" />
                       </div>
-                      <div className="min-w-0 text-left flex items-center gap-1.5 flex-wrap">
+                      <div className="min-w-0 text-left">
                         <p className="text-xs sm:text-sm font-extrabold text-fg truncate">{group.brand} {group.model}</p>
-                        {group.storageGroups.map((sg) => (
-                          <span
-                            key={sg.key}
-                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-surface-raised text-fg-muted border border-border whitespace-nowrap font-mono"
-                          >
-                            {sg.storage}{group.storageGroups.length > 1 || sg.count > 1 ? `: ${sg.count}` : ''}
-                          </span>
-                        ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
@@ -1876,7 +1895,31 @@ export const InventoryPage: React.FC = () => {
                   </button>
 
                   {isExpanded && (
-                    <div className="bg-surface/30 border-t border-border p-2 sm:p-3 space-y-1.5">
+                    <div className="bg-surface/30 border-t border-border p-2 sm:p-3 space-y-2">
+                      {/* Specs bar when expanded */}
+                      {group.storageGroups.length > 0 && (
+                        <div className="flex flex-wrap items-center justify-between gap-2 px-3 py-2 rounded-xl bg-surface-raised/60 border border-border/80 text-xs">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <span className="text-[11px] font-bold text-fg-subtle flex items-center gap-1 uppercase tracking-wider">
+                              <SlidersHorizontal className="w-3 h-3 text-accent" />
+                              Память:
+                            </span>
+                            {group.storageGroups.map((sg) => (
+                              <span
+                                key={sg.key}
+                                className="px-2 py-0.5 rounded-md text-[11px] font-bold bg-surface border border-border text-fg font-mono shadow-2xs"
+                              >
+                                {sg.storage}
+                                <span className="text-accent ml-1 font-bold">({sg.count} шт.)</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="text-[11px] text-fg-subtle font-mono">
+                            Всего: <strong className="text-fg font-bold">{group.count} шт.</strong>
+                          </div>
+                        </div>
+                      )}
+
                       {allDevices.map((dev) => {
                         const store = stores.find(s => s.id === dev.locationId);
                         const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
