@@ -1201,7 +1201,114 @@ export const OwnersPage: React.FC = () => {
                 <p className="text-[11px]">Попробуйте сбросить фильтры или добавьте новую операцию.</p>
               </div>
             ) : (
-              paginatedTransactions.map((tx) => {
+              <>
+                {/* Desktop Table View (>= 768px) */}
+                <div className="hidden md:block overflow-x-auto rounded-xl border border-border bg-surface">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-border bg-surface-raised text-[10px] font-bold text-fg-subtle uppercase tracking-wider select-none">
+                    <th className="py-2.5 px-3">Дата</th>
+                    <th className="py-2.5 px-3">Учредитель</th>
+                    <th className="py-2.5 px-3">Операция</th>
+                    <th className="py-2.5 px-3">Объект / Касса</th>
+                    <th className="py-2.5 px-3 text-right">Сумма USD</th>
+                    <th className="py-2.5 px-3 text-right">Сумма TJS</th>
+                    <th className="py-2.5 px-3">Провел</th>
+                    <th className="py-2.5 px-3">Примечание</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {paginatedTransactions.map((tx) => {
+                    const isDeposit = tx.type === 'INVESTMENT';
+                    const isReinvest = tx.type === 'REINVEST';
+                    const isPayout = tx.type === 'PROFIT_PAYOUT';
+                    const isCapitalIncrease = isDeposit || isReinvest;
+                    const tjsVal = Math.round((tx.amountUsd || 0) * (tx.exchangeRate || rate));
+
+                    return (
+                      <tr key={tx.id} className="hover:bg-surface-raised/70 transition-colors">
+                        <td className="py-2.5 px-3 whitespace-nowrap text-fg-subtle font-mono text-[11px]">
+                          {tx.date}
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span className="font-bold text-fg">{tx.ownerName}</span>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          <span
+                            className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-md border uppercase tracking-wider ${
+                              isReinvest
+                                ? 'bg-warning/10 border-warning/30 text-warning'
+                                : isDeposit
+                                ? 'bg-accent/10 border-accent/30 text-accent'
+                                : isPayout
+                                ? 'bg-info/10 border-info/30 text-info'
+                                : 'bg-danger/10 border-danger/30 text-danger'
+                            }`}
+                          >
+                            {isReinvest ? (
+                              <Coins className="w-3 h-3" />
+                            ) : isDeposit ? (
+                              <ArrowDownLeft className="w-3 h-3" />
+                            ) : isPayout ? (
+                              <ArrowUpRight className="w-3 h-3" />
+                            ) : (
+                              <Wallet className="w-3 h-3" />
+                            )}
+                            <span>
+                              {isReinvest
+                                ? 'Реинвест'
+                                : isDeposit
+                                ? 'Внесение'
+                                : isPayout
+                                ? 'Выплата'
+                                : 'Вывод'}
+                            </span>
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap">
+                          {tx.sourceOrDestination ? (
+                            <span className="inline-flex items-center gap-1 text-[11px] font-medium text-fg-muted">
+                              {mainWarehouse &&
+                              (tx.sourceOrDestination === mainWarehouse.name || tx.sourceOrDestination === mainWarehouse.id) ? (
+                                <Warehouse className="w-3 h-3 text-warning shrink-0" />
+                              ) : (
+                                <Store className="w-3 h-3 text-accent shrink-0" />
+                              )}
+                              <span>{tx.sourceOrDestination}</span>
+                            </span>
+                          ) : (
+                            <span className="text-fg-subtle">—</span>
+                          )}
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono">
+                          <span
+                            className={`text-xs font-bold ${
+                              isCapitalIncrease ? 'text-accent' : 'text-warning'
+                            }`}
+                          >
+                            {isCapitalIncrease ? '+' : '-'}${tx.amountUsd?.toLocaleString()} USD
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right whitespace-nowrap font-mono text-[11px] text-fg-subtle">
+                          ≈ {isCapitalIncrease ? '+' : '-'}{tjsVal.toLocaleString()} TJS
+                          <span className="text-[10px] text-fg-subtle/70 ml-1">({tx.exchangeRate})</span>
+                        </td>
+                        <td className="py-2.5 px-3 whitespace-nowrap text-fg-subtle text-[11px]">
+                          {tx.createdByName || 'Администратор'}
+                        </td>
+                        <td className="py-2.5 px-3 text-fg-muted max-w-xs truncate" title={tx.note || ''}>
+                          {tx.note || <span className="text-fg-subtle/50">—</span>}
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Cards View (< 768px) */}
+            <div className="md:hidden space-y-1.5">
+              {paginatedTransactions.map((tx) => {
                 const isDeposit = tx.type === 'INVESTMENT';
                 const isReinvest = tx.type === 'REINVEST';
                 const isPayout = tx.type === 'PROFIT_PAYOUT';
@@ -1301,8 +1408,10 @@ export const OwnersPage: React.FC = () => {
                     </div>
                   </div>
                 );
-              })
-            )}
+              })}
+            </div>
+          </>
+        )}
           </div>
 
           {/* Pagination */}

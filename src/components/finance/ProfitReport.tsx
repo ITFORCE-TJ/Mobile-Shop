@@ -480,97 +480,158 @@ export const ProfitReport: React.FC<ProfitReportProps> = ({ view, month, onMonth
               </div>
             </div>
 
-            {/* Capital & Active Assets Snapshot (Stock vs Cash) */}
-            <div className="p-3 sm:p-3.5 rounded-xl bg-surface border border-border shadow-xs flex flex-wrap items-center justify-between gap-3 text-xs">
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-                  <Briefcase className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Капитал учредителей</span>
-                  <span className="font-bold text-fg text-sm">{usd(totalCapitalInvested)}</span>
-                </div>
-              </div>
-
-              <div className="h-6 w-px bg-border hidden sm:block" />
-
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
-                  <Package className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">В товаре на складах</span>
-                  <span className="font-bold text-info text-sm">
-                    {usd(totalStockCostUsd)} <span className="font-normal text-fg-subtle text-xs">({totalStockCount} шт)</span>
-                  </span>
-                </div>
-              </div>
-
-              <div className="h-6 w-px bg-border hidden sm:block" />
-
-              <div className="flex items-center gap-2.5">
-                <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
-                  <Banknote className="w-4 h-4" />
-                </div>
-                <div>
-                  <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Наличными в кассах</span>
-                  <span className="font-bold text-accent text-sm">{usd(totalCashInRegistersUsd)}</span>
-                </div>
-              </div>
-            </div>
-
-            {/* How net profit is built — clearly distinguishing core operations from separate bonus income */}
-            <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2.5 text-sm">
-              <div className="flex items-center justify-between pb-1 border-b border-border">
-                <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">Как считается чистая прибыль</h4>
-                <span className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded-md border border-accent/20">
-                  Операционная деятельность
-                </span>
-              </div>
-              <div className="space-y-1.5">
-                {[
-                  ...(data.refundsCount
-                    ? [
-                        { label: 'Продажи и обмены', value: usd(data.revenueUsd + data.refundsRevenueUsd) },
-                        { label: `Возвраты за период (${data.refundsCount})`, value: `−${usd(data.refundsRevenueUsd)}` },
-                      ]
-                    : [{ label: 'Выручка', value: usd(data.revenueUsd) }]),
-                  { label: 'Себестоимость проданного', value: `−${usd(data.cogsUsd)}` },
-                  ...(data.bonusDeviceProfitUsd ? [{ label: 'Прибыль бонусных телефонов (не доход)', value: `−${usd(data.bonusDeviceProfitUsd)}` }] : []),
-                  ...(data.periodRefundPenaltiesUsd ? [{ label: 'Удержано при возвратах', value: `+${usd(data.periodRefundPenaltiesUsd)}` }] : []),
-                  { label: 'Расходы (включая зарплату)', value: `−${usd(data.expensesUsd)}` },
-                ].map((row) => (
-                  <div key={row.label} className="flex items-center justify-between text-fg-muted">
-                    <span>{row.label}</span>
-                    <span className="font-semibold">{row.value}</span>
+            {/* Desktop 2-column Grid: Net Profit Breakdown & Capital Assets */}
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 sm:gap-4 items-stretch">
+              {/* How net profit is built — clearly distinguishing core operations from separate bonus income */}
+              <div className="p-3.5 rounded-xl bg-surface border border-border space-y-2.5 text-sm flex flex-col justify-between shadow-xs">
+                <div className="space-y-2.5">
+                  <div className="flex items-center justify-between pb-1 border-b border-border">
+                    <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">Как считается чистая прибыль</h4>
+                    <span className="text-[10px] font-semibold text-accent bg-accent/10 px-2 py-0.5 rounded-md border border-accent/20">
+                      Операционная деятельность
+                    </span>
                   </div>
-                ))}
+                  <div className="space-y-1.5">
+                    {[
+                      ...(data.refundsCount
+                        ? [
+                            { label: 'Продажи и обмены', value: usd(data.revenueUsd + data.refundsRevenueUsd) },
+                            { label: `Возвраты за период (${data.refundsCount})`, value: `−${usd(data.refundsRevenueUsd)}` },
+                          ]
+                        : [{ label: 'Выручка', value: usd(data.revenueUsd) }]),
+                      { label: 'Себестоимость проданного', value: `−${usd(data.cogsUsd)}` },
+                      ...(data.bonusDeviceProfitUsd ? [{ label: 'Прибыль бонусных телефонов (не доход)', value: `−${usd(data.bonusDeviceProfitUsd)}` }] : []),
+                      ...(data.periodRefundPenaltiesUsd ? [{ label: 'Удержано при возвратах', value: `+${usd(data.periodRefundPenaltiesUsd)}` }] : []),
+                      { label: 'Расходы (включая зарплату)', value: `−${usd(data.expensesUsd)}` },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center justify-between text-fg-muted">
+                        <span>{row.label}</span>
+                        <span className="font-semibold font-mono">{row.value}</span>
+                      </div>
+                    ))}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1.5 border-t border-border font-bold">
+                    <span>Чистая прибыль</span>
+                    <span className={`font-mono ${data.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}`}>
+                      {signedUsd(data.netProfitUsd)}
+                    </span>
+                  </div>
+                </div>
+
+                {/* Supplier bonuses: for reference only — not income, not in profit, not credited anywhere */}
+                <div className="pt-2 border-t border-dashed border-border/80 space-y-1.5 mt-2">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-xs font-semibold text-info flex items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5" />
+                      <span>Бонусы поставщиков — справочно</span>
+                    </span>
+                    <span className="text-[10px] text-fg-subtle">не входят в прибыль</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-fg-subtle">
+                    <span>Денежные бонусы</span>
+                    <span className="font-medium text-fg-muted font-mono">{usd(data.periodCashBonusesUsd || 0)}</span>
+                  </div>
+                  <div className="flex items-center justify-between text-[11px] text-fg-subtle">
+                    <span>Прибыль бонусных телефонов</span>
+                    <span className="font-medium text-fg-muted font-mono">{usd(data.bonusDeviceProfitUsd || 0)}</span>
+                  </div>
+                </div>
               </div>
 
-              <div className="flex items-center justify-between pt-1.5 border-t border-border font-bold">
-                <span>Чистая прибыль</span>
-                <span className={data.netProfitUsd >= 0 ? 'text-accent' : 'text-danger'}>
-                  {signedUsd(data.netProfitUsd)}
-                </span>
-              </div>
+              {/* Capital & Active Assets Snapshot (Stock vs Cash) */}
+              <div className="p-3.5 rounded-xl bg-surface border border-border space-y-3 text-sm flex flex-col justify-between shadow-xs">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between pb-1 border-b border-border">
+                    <h4 className="text-[10px] font-bold text-fg-subtle uppercase tracking-wider">Структура активов и капитал</h4>
+                    <span className="text-[10px] font-semibold text-info bg-info/10 px-2 py-0.5 rounded-md border border-info/20">
+                      Баланс
+                    </span>
+                  </div>
 
-              {/* Supplier bonuses: for reference only — not income, not in profit, not credited anywhere */}
-              <div className="pt-2 border-t border-dashed border-border/80 space-y-1.5">
-                <div className="flex items-center justify-between gap-2">
-                  <span className="text-xs font-semibold text-info flex items-center gap-1.5">
-                    <Sparkles className="w-3.5 h-3.5" />
-                    <span>Бонусы поставщиков — справочно</span>
-                  </span>
-                  <span className="text-[10px] text-fg-subtle">не входят в прибыль</span>
+                  <div className="space-y-2">
+                    <div className="p-2.5 rounded-xl bg-surface-raised border border-border flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                          <Briefcase className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Капитал учредителей</span>
+                          <span className="text-xs text-fg-subtle">Вложено в оборот бизнеса</span>
+                        </div>
+                      </div>
+                      <span className="font-bold text-fg text-sm font-mono">{usd(totalCapitalInvested)}</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-surface-raised border border-border flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info shrink-0">
+                          <Package className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-fg-subtle uppercase font-semibold block">В товаре на складах</span>
+                          <span className="text-xs text-fg-subtle">Остаток на балансе ({totalStockCount} шт)</span>
+                        </div>
+                      </div>
+                      <span className="font-bold text-info text-sm font-mono">{usd(totalStockCostUsd)}</span>
+                    </div>
+
+                    <div className="p-2.5 rounded-xl bg-surface-raised border border-border flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-2.5">
+                        <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                          <Banknote className="w-4 h-4" />
+                        </div>
+                        <div>
+                          <span className="text-[10px] text-fg-subtle uppercase font-semibold block">Наличными в кассах</span>
+                          <span className="text-xs text-fg-subtle">Суммарный кассовый остаток</span>
+                        </div>
+                      </div>
+                      <span className="font-bold text-accent text-sm font-mono">{usd(totalCashInRegistersUsd)}</span>
+                    </div>
+                  </div>
                 </div>
-                <div className="flex items-center justify-between text-[11px] text-fg-subtle">
-                  <span>Денежные бонусы</span>
-                  <span className="font-medium text-fg-muted">{usd(data.periodCashBonusesUsd || 0)}</span>
-                </div>
-                <div className="flex items-center justify-between text-[11px] text-fg-subtle">
-                  <span>Прибыль бонусных телефонов</span>
-                  <span className="font-medium text-fg-muted">{usd(data.bonusDeviceProfitUsd || 0)}</span>
-                </div>
+
+                {(() => {
+                  const totalAssets = totalStockCostUsd + totalCashInRegistersUsd;
+                  const stockPct = totalAssets > 0 ? Math.round((totalStockCostUsd / totalAssets) * 100) : 50;
+                  const cashPct = 100 - stockPct;
+                  return (
+                    <div className="pt-2 border-t border-dashed border-border/80 space-y-2 mt-2">
+                      <div className="flex items-center justify-between text-[11px]">
+                        <span className="text-fg-subtle">
+                          Всего активов: <strong className="text-fg font-mono font-bold">{usd(totalAssets)}</strong>
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setActivePage('OWNERS');
+                            navigate('/owners');
+                          }}
+                          className="text-accent text-xs font-semibold hover:underline flex items-center gap-1 cursor-pointer"
+                        >
+                          Управление долями →
+                        </button>
+                      </div>
+
+                      <div className="space-y-1">
+                        <div className="flex items-center justify-between text-[10px] text-fg-subtle">
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-info" />
+                            Товар: <strong className="text-fg-muted font-mono">{stockPct}%</strong>
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <span className="w-2 h-2 rounded-full bg-accent" />
+                            Кассы: <strong className="text-fg-muted font-mono">{cashPct}%</strong>
+                          </span>
+                        </div>
+                        <div className="w-full h-1.5 rounded-full bg-surface-raised overflow-hidden flex border border-border">
+                          <div className="bg-info h-full transition-all duration-300" style={{ width: `${stockPct}%` }} />
+                          <div className="bg-accent h-full transition-all duration-300" style={{ width: `${cashPct}%` }} />
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
             </div>
 

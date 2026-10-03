@@ -332,180 +332,422 @@ export const SalePage: React.FC = () => {
         </div>
       )}
 
-      {!isCentralCashMode && (<>
-      {/* Filter bar */}
-      <div className="p-2 sm:p-2.5 border-b border-border bg-surface shrink-0 space-y-2">
-        <SearchBar
-          value={searchQuery}
-          onChange={setSearchQuery}
-          onScan={handleTriggerScanner}
-          onSubmit={(value) => handleDeviceCode(value, 'enter')}
-          placeholder="Поиск по IMEI / штрихкоду / модели..."
-        />
+      {!isCentralCashMode && (
+        <div className="flex-1 flex min-h-0 overflow-hidden">
+          {/* Left Column: Product Search & Catalog */}
+          <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+            {/* Filter bar */}
+            <div className="p-2 sm:p-2.5 border-b border-border bg-surface shrink-0 space-y-2">
+              <SearchBar
+                value={searchQuery}
+                onChange={setSearchQuery}
+                onScan={handleTriggerScanner}
+                onSubmit={(value) => handleDeviceCode(value, 'enter')}
+                placeholder="Поиск по IMEI / штрихкоду / модели..."
+              />
 
-        {brands.length > 2 && (
-          <div className="flex items-center justify-between gap-2 overflow-hidden pt-0.5">
-            <div className="flex-1 min-w-0">
-              <FilterPillGroup options={brands} value={selectedBrand} onChange={setSelectedBrand} scrollable />
-            </div>
-            <span className="text-[11px] text-fg-subtle tabular-nums font-medium shrink-0 hidden sm:inline">
-              В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
-            </span>
-          </div>
-        )}
-      </div>
-
-      {/* Catalog */}
-      <div
-        key={effectiveStoreId}
-        className="animate-store-catalog flex-1 min-h-0 overflow-y-auto divide-y divide-border pb-4"
-      >
-        {isInitialLoading ? (
-          <LoadingState label="Загрузка каталога…" />
-        ) : groupedVariants.length === 0 ? (
-          <EmptyState
-            icon={Smartphone}
-            title="Товары не найдены"
-            description={`В наличии нет устройств${searchQuery ? ' по вашему запросу' : ''}${isStoreScoped ? '' : ` (${activeStoreName})`}`}
-            action={
-              selectedBrand !== 'ALL' || searchQuery ? (
-                <Button
-                  variant="secondary"
-                  size="md"
-                  onClick={() => {
-                    setSelectedBrand('ALL');
-                    setSearchQuery('');
-                  }}
-                >
-                  Сбросить фильтры
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <>
-            <div className="px-3.5 py-1.5 bg-surface-raised/40 border-b border-border text-[11px] text-fg-subtle flex items-center justify-between sticky top-0 backdrop-blur-xs z-10">
-              <span className="font-semibold text-fg-muted">В наличии: <strong className="text-accent font-bold">{availableDevices.length}</strong> шт.</span>
-              {selectedBrand !== 'ALL' && (
-                <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
-                  {selectedBrand}
-                </span>
+              {brands.length > 2 && (
+                <div className="flex items-center justify-between gap-2 overflow-hidden pt-0.5">
+                  <div className="flex-1 min-w-0">
+                    <FilterPillGroup options={brands} value={selectedBrand} onChange={setSelectedBrand} scrollable />
+                  </div>
+                  <span className="text-[11px] text-fg-subtle tabular-nums font-medium shrink-0 hidden sm:inline">
+                    В наличии: <strong className="text-fg-muted font-semibold">{availableDevices.length}</strong> шт.
+                  </span>
+                </div>
               )}
             </div>
-            {groupedVariants.map((variant) => {
-            const costs = variant.devices.map(d => d.purchaseCostUsd ?? d.costBasisUsd ?? 0);
-            const maxCost = costs.length ? Math.max(...costs) : 0;
-            const hasCostVariance = costs.length > 1 && maxCost > Math.min(...costs);
-            const isExpanded = expandedVariantKey === variant.variantKey;
-            const sortedDevices = [...variant.devices].sort((a, b) => (b.purchaseCostUsd ?? b.costBasisUsd ?? 0) - (a.purchaseCostUsd ?? a.costBasisUsd ?? 0));
-            const retailPrices = variant.devices.map(defaultPriceFor).filter((p): p is number => p !== undefined);
-            const minRetail = retailPrices.length ? Math.min(...retailPrices) : undefined;
-            const maxRetail = retailPrices.length ? Math.max(...retailPrices) : undefined;
 
-            return (
-              <div key={variant.variantKey}>
-                <button
-                  onClick={() => handleSelectVariant(variant)}
-                  className="w-full text-left px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-fg-muted truncate">{variant.brand} {variant.model}</p>
-                    <p className="text-xs text-fg-subtle mt-0.5">
-                      {variant.ram ? `${variant.ram} · ` : ''}{variant.storage} · {variant.color}
-                    </p>
+            {/* Catalog list */}
+            <div
+              key={effectiveStoreId}
+              className="animate-store-catalog flex-1 min-h-0 overflow-y-auto divide-y divide-border pb-4"
+            >
+              {isInitialLoading ? (
+                <LoadingState label="Загрузка каталога…" />
+              ) : groupedVariants.length === 0 ? (
+                <EmptyState
+                  icon={Smartphone}
+                  title="Товары не найдены"
+                  description={`В наличии нет устройств${searchQuery ? ' по вашему запросу' : ''}${isStoreScoped ? '' : ` (${activeStoreName})`}`}
+                  action={
+                    selectedBrand !== 'ALL' || searchQuery ? (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        onClick={() => {
+                          setSelectedBrand('ALL');
+                          setSearchQuery('');
+                        }}
+                      >
+                        Сбросить фильтры
+                      </Button>
+                    ) : undefined
+                  }
+                />
+              ) : (
+                <>
+                  <div className="px-3.5 py-1.5 bg-surface-raised/40 border-b border-border text-[11px] text-fg-subtle flex items-center justify-between sticky top-0 backdrop-blur-xs z-10">
+                    <span className="font-semibold text-fg-muted">В наличии: <strong className="text-accent font-bold">{availableDevices.length}</strong> шт.</span>
+                    {selectedBrand !== 'ALL' && (
+                      <span className="text-[10px] font-bold text-accent bg-accent/10 px-2 py-0.5 rounded-full border border-accent/20">
+                        {selectedBrand}
+                      </span>
+                    )}
                   </div>
+                  {groupedVariants.map((variant) => {
+                  const costs = variant.devices.map(d => d.purchaseCostUsd ?? d.costBasisUsd ?? 0);
+                  const maxCost = costs.length ? Math.max(...costs) : 0;
+                  const hasCostVariance = costs.length > 1 && maxCost > Math.min(...costs);
+                  const isExpanded = expandedVariantKey === variant.variantKey;
+                  const sortedDevices = [...variant.devices].sort((a, b) => (b.purchaseCostUsd ?? b.costBasisUsd ?? 0) - (a.purchaseCostUsd ?? a.costBasisUsd ?? 0));
+                  const retailPrices = variant.devices.map(defaultPriceFor).filter((p): p is number => p !== undefined);
+                  const minRetail = retailPrices.length ? Math.min(...retailPrices) : undefined;
+                  const maxRetail = retailPrices.length ? Math.max(...retailPrices) : undefined;
 
-                  <div className="text-right shrink-0 flex items-center gap-2">
-                    <div className="flex flex-col items-end gap-0.5">
-                      {minRetail !== undefined ? (
-                        <span className="text-sm font-bold tabular-nums text-accent whitespace-nowrap">
-                          {formatMoney(minRetail)}{maxRetail !== undefined && maxRetail > minRetail ? `–${formatMoney(maxRetail)}` : ''} TJS
-                        </span>
-                      ) : (
-                        <span className="text-xs text-fg-subtle whitespace-nowrap">Цена не задана</span>
+                  return (
+                    <div key={variant.variantKey}>
+                      <button
+                        onClick={() => handleSelectVariant(variant)}
+                        className="w-full text-left px-4 py-3 active:bg-surface-raised flex items-center justify-between gap-3 transition-colors hover:bg-surface-raised/40 cursor-pointer"
+                      >
+                        <div className="min-w-0">
+                          <p className="text-sm font-semibold text-fg-muted truncate">{variant.brand} {variant.model}</p>
+                          <p className="text-xs text-fg-subtle mt-0.5">
+                            {variant.ram ? `${variant.ram} · ` : ''}{variant.storage} · {variant.color}
+                          </p>
+                        </div>
+
+                        <div className="text-right shrink-0 flex items-center gap-2">
+                          <div className="flex flex-col items-end gap-0.5">
+                            {minRetail !== undefined ? (
+                              <span className="text-sm font-bold tabular-nums text-accent whitespace-nowrap">
+                                {formatMoney(minRetail)}{maxRetail !== undefined && maxRetail > minRetail ? `–${formatMoney(maxRetail)}` : ''} TJS
+                              </span>
+                            ) : (
+                              <span className="text-xs text-fg-subtle whitespace-nowrap">Цена не задана</span>
+                            )}
+                            <span className="text-xs text-fg-subtle tabular-nums">{variant.devices.length} шт.</span>
+                          </div>
+                          {variant.devices.length > 1 && (
+                            <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                          )}
+                        </div>
+                      </button>
+
+                      {isExpanded && (
+                        <div className="bg-surface/60 border-t border-border px-4 py-2 space-y-2">
+                          {isRealAdmin && hasCostVariance && (
+                            <p className="text-xs text-warning font-medium">Рекомендуется первым продать экземпляр за ${maxCost}</p>
+                          )}
+                          {sortedDevices.map((dev) => {
+                            const devCost = dev.purchaseCostUsd ?? dev.costBasisUsd ?? 0;
+                            const isHighestCost = isRealAdmin && hasCostVariance && devCost === maxCost;
+                            return (
+                              <button
+                                key={dev.id}
+                                onClick={() => addDeviceToCart(dev)}
+                                className={`w-full p-3 text-left rounded-lg flex items-center justify-between gap-2 border transition-colors cursor-pointer ${
+                                  isHighestCost ? 'border-warning bg-warning/10' : 'border-border bg-surface hover:bg-surface-raised'
+                                }`}
+                              >
+                                <div className="min-w-0">
+                                  <p className="text-xs font-semibold text-fg-muted font-mono">
+                                    IMEI: {dev.imei}{dev.imei2 ? ` / ${dev.imei2}` : ''}
+                                  </p>
+                                  {isRealAdmin && devCost > 0 && (
+                                    <p className="text-xs text-fg-subtle mt-0.5">
+                                      Закупка: ${devCost}
+                                    </p>
+                                  )}
+                                </div>
+                                <div className="flex items-center gap-2 shrink-0">
+                                  {defaultPriceFor(dev) !== undefined && (
+                                    <span className="text-xs font-semibold tabular-nums text-fg-muted">{formatMoney(defaultPriceFor(dev))} TJS</span>
+                                  )}
+                                  <Badge tone={isHighestCost ? 'warning' : 'accent'}>Выбрать</Badge>
+                                </div>
+                              </button>
+                            );
+                          })}
+                        </div>
                       )}
-                      <span className="text-xs text-fg-subtle tabular-nums">{variant.devices.length} шт.</span>
                     </div>
-                    {variant.devices.length > 1 && (
-                      <ChevronDown className={`w-4 h-4 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
-                    )}
+                  );
+                })}
+              </>
+            )}
+          </div>
+
+          {/* Floating Cart Bar on Mobile & Tablet (< 1024px) */}
+          {cart.length > 0 && (
+            <div className="lg:hidden shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-bg">
+              <div className="max-w-2xl mx-auto p-3 rounded-xl bg-surface border border-accent/40 flex items-center justify-between gap-2" role="region" aria-label="Корзина">
+                <div className="flex items-center gap-3 min-w-0 pl-1">
+                  <div className="w-9 h-9 rounded-lg bg-accent text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
+                    {cart.length}
                   </div>
-                </button>
-
-                {isExpanded && (
-                  <div className="bg-surface/60 border-t border-border px-4 py-2 space-y-2">
-                    {isRealAdmin && hasCostVariance && (
-                      <p className="text-xs text-warning font-medium">Рекомендуется первым продать экземпляр за ${maxCost}</p>
-                    )}
-                    {sortedDevices.map((dev) => {
-                      const devCost = dev.purchaseCostUsd ?? dev.costBasisUsd ?? 0;
-                      const isHighestCost = isRealAdmin && hasCostVariance && devCost === maxCost;
-                      return (
-                        <button
-                          key={dev.id}
-                          onClick={() => addDeviceToCart(dev)}
-                          className={`w-full p-3 text-left rounded-lg flex items-center justify-between gap-2 border transition-colors ${
-                            isHighestCost ? 'border-warning bg-warning/10' : 'border-border bg-surface active:bg-surface-raised'
-                          }`}
-                        >
-                          <div className="min-w-0">
-                            <p className="text-xs font-semibold text-fg-muted">
-                              IMEI: {dev.imei}{dev.imei2 ? ` / ${dev.imei2}` : ''}
-                            </p>
-                            {isRealAdmin && devCost > 0 && (
-                              <p className="text-xs text-fg-subtle mt-0.5">
-                                Закупка: ${devCost}
-                              </p>
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2 shrink-0">
-                            {defaultPriceFor(dev) !== undefined && (
-                              <span className="text-xs font-semibold tabular-nums text-fg-muted">{formatMoney(defaultPriceFor(dev))} TJS</span>
-                            )}
-                            <Badge tone={isHighestCost ? 'warning' : 'accent'}>Выбрать</Badge>
-                          </div>
-                        </button>
-                      );
-                    })}
+                  <div className="truncate">
+                    <span className="text-sm font-bold text-accent block truncate">{formatMoney(totalTjs)} TJS</span>
+                    <span className="text-xs text-fg-subtle block">{usdLabel}</span>
                   </div>
-                )}
-              </div>
-            );
-          })}
-        </>
-      )}
-    </div>
+                </div>
 
-      </>)}
-
-      {/* Cart bar: a normal last row of the page, so it always sits above the bottom navigation
-          (which already pads for the iPhone home indicator) and centers on the content area next
-          to any side navigation. Extra bottom space on phones clears the raised center nav button. */}
-      {cart.length > 0 && (
-        <div className="shrink-0 px-3 pt-2 pb-7 md:pb-3 border-t border-border bg-bg">
-          <div className="max-w-2xl mx-auto p-3 rounded-xl bg-surface border border-accent/40 flex items-center justify-between gap-2" role="region" aria-label="Корзина">
-            <div className="flex items-center gap-3 min-w-0 pl-1">
-              <div className="w-9 h-9 rounded-lg bg-accent text-accent-fg flex items-center justify-center font-bold text-sm shrink-0">
-                {cart.length}
+                <div className="flex items-center gap-2 shrink-0">
+                  <button
+                    onClick={() => setIsClearConfirmOpen(true)}
+                    className="h-9 px-2.5 rounded-lg text-xs font-medium text-fg-subtle hover:text-danger transition-colors cursor-pointer"
+                  >
+                    Очистить
+                  </button>
+                  <Button onClick={handleOpenCart} leftIcon={ShoppingCart}>Оформить</Button>
+                </div>
               </div>
-              <div className="truncate">
-                <span className="text-sm font-bold text-accent block truncate">{formatMoney(totalTjs)} TJS</span>
-                <span className="text-xs text-fg-subtle block">{usdLabel}</span>
+            </div>
+          )}
+        </div>
+
+        {/* Right Column: Dedicated Desktop POS Terminal Checkout Sidebar (>= 1024px) */}
+        <aside className="hidden lg:flex w-96 xl:w-[420px] shrink-0 border-l border-border bg-surface flex-col h-full overflow-hidden select-none">
+          {/* Header: Текущий чек */}
+          <div className="p-3 border-b border-border bg-surface flex items-center justify-between gap-2 shrink-0">
+            <div className="flex items-center gap-2 min-w-0">
+              <div className="w-8 h-8 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent shrink-0">
+                <ShoppingCart className="w-4 h-4" />
+              </div>
+              <div className="min-w-0">
+                <h2 className="text-xs font-bold text-fg uppercase tracking-wide truncate">Текущий чек</h2>
+                <p className="text-[10px] text-fg-subtle truncate flex items-center gap-1">
+                  <StoreIcon className="w-3 h-3 text-accent shrink-0" />
+                  <span>{activeStoreName}</span>
+                </p>
               </div>
             </div>
 
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={() => setIsClearConfirmOpen(true)}
-                className="h-9 px-2.5 rounded-lg text-xs font-medium text-fg-subtle hover:text-danger transition-colors"
-              >
-                Очистить
-              </button>
-              <Button onClick={handleOpenCart} leftIcon={ShoppingCart}>Оформить</Button>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <span className="px-2 py-0.5 rounded-full bg-accent/15 border border-accent/30 text-accent font-bold font-mono text-xs">
+                {cart.length} шт
+              </span>
+              {cart.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setIsClearConfirmOpen(true)}
+                  className="p-1.5 rounded-lg text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors cursor-pointer"
+                  title="Очистить чек"
+                >
+                  <Trash2 className="w-4 h-4" />
+                </button>
+              )}
             </div>
           </div>
-        </div>
-      )}
+
+          {/* Body: Empty State or Cart Items & Checkout */}
+          {cart.length === 0 ? (
+            <div className="flex-1 flex flex-col items-center justify-center p-6 text-center text-fg-subtle space-y-2.5">
+              <div className="w-14 h-14 rounded-2xl bg-surface-raised border border-border flex items-center justify-center text-fg-subtle/50 mb-1">
+                <ShoppingCart className="w-7 h-7" />
+              </div>
+              <p className="text-sm font-bold text-fg">Чек пуст</p>
+              <p className="text-xs text-fg-subtle leading-relaxed max-w-xs">
+                Выберите устройство из каталога слева или отсканируйте штрихкод / IMEI для добавления в продажу
+              </p>
+            </div>
+          ) : (
+            <>
+              {/* Scrollable Cart Items */}
+              <div className="flex-1 overflow-y-auto p-3 space-y-2.5 divide-y divide-border/60">
+                {cart.map((item, idx) => {
+                  const belowCost = isItemBelowCost(item);
+                  const priceMissing = item.salePriceTjs === undefined || item.salePriceTjs <= 0;
+
+                  return (
+                    <div key={`${item.device.id}-${idx}`} className="pt-2.5 first:pt-0 space-y-1.5">
+                      <div className="flex items-start justify-between gap-2">
+                        <div className="min-w-0">
+                          <p className="text-xs font-bold text-fg truncate">
+                            {item.device.brand} {item.device.model}
+                          </p>
+                          <p className="text-[11px] text-fg-subtle truncate">
+                            {item.device.ram ? `${item.device.ram} · ` : ''}{item.device.storage} · {item.device.color}
+                          </p>
+                          <p className="text-[10px] text-fg-subtle font-mono truncate">
+                            IMEI: {item.device.imei}
+                          </p>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveFromCart(idx)}
+                          className="p-1 rounded-md text-fg-subtle hover:text-danger hover:bg-danger/10 transition-colors shrink-0 cursor-pointer"
+                          title="Удалить позицию"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+
+                      {/* Price Input */}
+                      <div>
+                        <div className="relative">
+                          <input
+                            type="number"
+                            step="0.01"
+                            min="0.01"
+                            placeholder="Цена в TJS..."
+                            value={item.salePriceTjs !== undefined ? item.salePriceTjs : ''}
+                            onChange={(e) => {
+                              const val = parseFloat(e.target.value);
+                              handleUpdatePrice(idx, isNaN(val) ? undefined : val);
+                            }}
+                            className={`w-full h-8 rounded-lg px-2.5 pr-11 text-xs font-bold font-mono bg-bg focus:outline-none focus:ring-1 ${
+                              priceMissing
+                                ? 'border border-warning text-warning focus:border-warning focus:ring-warning'
+                                : belowCost
+                                  ? 'border border-danger text-danger focus:border-danger focus:ring-danger'
+                                  : 'border border-border text-accent focus:border-accent focus:ring-accent'
+                            }`}
+                          />
+                          <span className="absolute right-2 top-1/2 -translate-y-1/2 text-[10px] font-bold text-fg-subtle">
+                            TJS
+                          </span>
+                        </div>
+                        {priceMissing && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[10px] text-warning font-medium">
+                            <AlertTriangle className="w-3 h-3 shrink-0" /> Укажите цену
+                          </p>
+                        )}
+                        {belowCost && !priceMissing && (
+                          <p className="mt-0.5 flex items-center gap-1 text-[10px] text-danger font-medium">
+                            <AlertTriangle className="w-3 h-3 shrink-0" /> Ниже себестоимости
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {/* Bottom Checkout Controls */}
+              <div className="p-3 border-t border-border bg-surface-raised/40 space-y-2.5 shrink-0">
+                {/* Customer name input */}
+                <div>
+                  <input
+                    type="text"
+                    value={customerNameInput}
+                    onChange={(e) => setCustomerNameInput(e.target.value)}
+                    placeholder="Покупатель / номер телефона (опционально)"
+                    className="w-full h-8 rounded-lg bg-surface border border-border px-2.5 text-xs text-fg placeholder:text-fg-subtle focus:outline-none focus:border-accent"
+                  />
+                </div>
+
+                {/* Payment Method Selector */}
+                <div className="grid grid-cols-3 gap-1.5">
+                  {([
+                    { id: 'CASH' as const, label: 'Наличные', icon: Banknote },
+                    { id: 'CARD' as const, label: 'Карта', icon: CreditCard },
+                    { id: 'SPLIT' as const, label: 'Смешанная', icon: Split },
+                  ]).map(({ id, label, icon: Icon }) => (
+                    <button
+                      key={id}
+                      type="button"
+                      onClick={() => {
+                        setPaymentMethod(id);
+                        if (id === 'CASH') { setCashAmountInput(totalTjs.toString()); setCardAmountInput('0'); }
+                        else if (id === 'CARD') { setCardAmountInput(totalTjs.toString()); setCashAmountInput('0'); }
+                        else { const half = Math.floor(totalTjs / 2); setCashAmountInput(half.toString()); setCardAmountInput(moneyNumber(decimal(totalTjs).minus(half)).toString()); }
+                      }}
+                      className={`h-9 rounded-lg border text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors cursor-pointer select-none ${
+                        paymentMethod === id
+                          ? 'border-accent bg-accent/15 text-accent font-bold'
+                          : 'border-border bg-surface text-fg-muted hover:text-fg'
+                      }`}
+                    >
+                      <Icon className="w-3.5 h-3.5" />
+                      <span className="text-[11px]">{label}</span>
+                    </button>
+                  ))}
+                </div>
+
+                {/* Split Details if active */}
+                {paymentMethod === 'SPLIT' && (
+                  <div className="grid grid-cols-2 gap-1.5">
+                    <div>
+                      <span className="text-[10px] text-fg-subtle block mb-0.5">Наличные:</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={totalTjs}
+                        value={cashAmountInput}
+                        onChange={(e) => {
+                          const valStr = e.target.value;
+                          const raw = parseFloat(valStr);
+                          if (!isNaN(raw)) {
+                            const clamped = Math.min(totalTjs, Math.max(0, raw));
+                            setCashAmountInput(raw > totalTjs ? totalTjs.toString() : valStr);
+                            setCardAmountInput(Number(Math.max(0, totalTjs - clamped).toFixed(2)).toString());
+                          } else {
+                            setCashAmountInput(valStr);
+                            setCardAmountInput(totalTjs.toString());
+                          }
+                        }}
+                        className="w-full h-7 rounded-md bg-surface border border-border px-2 text-xs font-mono font-semibold text-fg focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                    <div>
+                      <span className="text-[10px] text-fg-subtle block mb-0.5">Карта:</span>
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        max={totalTjs}
+                        value={cardAmountInput}
+                        onChange={(e) => {
+                          const valStr = e.target.value;
+                          const raw = parseFloat(valStr);
+                          if (!isNaN(raw)) {
+                            const clamped = Math.min(totalTjs, Math.max(0, raw));
+                            setCardAmountInput(raw > totalTjs ? totalTjs.toString() : valStr);
+                            setCashAmountInput(Number(Math.max(0, totalTjs - clamped).toFixed(2)).toString());
+                          } else {
+                            setCardAmountInput(valStr);
+                            setCashAmountInput(totalTjs.toString());
+                          }
+                        }}
+                        className="w-full h-7 rounded-md bg-surface border border-border px-2 text-xs font-mono font-semibold text-fg focus:outline-none focus:border-accent"
+                      />
+                    </div>
+                  </div>
+                )}
+
+                {/* Summary & Pay Action */}
+                <div className="pt-2 border-t border-border flex items-center justify-between">
+                  <div>
+                    <span className="text-[10px] uppercase font-bold text-fg-subtle block">Итого к оплате</span>
+                    <span className="text-[11px] text-fg-subtle font-mono">{usdLabel}</span>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-base sm:text-lg font-black font-mono text-accent block">
+                      {formatMoney(totalTjs)} TJS
+                    </span>
+                  </div>
+                </div>
+
+                <Button
+                  size="lg"
+                  fullWidth
+                  leftIcon={CheckCircle2}
+                  loading={isSubmittingSale}
+                  disabled={hasEmptyPrice || totalTjs <= 0 || isSubmittingSale}
+                  onClick={handleFinishPayment}
+                  className="h-11 text-xs sm:text-sm font-bold flex items-center justify-center cursor-pointer shadow-md"
+                >
+                  {isSubmittingSale ? 'Оформление…' : hasEmptyPrice ? 'Укажите цену' : `Оплатить ${formatMoney(totalTjs)} TJS`}
+                </Button>
+              </div>
+            </>
+          )}
+        </aside>
+      </div>
+    )}
 
       <ConfirmDialog
         open={isClearConfirmOpen}
