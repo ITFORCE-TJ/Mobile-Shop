@@ -92,12 +92,14 @@ export async function createExpense(tx: TransactionClient, input: CreateExpenseI
   const status = writesOffCash ? 'PAID' : 'UNPAID';
 
   const centralStore = await getCentralStore(tx);
-  // When sourceAccount is 'Центральная касса' (or no storeId is specified), Central Cash is used.
+  // Advances and salary payouts are issued from the Central Cash register by business requirement.
+  const isSalaryOrAdvance = input.category === 'SALARY' || input.category === 'Зарплата' || input.category === 'EMPLOYEE_ADVANCE' || input.category === 'Аванс сотрудника' || isAdvance;
+  // When sourceAccount is 'Центральная касса' (or for salary/advances, or no storeId is specified), Central Cash is used.
   // When a specific storeId is provided without 'Центральная касса', it deducts from that store.
-  const isCentral = input.sourceAccount === 'Центральная касса' || (!input.storeId && Boolean(centralStore));
+  const isCentral = input.sourceAccount === 'Центральная касса' || isSalaryOrAdvance || (!input.storeId && Boolean(centralStore));
   const cashStore = isCentral ? (centralStore || store) : (store || centralStore);
   const resolvedSource = writesOffCash
-    ? (input.sourceAccount || (cashStore?.isMainWarehouse ? 'Центральная касса' : `Касса ${cashStore?.name ?? ''}`))
+    ? (input.sourceAccount || (isCentral || cashStore?.isMainWarehouse ? 'Центральная касса' : `Касса ${cashStore?.name ?? ''}`))
     : input.sourceAccount || null;
   const ownerProfitAllocations = await currentOwnerAllocations(tx, amountUsd, input.storeId);
 
@@ -342,7 +344,8 @@ export async function updateExpense(
     // Adjust cash balance if amount or store changed
     if (existing.status === 'PAID' && existing.paidFromCashRegister) {
       const centralStore = await getCentralStore(tx);
-      const isOldCentral = existing.sourceAccount === 'Центральная касса' || !existing.storeId;
+      const isOldSalaryOrAdvance = existing.category === 'SALARY' || existing.category === 'Зарплата' || existing.category === 'EMPLOYEE_ADVANCE' || existing.category === 'Аванс сотрудника' || existing.isEmployeeAdvance;
+      const isOldCentral = existing.sourceAccount === 'Центральная касса' || isOldSalaryOrAdvance || !existing.storeId;
       const oldCashStoreId = isOldCentral ? centralStore?.id : existing.storeId;
       if (oldCashStoreId) {
         await tx.store.update({
@@ -355,7 +358,8 @@ export async function updateExpense(
     if (existing.status === 'PAID' && existing.paidFromCashRegister) {
       const centralStore = await getCentralStore(tx);
       const newStore = newStoreId ? await tx.store.findUnique({ where: { id: newStoreId } }) : null;
-      const isCentral = existing.sourceAccount === 'Центральная касса' || (!newStoreId && Boolean(centralStore));
+      const isNewSalaryOrAdvance = newCategory === 'SALARY' || newCategory === 'Зарплата' || newCategory === 'EMPLOYEE_ADVANCE' || newCategory === 'Аванс сотрудника' || existing.isEmployeeAdvance;
+      const isCentral = existing.sourceAccount === 'Центральная касса' || isNewSalaryOrAdvance || (!newStoreId && Boolean(centralStore));
       const targetStore = isCentral ? (centralStore || newStore) : (newStore || centralStore);
       if (!targetStore) throw new Error('Касса для списания расхода не найдена');
       const cashGuard = await tx.store.updateMany({
@@ -477,7 +481,8 @@ export async function deleteExpense(id: string, actorId: string) {
     // Revert cash balance
     if (existing.status === 'PAID' && existing.paidFromCashRegister) {
       const centralStore = await getCentralStore(tx);
-      const isCentral = existing.sourceAccount === 'Центральная касса' || !existing.storeId;
+      const isSalaryOrAdvance = existing.category === 'SALARY' || existing.category === 'Зарплата' || existing.category === 'EMPLOYEE_ADVANCE' || existing.category === 'Аванс сотрудника' || existing.isEmployeeAdvance;
+      const isCentral = existing.sourceAccount === 'Центральная касса' || isSalaryOrAdvance || !existing.storeId;
       const targetStoreId = isCentral ? centralStore?.id : existing.storeId;
       if (targetStoreId) {
         await tx.store.update({

@@ -366,6 +366,7 @@ export const EmployeesPage: React.FC = () => {
         category: 'EMPLOYEE_ADVANCE',
         amountTjs: val,
         storeId: advanceIssueUser.storeId || stores[0]?.id,
+        sourceAccount: 'Центральная касса',
         description: `Аванс сотруднику ${advanceIssueUser.name}: ${advanceNoteInput.trim() || 'Выдан под отчет / в счет зарплаты'}`,
         paidFromCashRegister: true,
         employeeId: advanceIssueUser.id,
@@ -375,7 +376,7 @@ export const EmployeesPage: React.FC = () => {
       });
 
       if (res.success) {
-        setStatusMessage({ type: 'success', text: `Аванс ${val} TJS успешно выдан сотруднику ${advanceIssueUser.name}` });
+        setStatusMessage({ type: 'success', text: `Аванс ${val} TJS успешно выдан из Центральной кассы сотруднику ${advanceIssueUser.name}` });
         setAdvanceIssueUser(null);
         setAdvanceAmountInput('');
         setAdvanceNoteInput('');
@@ -435,7 +436,7 @@ export const EmployeesPage: React.FC = () => {
       if (res.success) {
         setStatusMessage({
           type: 'success',
-          text: `Зарплата ${salaryPayoutUser.name} за ${payoutMonth} выплачена: ${res.amountTjs ?? netPayout} TJS${payrollSummary.paidAdvancesTjs > 0 ? ` (удержано авансов: ${payrollSummary.paidAdvancesTjs} TJS)` : ''}`
+          text: `Зарплата ${salaryPayoutUser.name} за ${payoutMonth} выплачена из Центральной кассы: ${res.amountTjs ?? netPayout} TJS${payrollSummary.paidAdvancesTjs > 0 ? ` (удержано авансов: ${payrollSummary.paidAdvancesTjs} TJS)` : ''}`
         });
         setSalaryPayoutUser(null);
         setGrossSalaryInput('');
@@ -1174,6 +1175,10 @@ export const EmployeesPage: React.FC = () => {
                 <span className="text-[10px] text-fg-subtle uppercase block">Сотрудник:</span>
                 <strong className="text-sm text-fg-muted">{advanceIssueUser.name}</strong>
                 <p className="text-[10px] text-fg-subtle">{advanceIssueUser.storeName || (advanceIssueUser.storeId ? stores.find(s => s.id === advanceIssueUser.storeId)?.name : undefined) || 'Магазин'}</p>
+                <div className="flex justify-between items-center text-[10px] pt-1.5 border-t border-border">
+                  <span className="text-fg-subtle uppercase font-semibold">Источник списания:</span>
+                  <span className="text-accent font-bold">Центральная касса</span>
+                </div>
               </div>
 
               <div>
@@ -1213,7 +1218,7 @@ export const EmployeesPage: React.FC = () => {
               </div>
 
               <p className="text-[9px] text-fg-subtle italic">
-                ★ Сумма будет списана из кассы и учтена как удержанный аванс при выдаче зарплаты.
+                ★ Сумма будет списана из Центральной кассы и учтена как удержанный аванс при расчёте зарплаты.
               </p>
             </div>
 
@@ -1367,6 +1372,15 @@ export const EmployeesPage: React.FC = () => {
                       className="w-full rounded-lg bg-bg border border-border px-3 py-2 text-fg-muted text-xs focus:border-accent focus:outline-none"
                     />
                   </div>
+
+                  <div className="flex justify-between items-center text-[10px] p-2.5 rounded-lg bg-bg border border-border">
+                    <span className="text-fg-subtle uppercase font-semibold">Источник выплаты:</span>
+                    <span className="text-accent font-bold">Центральная касса</span>
+                  </div>
+
+                  <p className="text-[9px] text-fg-subtle italic">
+                    ★ Выплата производится из Центральной кассы.
+                  </p>
 
                   <div className="flex space-x-2 pt-1">
                     <button

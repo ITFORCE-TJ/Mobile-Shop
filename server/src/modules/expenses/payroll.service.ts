@@ -46,6 +46,7 @@ export async function paySalary(input: { employeeId: string; month: string; gros
     if (amount.lte(0)) throw Object.assign(new Error('Начисленная сумма за месяц уже полностью выплачена с учётом зарплаты и авансов'), { statusCode: 409 });
     const expense = await createExpense(tx, {
       category: 'SALARY', amountTjs: amount, storeId: summary.employee.storeId,
+      sourceAccount: 'Центральная касса',
       employeeId: input.employeeId, paidFromCashRegister: true, createdByUserId: input.actorId,
       description: `Зарплата за ${input.month}: начислено ${gross}; ранее выплачено ${summary.paidSalaryTjs}; оплаченные авансы ${summary.paidAdvancesTjs}; доплата ${amount}. ${input.note?.trim() || ''}`,
     });
