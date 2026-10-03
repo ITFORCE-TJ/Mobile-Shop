@@ -912,8 +912,8 @@ export const ExpensesPage: React.FC = () => {
                   ? `По запросу «${searchQuery}» ничего не найдено.`
                   : 'За выбранный период или фильтры расходы отсутствуют.'}
               </p>
-              <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
-                {hasActiveFilters && (
+              {hasActiveFilters && (
+                <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
                   <Button
                     variant="secondary"
                     size="md"
@@ -923,17 +923,8 @@ export const ExpensesPage: React.FC = () => {
                     <RotateCcw className="w-3.5 h-3.5 mr-1" />
                     Сбросить фильтры
                   </Button>
-                )}
-                <Button
-                  variant="danger"
-                  size="md"
-                  className="!h-8 !px-3 text-xs"
-                  onClick={() => setIsModalOpen(true)}
-                >
-                  <Plus className="w-3.5 h-3.5 mr-1" />
-                  Добавить расход
-                </Button>
-              </div>
+                </div>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
