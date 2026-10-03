@@ -583,17 +583,6 @@ export const SettingsPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Enterprise Info & Shortcut Tips */}
-              <div className="p-3.5 rounded-2xl bg-surface border border-border/70 text-[11px] text-fg-subtle space-y-2 shadow-2xs">
-                <p className="flex items-start gap-2 text-fg-muted font-medium leading-relaxed">
-                  <span className="text-accent shrink-0">⚡</span>
-                  <span>Офлайн-режим: все продажи и операции сохраняются в памяти устройства при отсутствии связи.</span>
-                </p>
-                <p className="flex items-start gap-2 text-fg-subtle leading-relaxed">
-                  <span className="text-accent shrink-0">💡</span>
-                  <span>Поддержка 1D/2D сканеров: подключите USB-сканер штрихкодов в режиме HID-эмуляции клавиатуры.</span>
-                </p>
-              </div>
             </div>
           </div>
         </div>
