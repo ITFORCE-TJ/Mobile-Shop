@@ -2,7 +2,7 @@ import React, { useEffect, useRef, useState } from 'react';
 import { Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import { Html5QrcodeShim } from 'html5-qrcode/esm/code-decoder';
 import { BaseLoggger } from 'html5-qrcode/esm/core';
-import { AlertCircle, ArrowRight, Barcode, Flashlight, FlashlightOff, Focus, X, ZoomIn } from 'lucide-react';
+import { AlertCircle, ArrowRight, Barcode, Flashlight, FlashlightOff, Focus, X } from 'lucide-react';
 import { useAppFields } from '../../context/AppContext';
 import { Dialog } from '../ui/Dialog';
 import { soundEffects } from '../../utils/sound';
@@ -31,12 +31,6 @@ type BarcodeCameraConstraint = MediaTrackConstraintSet & {
 
 type BarcodeCameraSettings = MediaTrackSettings & {
   zoom?: number;
-};
-
-type ZoomRange = {
-  min: number;
-  max: number;
-  step: number;
 };
 
 // IMEI labels are Code 128 (occasionally Code 39); some brands add a QR/DataMatrix with
@@ -74,8 +68,6 @@ export const ScannerModal: React.FC = () => {
   const [torchOn, setTorchOn] = useState(false);
   const [focusSupported, setFocusSupported] = useState(false);
   const [isFocusing, setIsFocusing] = useState(false);
-  const [zoomRange, setZoomRange] = useState<ZoomRange | null>(null);
-  const [zoomValue, setZoomValue] = useState(1);
   const [scanHint, setScanHint] = useState(SCAN_HINTS.aim);
   const [manualCode, setManualCode] = useState('');
   const [band, setBand] = useState(() => aimingBand(340, 260));
@@ -127,17 +119,6 @@ export const ScannerModal: React.FC = () => {
     }
   };
 
-  const changeZoom = async (value: number) => {
-    if (!zoomRange) return;
-    const next = Math.min(zoomRange.max, Math.max(zoomRange.min, value));
-    setZoomValue(next);
-    try {
-      await applyConstraint({ zoom: next });
-    } catch {
-      // Capability reporting differs across Android browsers; keep scanning.
-    }
-  };
-
   const refocus = async () => {
     const track = trackRef.current;
     if (!track || isFocusing) return;
@@ -165,8 +146,6 @@ export const ScannerModal: React.FC = () => {
       setTorchOn(false);
       setFocusSupported(false);
       setIsFocusing(false);
-      setZoomRange(null);
-      setZoomValue(1);
       setScanHint(SCAN_HINTS.aim);
       setManualCode('');
       return;
@@ -320,18 +299,27 @@ export const ScannerModal: React.FC = () => {
         setTorchSupported(!!capabilities.torch);
         const modes = capabilities.focusMode ?? [];
         setFocusSupported(modes.includes('continuous') || modes.includes('single-shot'));
-        if (modes.includes('continuous')) applyConstraint({ focusMode: 'continuous' }).catch(() => {});
 
-        const zoom = capabilities.zoom;
-        if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max) && zoom.max > zoom.min) {
-          const range = { min: zoom.min, max: zoom.max, step: zoom.step && zoom.step > 0 ? zoom.step : 0.1 };
-          const currentZoom = (track?.getSettings() as BarcodeCameraSettings | undefined)?.zoom;
-          // Start at natural 1.0x optical zoom for sharp barcode lines
-          const preferredZoom = Math.min(range.max, Math.max(range.min, currentZoom ?? 1));
-          setZoomRange(range);
-          setZoomValue(preferredZoom);
-          await applyConstraint({ zoom: preferredZoom }).catch(() => {});
+        // Automatic continuous autofocus
+        if (modes.includes('continuous')) {
+          applyConstraint({ focusMode: 'continuous' }).catch(() => {});
+        } else if (modes.includes('single-shot')) {
+          applyConstraint({ focusMode: 'single-shot' }).catch(() => {});
         }
+
+        // Lock to 1.0x natural optical zoom (no digital crop blur)
+        const zoom = capabilities.zoom;
+        if (zoom && Number.isFinite(zoom.min) && Number.isFinite(zoom.max)) {
+          const naturalZoom = Math.min(zoom.max, Math.max(zoom.min, 1));
+          applyConstraint({ zoom: naturalZoom }).catch(() => {});
+        }
+
+        // Automatic initial focus pulse after sensor warmup to lock onto nearby barcodes
+        window.setTimeout(() => {
+          if (!cancelled && trackRef.current === track) {
+            void refocus();
+          }
+        }, 500);
       } catch {
         setTorchSupported(false);
       }
@@ -437,6 +425,27 @@ export const ScannerModal: React.FC = () => {
             </div>
           )}
 
+          {/* Autofocus trigger overlay (top left) */}
+          {focusSupported && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void refocus();
+              }}
+              aria-label="Автофокус"
+              className={cn(
+                'absolute top-2.5 left-2.5 z-20 h-8 px-2.5 rounded-full flex items-center gap-1.5 backdrop-blur-md transition-all active:scale-90 shadow-md cursor-pointer text-xs font-semibold',
+                isFocusing
+                  ? 'bg-accent text-accent-fg shadow-accent/40 font-bold scale-105'
+                  : 'bg-black/50 text-white border border-white/20 hover:bg-black/70'
+              )}
+            >
+              <Focus className="w-3.5 h-3.5" />
+              <span>{isFocusing ? 'Фокус…' : 'Автофокус'}</span>
+            </button>
+          )}
+
           {/* Torch toggle button */}
           {torchSupported && (
             <button
@@ -478,39 +487,6 @@ export const ScannerModal: React.FC = () => {
             <span className="truncate">{scanHint}</span>
           </div>
         </div>
-
-        {/* Focus / Zoom Controls if supported */}
-        {(focusSupported || zoomRange) && (
-          <div className="flex items-center gap-2 rounded-xl border border-border bg-surface-raised px-2.5 py-1 text-xs">
-            {focusSupported && (
-              <button
-                type="button"
-                onClick={refocus}
-                disabled={isFocusing}
-                className="flex shrink-0 items-center gap-1 font-medium text-fg active:scale-95 disabled:opacity-50 cursor-pointer"
-              >
-                <Focus className="h-3.5 w-3.5 text-accent" />
-                <span>{isFocusing ? 'Фокусирую…' : 'Фокус'}</span>
-              </button>
-            )}
-            {zoomRange && (
-              <label className="flex min-w-0 flex-1 items-center gap-1.5 text-fg-muted">
-                <ZoomIn className="h-3.5 w-3.5 shrink-0" />
-                <input
-                  type="range"
-                  min={zoomRange.min}
-                  max={zoomRange.max}
-                  step={zoomRange.step}
-                  value={zoomValue}
-                  onChange={(event) => void changeZoom(Number(event.target.value))}
-                  className="min-w-0 flex-1 accent-accent h-1 cursor-pointer"
-                  aria-label="Масштаб камеры"
-                />
-                <span className="w-7 text-right tabular-nums text-[11px] font-mono">{zoomValue.toFixed(1)}×</span>
-              </label>
-            )}
-          </div>
-        )}
 
         {/* Camera Error Message */}
         {cameraError && (
