@@ -130,7 +130,7 @@ export const LockScreen: React.FC = () => {
           </div>
           <h1 id="lock-title" className="text-lg font-bold text-fg">Сеанс заблокирован</h1>
           <p className="text-sm text-fg-subtle mt-1">
-            10 минут без действий. Войдите, чтобы продолжить{unfinished ? ' — несохранённая работа сохранена на экране' : ''}.
+            Войдите, чтобы продолжить{unfinished ? ' — несохранённая работа сохранена на экране' : ''}.
           </p>
         </div>
 
