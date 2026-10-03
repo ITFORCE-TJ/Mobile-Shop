@@ -828,82 +828,29 @@ export const RepairPage: React.FC = () => {
                     : `За ${selectedMonth === 'ALL' ? 'весь период' : 'выбранный месяц'} квитанций на ремонт нет.`}
                 </p>
 
-                <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
-                  {searchQuery && (
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      className="!h-8.5 !px-3 text-xs"
-                      onClick={() => setSearchQuery('')}
-                    >
-                      <X className="w-3.5 h-3.5 mr-1 text-fg-subtle" />
-                      Сбросить поиск
-                    </Button>
-                  )}
-                  {statusFilter !== 'ALL' && (
-                    <Button
-                      variant="secondary"
-                      size="md"
-                      className="!h-8.5 !px-3 text-xs"
-                      onClick={() => setStatusFilter('ALL')}
-                    >
-                      Показать все статусы
-                    </Button>
-                  )}
-                  {!searchQuery && statusFilter === 'ALL' && (
-                    <Button
-                      size="md"
-                      className="!h-8.5 !px-3.5 text-xs shadow-xs"
-                      onClick={() => {
-                        setStatusMessage(null);
-                        setActiveTab('create');
-                      }}
-                    >
-                      <Plus className="w-3.5 h-3.5 mr-1" />
-                      Оформить приём в ремонт
-                    </Button>
-                  )}
-                </div>
-
-                {/* Quick helper action cards */}
-                {!searchQuery && statusFilter === 'ALL' && (
-                  <div className="mt-6 grid grid-cols-1 sm:grid-cols-2 gap-2.5 max-w-md w-full text-left">
-                    <div
-                      onClick={() => {
-                        setStatusMessage(null);
-                        setActiveTab('create');
-                      }}
-                      className="p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/50 transition-all cursor-pointer group shadow-2xs"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-6 h-6 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center text-accent group-hover:scale-105 transition-transform">
-                          <Plus className="w-3.5 h-3.5" />
-                        </div>
-                        <span className="text-xs font-bold text-fg group-hover:text-accent transition-colors">
-                          Приём в ремонт
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-fg-subtle leading-snug">
-                        Оформление приёма с фиксацией дефекта, IMEI и предоплаты
-                      </p>
-                    </div>
-
-                    <div
-                      onClick={handleScanListSearch}
-                      className="p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 hover:bg-surface-raised/50 transition-all cursor-pointer group shadow-2xs"
-                    >
-                      <div className="flex items-center gap-2 mb-1">
-                        <div className="w-6 h-6 rounded-lg bg-info/10 border border-info/20 flex items-center justify-center text-info group-hover:scale-105 transition-transform">
-                          <Scan className="w-3.5 h-3.5" />
-                        </div>
-                        <span className="text-xs font-bold text-fg group-hover:text-info transition-colors">
-                          Быстрый поиск
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-fg-subtle leading-snug">
-                        Поиск квитанции по штрихкоду или поиск устройства по IMEI
-                      </p>
-                    </div>
+                {(searchQuery || statusFilter !== 'ALL') && (
+                  <div className="mt-4 flex items-center gap-2 flex-wrap justify-center">
+                    {searchQuery && (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        className="!h-8.5 !px-3 text-xs"
+                        onClick={() => setSearchQuery('')}
+                      >
+                        <X className="w-3.5 h-3.5 mr-1 text-fg-subtle" />
+                        Сбросить поиск
+                      </Button>
+                    )}
+                    {statusFilter !== 'ALL' && (
+                      <Button
+                        variant="secondary"
+                        size="md"
+                        className="!h-8.5 !px-3 text-xs"
+                        onClick={() => setStatusFilter('ALL')}
+                      >
+                        Показать все статусы
+                      </Button>
+                    )}
                   </div>
                 )}
               </div>
