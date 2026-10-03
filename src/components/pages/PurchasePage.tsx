@@ -19,7 +19,12 @@ import {
   FileText,
   Edit2,
   Loader2,
-  Building
+  Building,
+  Calendar,
+  Hash,
+  DollarSign,
+  Check,
+  Receipt
 } from 'lucide-react';
 import { soundEffects } from '../../utils/sound';
 import { MonthPicker } from '../ui/MonthPicker';
@@ -1690,72 +1695,146 @@ export const PurchasePage: React.FC = () => {
 
       {/* Edit Invoice Modal */}
       {editingInvoiceModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4 font-mono">
-          <div className="w-full max-w-md rounded-2xl bg-surface border border-border p-5 text-fg-muted shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-border">
-              <div className="flex items-center space-x-2">
-                <div className="p-2 rounded-lg bg-accent/15 text-accent border border-accent/30">
-                  <Edit2 className="w-4 h-4" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4 animate-in fade-in duration-150">
+          <div className="w-full max-w-md rounded-2xl bg-surface border border-border/80 p-5 sm:p-6 text-fg-muted shadow-2xl space-y-4">
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-border/70">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 shadow-2xs">
+                  <Receipt className="w-4 h-4" />
                 </div>
-                <h3 className="text-sm font-bold text-fg-muted ">Редактировать накладную</h3>
+                <div>
+                  <h3 className="text-sm sm:text-base font-bold text-fg">
+                    Редактировать накладную
+                  </h3>
+                  <p className="text-[11px] text-fg-subtle">
+                    Изменение номера, даты и суммы закупки
+                  </p>
+                </div>
               </div>
-              <button onClick={() => setEditingInvoiceModal(null)} className="p-1 rounded text-fg-subtle hover:text-fg-muted">
+              <button
+                type="button"
+                onClick={() => setEditingInvoiceModal(null)}
+                className="p-1.5 rounded-lg text-fg-subtle hover:text-fg hover:bg-surface-raised transition-colors cursor-pointer"
+              >
                 <X className="w-4 h-4" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditInvoiceModal} className="space-y-3 text-xs">
+            {/* Context Card */}
+            <div className="p-3 rounded-xl bg-surface-raised/60 border border-border/80 flex items-center justify-between gap-3 text-xs">
+              <div className="min-w-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-fg-subtle">
+                  Накладная
+                </div>
+                <div className="font-bold font-mono text-fg truncate">
+                  #{editingInvoiceModal.invoiceNumber}
+                </div>
+              </div>
+              <div className="text-right shrink-0">
+                <div className="text-[10px] font-bold uppercase tracking-wider text-fg-subtle">
+                  Устройств в партии
+                </div>
+                <div className="font-bold font-mono text-accent">
+                  {editingInvoiceModal.devicesCount || 0} шт.
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveEditInvoiceModal} className="space-y-3.5">
+              {/* Invoice Number */}
               <div>
-                <label className="block text-fg-subtle text-[10px] mb-1">Номер накладной</label>
-                <input
-                  type="text"
-                  required
-                  value={editInvoiceNum}
-                  onChange={(e) => setEditInvoiceNum(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted font-bold focus:border-accent focus:outline-none"
-                />
+                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
+                  <span>Номер накладной</span>
+                  <span className="text-[10px] text-accent font-semibold font-mono">Обязательно</span>
+                </label>
+                <div className="relative">
+                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
+                    <Hash className="w-4 h-4 text-accent" />
+                  </div>
+                  <input
+                    type="text"
+                    required
+                    value={editInvoiceNum}
+                    onChange={(e) => setEditInvoiceNum(e.target.value)}
+                    placeholder="Например, INV-0022"
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-raised border border-border text-xs sm:text-sm font-bold font-mono text-fg placeholder:text-fg-subtle focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                  />
+                </div>
               </div>
 
+              {/* Invoice Date */}
               <div>
-                <label className="block text-fg-subtle text-[10px] mb-1">Дата накладной</label>
-                <input
-                  type="date"
-                  required
-                  value={editInvoiceDateStr}
-                  onChange={(e) => setEditInvoiceDateStr(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-fg-muted focus:border-accent focus:outline-none"
-                />
+                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
+                  <span>Дата накладной</span>
+                  <span className="text-[10px] text-fg-subtle font-mono">ГГГГ-ММ-ДД</span>
+                </label>
+                <div className="relative">
+                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
+                    <Calendar className="w-4 h-4 text-accent" />
+                  </div>
+                  <input
+                    type="date"
+                    required
+                    value={editInvoiceDateStr}
+                    onChange={(e) => setEditInvoiceDateStr(e.target.value)}
+                    className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-surface-raised border border-border text-xs sm:text-sm font-semibold text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                  />
+                </div>
               </div>
 
+              {/* Invoice Amount */}
               <div>
-                <label className="block text-fg-subtle text-[10px] mb-1">Сумма накладной ($)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  required
-                  min="0"
-                  value={editInvoiceAmountUsd}
-                  onChange={(e) => setEditInvoiceAmountUsd(e.target.value)}
-                  className="w-full rounded-xl bg-surface-raised border border-border px-3 py-2 text-accent font-bold focus:border-accent focus:outline-none font-mono"
-                />
+                <label className="block text-xs font-semibold text-fg-muted mb-1.5 flex items-center justify-between">
+                  <span>Сумма накладной ($ USD)</span>
+                  <span className="text-[10px] text-fg-subtle font-mono">USD</span>
+                </label>
+                <div className="relative">
+                  <div className="w-9 h-full absolute left-0 top-0 flex items-center justify-center text-fg-subtle pointer-events-none">
+                    <DollarSign className="w-4 h-4 text-accent" />
+                  </div>
+                  <input
+                    type="number"
+                    step="0.01"
+                    required
+                    min="0"
+                    value={editInvoiceAmountUsd}
+                    onChange={(e) => setEditInvoiceAmountUsd(e.target.value)}
+                    placeholder="0.00"
+                    className="w-full pl-9 pr-14 py-2.5 rounded-xl bg-surface-raised border border-border text-sm sm:text-base font-bold font-mono text-accent focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent transition-all"
+                  />
+                  <div className="absolute right-3 top-1/2 -translate-y-1/2 px-1.5 py-0.5 rounded-md bg-surface border border-border text-[10px] font-bold font-mono text-fg-subtle pointer-events-none">
+                    USD
+                  </div>
+                </div>
               </div>
 
-              <div className="flex space-x-2 pt-3 border-t border-border">
+              {/* Actions Footer */}
+              <div className="pt-2 flex items-center gap-2.5 border-t border-border/70">
                 <button
                   type="button"
                   disabled={isSubmitting}
                   onClick={() => setEditingInvoiceModal(null)}
-                  className="flex-1 py-2 rounded-xl bg-surface-raised hover:bg-surface border border-border text-fg-subtle hover:text-fg-muted font-bold disabled:opacity-50"
+                  className="flex-1 py-2.5 rounded-xl bg-surface-raised hover:bg-surface border border-border text-xs font-bold text-fg-muted hover:text-fg transition-all cursor-pointer min-h-[40px] disabled:opacity-50 flex items-center justify-center"
                 >
                   Отмена
                 </button>
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex-1 py-2 rounded-xl bg-accent hover:bg-accent-strong text-accent-fg font-bold shadow-xs disabled:opacity-60 flex items-center justify-center gap-1.5"
+                  className="flex-1 py-2.5 rounded-xl bg-accent hover:bg-accent-strong text-xs font-bold text-accent-fg shadow-xs hover:shadow-md transition-all cursor-pointer min-h-[40px] disabled:opacity-60 flex items-center justify-center gap-1.5"
                 >
-                  {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-                  {isSubmitting ? 'СОХРАНЕНИЕ…' : 'СОХРАНИТЬ'}
+                  {isSubmitting ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Сохранение…</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Сохранить</span>
+                    </>
+                  )}
                 </button>
               </div>
             </form>
