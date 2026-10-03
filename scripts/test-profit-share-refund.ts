@@ -278,6 +278,7 @@ try {
   const { getBusinessDateKey } = await import('../server/src/common/business-date');
   const thisPayrollMonth = getBusinessDateKey().slice(0, 7);
   const advanceFor = '2000-01';
+  await OwnersService.investment('owner-admin', D(500), 'Главный счет', undefined, 'user-admin');
   await createExpenseStandalone({ category: 'EMPLOYEE_ADVANCE', amountTjs: D(300), storeId: 'store-siyoma', employeeId: 'user-ahmad',
     isEmployeeAdvance: true, payrollMonth: advanceFor, createdByUserId: 'user-admin' });
   assert.equal((await getPayrollSummary('user-ahmad', advanceFor)).paidAdvancesTjs, 300);
