@@ -583,10 +583,29 @@ export const EmployeesPage: React.FC = () => {
 
           {currentUser?.role === 'ADMIN' && (
             <div className="shrink-0">
-              <ActionMenu label={`Действия: ${u.name}`} actions={[
-                { label: 'Редактировать сотрудника', icon: Edit2, onSelect: () => handleOpenEdit(u) },
-                ...(currentUser.id !== u.id ? [{ label: 'Удалить сотрудника', icon: Trash2, danger: true, onSelect: () => handleDeleteUserClick(u) }] : []),
-              ]} />
+              <ActionMenu
+                label={`Действия: ${u.name}`}
+                subtitle={`Сотрудник: ${u.name}`}
+                actions={[
+                  {
+                    label: 'Редактировать сотрудника',
+                    description: 'Изменить имя, логин, роль, оклад или пароль',
+                    icon: Edit2,
+                    onSelect: () => handleOpenEdit(u),
+                  },
+                  ...(currentUser.id !== u.id
+                    ? [
+                        {
+                          label: 'Удалить сотрудника',
+                          description: 'Безвозвратное удаление учетной записи',
+                          icon: Trash2,
+                          danger: true,
+                          onSelect: () => handleDeleteUserClick(u),
+                        },
+                      ]
+                    : []),
+                ]}
+              />
             </div>
           )}
         </div>

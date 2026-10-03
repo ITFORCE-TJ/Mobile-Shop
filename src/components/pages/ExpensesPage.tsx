@@ -1035,9 +1035,10 @@ export const ExpensesPage: React.FC = () => {
                               {(isAdmin || isPartner) && (
                                 <ActionMenu
                                   label="Действия с расходом"
+                                  subtitle={exp.category || 'Расход'}
                                   actions={[
-                                    { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
-                                    { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                                    { label: 'Редактировать расход', description: 'Изменить категорию, сумму или описание', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                                    { label: 'Удалить расход', description: 'Удалить запись из истории расходов', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
                                   ]}
                                 />
                               )}
@@ -1129,10 +1130,14 @@ export const ExpensesPage: React.FC = () => {
                             <IconButton icon={Banknote} tone="accent" size="sm" aria-label="Оплатить расход" onClick={() => handleStartPay(exp)} />
                           )}
                           {(isAdmin || isPartner) && (
-                            <ActionMenu label="Действия с расходом" actions={[
-                              { label: 'Редактировать расход', icon: Edit2, onSelect: () => handleStartEdit(exp) },
-                              { label: 'Удалить расход', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
-                            ]} />
+                            <ActionMenu
+                              label="Действия с расходом"
+                              subtitle={exp.category || 'Расход'}
+                              actions={[
+                                { label: 'Редактировать расход', description: 'Изменить категорию, сумму или описание', icon: Edit2, onSelect: () => handleStartEdit(exp) },
+                                { label: 'Удалить расход', description: 'Удалить запись из истории расходов', icon: Trash2, danger: true, onSelect: () => setDeletingId(exp.id) },
+                              ]}
+                            />
                           )}
                         </div>
                       </div>
