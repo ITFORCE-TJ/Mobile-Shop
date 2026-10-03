@@ -71,9 +71,55 @@ function formatTimelineDate(dateStr: string): string {
   }
 }
 
-/** «≈ 1,234.00 TJS» for a USD amount at today's rate, or nothing when today's rate is not set. */
+/** «≈ 1,234 TJS» for a USD amount at today's rate, or nothing when today's rate is not set. */
 function approxTjs(usd: number, rate?: number): string | null {
-  return rate ? `≈ ${formatTjs(decimal(usd).mul(rate))}` : null;
+  if (!rate) return null;
+  const tjsAmount = Math.round(decimal(usd).mul(rate).toNumber());
+  return `≈ ${formatMoney(tjsAmount, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} TJS`;
+}
+
+function getBrandBadgeStyle(brand: string): { bg: string; text: string; border: string } {
+  const b = brand.toLowerCase();
+  if (b.includes('apple') || b.includes('iphone')) {
+    return { bg: 'bg-zinc-800 text-zinc-100 border-zinc-700', text: 'text-zinc-100', border: 'border-zinc-700' };
+  }
+  if (b.includes('samsung')) {
+    return { bg: 'bg-blue-500/15 text-blue-500 border-blue-500/30', text: 'text-blue-500', border: 'border-blue-500/30' };
+  }
+  if (b.includes('xiaomi') || b.includes('redmi') || b.includes('poco')) {
+    return { bg: 'bg-orange-500/15 text-orange-500 border-orange-500/30', text: 'text-orange-500', border: 'border-orange-500/30' };
+  }
+  if (b.includes('honor')) {
+    return { bg: 'bg-sky-500/15 text-sky-500 border-sky-500/30', text: 'text-sky-500', border: 'border-sky-500/30' };
+  }
+  if (b.includes('huawei')) {
+    return { bg: 'bg-red-500/15 text-red-500 border-red-500/30', text: 'text-red-500', border: 'border-red-500/30' };
+  }
+  if (b.includes('google') || b.includes('pixel')) {
+    return { bg: 'bg-emerald-500/15 text-emerald-500 border-emerald-500/30', text: 'text-emerald-500', border: 'border-emerald-500/30' };
+  }
+  if (b.includes('realme')) {
+    return { bg: 'bg-amber-500/15 text-amber-500 border-amber-500/30', text: 'text-amber-500', border: 'border-amber-500/30' };
+  }
+  return { bg: 'bg-accent/15 text-accent border-accent/30', text: 'text-accent', border: 'border-accent/30' };
+}
+
+function getPhoneColorHex(color?: string): string | null {
+  if (!color) return null;
+  const c = color.toLowerCase();
+  if (c.includes('black') || c.includes('черн') || c.includes('темн') || c.includes('midnight') || c.includes('phantom')) return '#1e293b';
+  if (c.includes('white') || c.includes('бел') || c.includes('starlight') || c.includes('pearl')) return '#f8fafc';
+  if (c.includes('gold') || c.includes('золот')) return '#eab308';
+  if (c.includes('silver') || c.includes('серебр')) return '#cbd5e1';
+  if (c.includes('gray') || c.includes('grey') || c.includes('серый') || c.includes('титан') || c.includes('titanium') || c.includes('graphite') || c.includes('графит')) return '#64748b';
+  if (c.includes('blue') || c.includes('син') || c.includes('голуб')) return '#3b82f6';
+  if (c.includes('green') || c.includes('зелен') || c.includes('изумруд')) return '#22c55e';
+  if (c.includes('purple') || c.includes('фиолет') || c.includes('лаванд') || c.includes('violet')) return '#a855f7';
+  if (c.includes('red') || c.includes('красн')) return '#ef4444';
+  if (c.includes('pink') || c.includes('розов')) return '#ec4899';
+  if (c.includes('yellow') || c.includes('желт')) return '#eab308';
+  if (c.includes('orange') || c.includes('оранж')) return '#f97316';
+  return '#94a3b8';
 }
 
 function getTimelineBadge(type: string) {
@@ -133,95 +179,119 @@ interface DeviceRowProps {
 const DeviceRow = React.forwardRef<HTMLButtonElement, DeviceRowProps>(({ device, isAdmin, storeName, isMainWarehouse, rate, hideModelName, onClick }, ref) => {
   const isSpecialStatus = device.status !== 'STORE_STOCK' && device.status !== 'MAIN_WAREHOUSE';
   const showStatusBadge = isSpecialStatus || !storeName;
+  const colorHex = getPhoneColorHex(device.color);
+  const formattedRam = device.ram
+    ? (device.ram.toUpperCase().includes('GB') ? device.ram : `${device.ram} GB`)
+    : null;
 
   return (
     <button
       ref={ref}
       type="button"
       onClick={onClick}
-      className="group w-full text-left px-3 py-2 sm:py-2.5 sm:px-4 active:bg-surface-raised flex items-center justify-between gap-2.5 transition-colors hover:bg-surface-raised/50 cursor-pointer"
+      className="group w-full text-left p-2.5 sm:p-3 rounded-xl bg-surface border border-border/80 hover:border-accent/40 active:bg-surface-raised flex items-center justify-between gap-3 transition-all hover:shadow-2xs cursor-pointer"
     >
-      <div className="min-w-0 flex-1">
-        {/* Line 1: Model/Specs & Color */}
-        <div className="flex items-center gap-1.5 min-w-0">
-          {!hideModelName ? (
-            <p className="text-xs sm:text-sm font-bold text-fg-muted truncate shrink min-w-0">
-              {device.brand} {device.model}
-            </p>
-          ) : null}
-
-          {device.storage && (
-            <span className="font-extrabold text-xs text-fg font-mono shrink-0">
-              {device.storage}
-            </span>
-          )}
-
-          {device.ram && (
-            <span className="px-1 py-0.2 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/25 font-mono shrink-0">
-              {device.ram.toUpperCase().includes('GB') ? device.ram : `${device.ram} GB`}
-            </span>
-          )}
-
-          {device.color && (
-            <span className="text-[11px] font-medium text-fg-subtle truncate shrink-0 max-w-28">
-              {device.color}
-            </span>
-          )}
-
-          {device.isBonus && (
-            <span className="px-1.5 py-0.2 rounded text-[9px] font-bold bg-accent/20 text-accent border border-accent/30 shrink-0">
-              Бонус
-            </span>
-          )}
+      <div className="flex items-center gap-2.5 sm:gap-3 min-w-0 flex-1">
+        {/* Left: Device icon / visual anchor */}
+        <div className="w-9 h-9 rounded-xl bg-surface-raised border border-border/80 flex items-center justify-center shrink-0 text-fg-subtle group-hover:text-accent group-hover:border-accent/30 group-hover:bg-accent/10 transition-colors shadow-2xs">
+          <Smartphone className="w-4.5 h-4.5" />
         </div>
 
-        {/* Line 2: IMEI + Location / Status */}
-        <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle mt-0.5 truncate font-mono">
-          <span>IMEI: {device.imei}{device.imei2 ? ` / ${device.imei2}` : ''}</span>
-          {storeName && (
-            <>
-              <span className="opacity-40">·</span>
-              <span className={`inline-flex items-center gap-1 font-sans text-[11px] font-medium truncate ${
-                isMainWarehouse ? 'text-amber-500' : 'text-accent'
+        <div className="min-w-0 flex-1">
+          {/* Line 1: Model (if visible) + Specs (Storage, RAM, Color) */}
+          <div className="flex items-center gap-1.5 flex-wrap min-w-0">
+            {!hideModelName && (
+              <span className="text-xs sm:text-sm font-extrabold text-fg truncate mr-1">
+                {device.brand} {device.model}
+              </span>
+            )}
+
+            {device.storage && (
+              <span className="px-2 py-0.5 rounded-md bg-surface-raised border border-border text-xs font-black font-mono text-fg shadow-2xs shrink-0">
+                {device.storage}
+              </span>
+            )}
+
+            {formattedRam && (
+              <span className="px-1.5 py-0.5 rounded-md bg-surface-raised/80 border border-border/70 text-[10px] font-bold font-mono text-fg-subtle shrink-0">
+                {formattedRam}
+              </span>
+            )}
+
+            {device.color && (
+              <span className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-md bg-surface-raised/60 border border-border/60 text-[11px] font-medium text-fg-muted shrink-0 max-w-36 truncate">
+                {colorHex && (
+                  <span
+                    className="w-2.5 h-2.5 rounded-full border border-black/20 shrink-0"
+                    style={{ backgroundColor: colorHex }}
+                  />
+                )}
+                <span className="truncate">{device.color}</span>
+              </span>
+            )}
+
+            {device.isBonus && (
+              <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md text-[10px] font-black bg-accent/15 text-accent border border-accent/25 shrink-0">
+                <Sparkles className="w-3 h-3" />
+                Бонус
+              </span>
+            )}
+          </div>
+
+          {/* Line 2: Monospace IMEI + Location + Special Status */}
+          <div className="flex items-center gap-1.5 text-[11px] text-fg-subtle mt-1.5 flex-wrap">
+            <span className="inline-flex items-center gap-1 font-mono text-[10px] sm:text-[11px] bg-surface-raised/80 px-2 py-0.5 rounded-md border border-border/60 text-fg-muted">
+              <span className="text-[9px] font-bold text-fg-subtle uppercase tracking-wider">IMEI</span>
+              <span className="font-semibold text-fg tracking-wide">{device.imei}</span>
+              {device.imei2 && <span className="opacity-60 text-[10px]">/{device.imei2}</span>}
+            </span>
+
+            {storeName && (
+              <span className={`inline-flex items-center gap-1 text-[11px] font-semibold px-2 py-0.5 rounded-md border ${
+                isMainWarehouse
+                  ? 'bg-amber-500/10 text-amber-500 border-amber-500/25'
+                  : 'bg-accent/10 text-accent border-accent/25'
               }`}>
                 {isMainWarehouse ? <Warehouse className="w-3 h-3 shrink-0" /> : <Store className="w-3 h-3 shrink-0" />}
                 <span className="truncate max-w-36">{storeName}</span>
               </span>
-            </>
-          )}
-          {showStatusBadge && (
-            <>
-              <span className="opacity-40">·</span>
+            )}
+
+            {showStatusBadge && (
               <Badge tone={STATUS_TONE[device.status] || 'neutral'}>
                 {STATUS_LABELS[device.status] || device.status}
               </Badge>
-            </>
-          )}
+            )}
+          </div>
         </div>
       </div>
 
-      {/* Right Column: Price & Chevron */}
+      {/* Right: Price & Chevron */}
       <div className="text-right shrink-0 flex items-center gap-2">
         {device.isBonus || (isAdmin && device.purchaseCostUsd === 0) ? (
-          <span className="text-[11px] font-bold text-accent font-mono">Бонус</span>
+          <span className="text-xs font-black text-accent font-mono px-2 py-0.5 rounded-lg bg-accent/10 border border-accent/20">
+            Бонус ($0)
+          </span>
         ) : isAdmin && device.purchaseCostUsd > 0 ? (
           <div className="text-right">
-            <span className="text-xs font-bold text-fg-muted font-mono block leading-tight">
+            <span className="text-xs sm:text-sm font-extrabold text-fg font-mono block leading-tight">
               {formatUsd(device.purchaseCostUsd)}
             </span>
             {approxTjs(device.purchaseCostUsd, rate) && (
-              <span className="text-[10px] text-fg-subtle font-mono block leading-none mt-0.5">
+              <span className="text-[10px] text-fg-subtle font-mono block leading-none mt-0.5 font-medium">
                 {approxTjs(device.purchaseCostUsd, rate)}
               </span>
             )}
           </div>
         ) : !isAdmin && (device.retailPriceTjs ?? 0) > 0 ? (
-          <span className="text-xs font-bold font-mono text-accent whitespace-nowrap">
+          <span className="text-xs sm:text-sm font-extrabold font-mono text-accent whitespace-nowrap">
             {formatTjs(device.retailPriceTjs)}
           </span>
         ) : null}
 
-        <ChevronRight className="w-3.5 h-3.5 text-fg-subtle group-hover:translate-x-0.5 transition-transform" />
+        <div className="w-6 h-6 rounded-lg bg-surface-raised flex items-center justify-center text-fg-subtle group-hover:text-accent group-hover:bg-accent/10 transition-colors">
+          <ChevronRight className="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" />
+        </div>
       </div>
     </button>
   );
@@ -1616,25 +1686,26 @@ export const InventoryPage: React.FC = () => {
               const isBrandExpanded = !!expandedBrandKeys[bGroup.key];
               const totalDevicesInView = filteredDevices.length || 1;
               const percent = Math.round((bGroup.totalCount / totalDevicesInView) * 100);
+              const brandBadgeStyle = getBrandBadgeStyle(bGroup.brand);
 
               return (
                 <div key={bGroup.key} className="transition-colors">
                   {/* Brand Row Button */}
                   <div
                     onClick={() => setExpandedBrandKeys(prev => ({ ...prev, [bGroup.key]: !prev[bGroup.key] }))}
-                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 active:bg-surface-raised transition-colors hover:bg-surface-raised/50 cursor-pointer select-none"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-3 active:bg-surface-raised transition-colors hover:bg-surface-raised/40 cursor-pointer select-none"
                   >
                     {/* Left: Brand name, badge, and model count */}
-                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
-                      <div className="w-8 h-8 rounded-lg bg-accent/15 border border-accent/30 text-accent flex items-center justify-center shrink-0 font-black text-xs tracking-wider shadow-xs">
-                        {bGroup.brand.substring(0, 2).toUpperCase()}
+                    <div className="flex items-center gap-3 min-w-0 flex-1">
+                      <div className={`w-9 h-9 rounded-xl border flex items-center justify-center shrink-0 font-black text-xs tracking-wider shadow-2xs ${brandBadgeStyle.bg} ${brandBadgeStyle.border}`}>
+                        <span className={brandBadgeStyle.text}>{bGroup.brand.substring(0, 2).toUpperCase()}</span>
                       </div>
                       <div className="min-w-0 flex-1">
-                        <div className="flex items-center gap-1.5 flex-wrap">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <h3 className="text-sm sm:text-base font-extrabold text-fg truncate">
                             {bGroup.brand}
                           </h3>
-                          <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-surface-raised text-fg-subtle border border-border">
+                          <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full bg-surface-raised text-fg-subtle border border-border">
                             {bGroup.distinctModelsCount} {bGroup.distinctModelsCount === 1 ? 'модель' : bGroup.distinctModelsCount < 5 ? 'модели' : 'моделей'}
                           </span>
                           {brandGroups.length > 1 && (
@@ -1644,7 +1715,7 @@ export const InventoryPage: React.FC = () => {
                           )}
                         </div>
                         {brandGroups.length > 1 && (
-                          <div className="flex items-center gap-2 mt-0.5 max-w-[120px] sm:max-w-[160px]">
+                          <div className="flex items-center gap-2 mt-1 max-w-[120px] sm:max-w-[160px]">
                             <div className="flex-1 h-1 rounded-full bg-surface-raised overflow-hidden border border-border">
                               <div
                                 className="h-full bg-accent rounded-full transition-all duration-300"
@@ -1657,25 +1728,25 @@ export const InventoryPage: React.FC = () => {
                     </div>
 
                     {/* Right: Phone count & financial value */}
-                    <div className="flex items-center gap-2 sm:gap-2.5 shrink-0">
+                    <div className="flex items-center gap-2 sm:gap-3 shrink-0">
                       <div className="text-right">
                         <div className="flex items-baseline justify-end gap-1">
-                          <span className="text-sm sm:text-base font-extrabold text-accent font-mono">
+                          <span className="text-sm sm:text-base font-black text-accent font-mono">
                             {bGroup.totalCount}
                           </span>
-                          <span className="text-[11px] text-fg-subtle font-medium">
+                          <span className="text-xs text-fg-subtle font-medium">
                             {bGroup.totalCount === 1 ? 'телефон' : bGroup.totalCount < 5 ? 'телефона' : 'телефонов'}
                           </span>
                         </div>
                         {isAdmin && (
-                          <div className="text-[10px] text-fg-subtle font-mono">
+                          <div className="text-[11px] text-fg-subtle font-mono mt-0.5">
                             <span className="font-bold text-fg-muted">{formatUsd(bGroup.totalValueUsd)}</span>
                             {approxTjs(bGroup.totalValueUsd, rate) && <span className="hidden sm:inline"> · {approxTjs(bGroup.totalValueUsd, rate)}</span>}
                           </div>
                         )}
                       </div>
 
-                      <div className={`p-1 rounded-md bg-surface-raised text-fg-subtle transition-transform duration-200 ${isBrandExpanded ? 'rotate-180 text-accent' : ''}`}>
+                      <div className={`w-7 h-7 rounded-xl bg-surface-raised border border-border flex items-center justify-center text-fg-subtle transition-transform duration-200 ${isBrandExpanded ? 'rotate-180 text-accent border-accent/40' : ''}`}>
                         <ChevronDown className="w-3.5 h-3.5" />
                       </div>
                     </div>
@@ -1683,24 +1754,26 @@ export const InventoryPage: React.FC = () => {
 
                   {/* Brand Models Accordion Body */}
                   {isBrandExpanded && (
-                    <div className="bg-surface/40 border-t border-border divide-y divide-border/60 pl-2.5 sm:pl-4 pr-1.5 sm:pr-3 py-0.5">
+                    <div className="bg-surface/30 border-t border-border px-2 sm:px-3 py-2 space-y-1.5">
                       {bGroup.modelGroups.map((mGroup) => {
                         const isModelExpanded = !!expandedModelKeys[mGroup.key];
                         return (
-                          <div key={mGroup.key} className="py-0.5">
+                          <div key={mGroup.key} className="space-y-1.5">
                             <button
                               type="button"
                               onClick={() => setExpandedModelKeys(prev => ({ ...prev, [mGroup.key]: !prev[mGroup.key] }))}
-                              className="w-full py-1.5 sm:py-2 px-2.5 rounded-lg flex items-center justify-between gap-2 hover:bg-surface-raised/70 active:bg-surface-raised transition-colors text-left cursor-pointer"
+                              className="w-full py-2 px-3 rounded-xl flex items-center justify-between gap-2.5 bg-surface-raised/50 hover:bg-surface-raised active:bg-surface-raised border border-border/70 hover:border-border transition-colors text-left cursor-pointer"
                             >
                               <div className="min-w-0 flex-1">
-                                <div className="flex items-center gap-1.5 flex-wrap">
-                                  <Smartphone className="w-3.5 h-3.5 text-accent shrink-0" />
-                                  <span className="text-xs sm:text-sm font-bold text-fg-muted">
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <div className="w-6 h-6 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 text-accent">
+                                    <Smartphone className="w-3.5 h-3.5" />
+                                  </div>
+                                  <span className="text-xs sm:text-sm font-extrabold text-fg">
                                     {mGroup.model}
                                   </span>
                                   {mGroup.ramList.length > 0 && (
-                                    <span className="px-1 py-0.2 rounded text-[10px] font-bold bg-accent/15 text-accent border border-accent/25 font-mono">
+                                    <span className="px-1.5 py-0.5 rounded-md text-[10px] font-bold bg-surface-raised text-fg-subtle border border-border font-mono">
                                       {mGroup.ramList.map(r => r.toUpperCase().includes('GB') ? r : `${r} GB`).join('/')}
                                     </span>
                                   )}
@@ -1708,32 +1781,34 @@ export const InventoryPage: React.FC = () => {
                                   {mGroup.storageList.map((sg) => (
                                     <span
                                       key={sg.storage}
-                                      className="text-[10px] font-semibold px-1.5 py-0.2 rounded bg-surface-raised text-fg-subtle border border-border"
+                                      className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-surface-raised text-fg-muted border border-border font-mono"
                                     >
-                                      {sg.storage}: <strong className="text-fg">{sg.count}</strong>
+                                      {sg.storage}{mGroup.storageList.length > 1 || sg.count > 1 ? `: ${sg.count}` : ''}
                                     </span>
                                   ))}
                                 </div>
                               </div>
 
-                              <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+                              <div className="flex items-center gap-2 shrink-0">
                                 <div className="text-right">
-                                  <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono bg-accent/15 text-accent border border-accent/25">
+                                  <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-bold font-mono bg-accent/10 text-accent border border-accent/20">
                                     {mGroup.count} шт.
                                   </span>
                                   {isAdmin && (
-                                    <span className="block text-[10px] text-fg-subtle font-mono leading-none mt-0.5">
+                                    <span className="block text-[10px] text-fg-subtle font-mono leading-none mt-0.5 font-medium">
                                       {formatUsd(mGroup.valueUsd)}
                                     </span>
                                   )}
                                 </div>
-                                <ChevronDown className={`w-3.5 h-3.5 text-fg-subtle transition-transform duration-200 ${isModelExpanded ? 'rotate-180' : ''}`} />
+                                <div className={`p-1 rounded-md text-fg-subtle transition-transform duration-200 ${isModelExpanded ? 'rotate-180 text-accent' : ''}`}>
+                                  <ChevronDown className="w-3.5 h-3.5" />
+                                </div>
                               </div>
                             </button>
 
                             {/* Specific Devices List for this Model */}
                             {isModelExpanded && (
-                              <div className="mt-0.5 mb-1.5 rounded-lg bg-surface border border-border/70 divide-y divide-border/60 overflow-hidden">
+                              <div className="space-y-1.5 pl-2 sm:pl-3 my-1">
                                 {mGroup.devices.map((dev) => {
                                   const store = stores.find(s => s.id === dev.locationId);
                                   const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
@@ -1772,51 +1847,53 @@ export const InventoryPage: React.FC = () => {
                 <div key={group.key}>
                   <button
                     onClick={() => setExpandedGroups(prev => ({ ...prev, [group.key]: !prev[group.key] }))}
-                    className="w-full px-3 sm:px-4 py-2 sm:py-2.5 flex items-center justify-between gap-2.5 active:bg-surface-raised transition-colors hover:bg-surface-raised/40 cursor-pointer"
+                    className="w-full px-3 sm:px-4 py-2.5 sm:py-3 flex items-center justify-between gap-2.5 active:bg-surface-raised transition-colors hover:bg-surface-raised/40 cursor-pointer"
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
-                      <Smartphone className="w-3.5 h-3.5 text-accent shrink-0" />
+                    <div className="flex items-center gap-2.5 min-w-0 flex-1">
+                      <div className="w-7 h-7 rounded-lg bg-accent/10 border border-accent/20 flex items-center justify-center shrink-0 text-accent">
+                        <Smartphone className="w-4 h-4" />
+                      </div>
                       <div className="min-w-0 text-left flex items-center gap-1.5 flex-wrap">
-                        <p className="text-xs sm:text-sm font-bold text-fg truncate">{group.brand} {group.model}</p>
+                        <p className="text-xs sm:text-sm font-extrabold text-fg truncate">{group.brand} {group.model}</p>
                         {group.storageGroups.map((sg) => (
                           <span
                             key={sg.key}
-                            className="text-[10px] font-medium px-1.5 py-0.2 rounded bg-surface-raised text-fg-subtle border border-border whitespace-nowrap"
+                            className="text-[10px] font-bold px-1.5 py-0.5 rounded-md bg-surface-raised text-fg-muted border border-border whitespace-nowrap font-mono"
                           >
-                            {sg.storage}: <strong className="text-fg">{sg.count}</strong>
+                            {sg.storage}{group.storageGroups.length > 1 || sg.count > 1 ? `: ${sg.count}` : ''}
                           </span>
                         ))}
                       </div>
                     </div>
                     <div className="flex items-center gap-2 shrink-0">
-                      <span className="inline-block px-1.5 py-0.5 rounded text-[11px] font-bold font-mono bg-accent/15 text-accent border border-accent/25">
+                      <span className="inline-block px-2 py-0.5 rounded-lg text-xs font-bold font-mono bg-accent/10 text-accent border border-accent/20">
                         {group.count} шт.
                       </span>
-                      <ChevronDown className={`w-3.5 h-3.5 text-fg-subtle transition-transform ${isExpanded ? 'rotate-180' : ''}`} />
+                      <div className={`p-1 rounded-md text-fg-subtle transition-transform duration-200 ${isExpanded ? 'rotate-180 text-accent' : ''}`}>
+                        <ChevronDown className="w-3.5 h-3.5" />
+                      </div>
                     </div>
                   </button>
 
                   {isExpanded && (
-                    <div className="bg-surface/60 border-t border-border divide-y divide-border pl-2 sm:pl-4 pr-1 sm:pr-2 py-1">
-                      <div className="rounded-lg bg-surface border border-border/70 divide-y divide-border/60 overflow-hidden">
-                        {allDevices.map((dev) => {
-                          const store = stores.find(s => s.id === dev.locationId);
-                          const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
-                          const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
-                          return (
-                            <DeviceRow
-                              key={dev.id}
-                              device={dev}
-                              isAdmin={isAdmin}
-                              storeName={selectedLocationId === 'ALL' ? storeName : undefined}
-                              isMainWarehouse={isWh}
-                              rate={rate}
-                              hideModelName
-                              onClick={() => setSelectedDevice(dev)}
-                            />
-                          );
-                        })}
-                      </div>
+                    <div className="bg-surface/30 border-t border-border p-2 sm:p-3 space-y-1.5">
+                      {allDevices.map((dev) => {
+                        const store = stores.find(s => s.id === dev.locationId);
+                        const isWh = store?.isMainWarehouse || dev.status === 'MAIN_WAREHOUSE';
+                        const storeName = isWh ? 'Центральный склад' : dev.locationName || store?.name || 'Магазин';
+                        return (
+                          <DeviceRow
+                            key={dev.id}
+                            device={dev}
+                            isAdmin={isAdmin}
+                            storeName={selectedLocationId === 'ALL' ? storeName : undefined}
+                            isMainWarehouse={isWh}
+                            rate={rate}
+                            hideModelName
+                            onClick={() => setSelectedDevice(dev)}
+                          />
+                        );
+                      })}
                     </div>
                   )}
                 </div>
@@ -1827,7 +1904,7 @@ export const InventoryPage: React.FC = () => {
           /* FLAT LIST: a table from tablet width up, rows on phones. Only one of them is rendered,
              and only the rows near the viewport (thousands of units stay fast on weak Android). */
           isMobileLayout ? (
-            <div ref={flatRows.listRef as React.RefObject<HTMLDivElement | null>} className="divide-y divide-border">
+            <div ref={flatRows.listRef as React.RefObject<HTMLDivElement | null>} className="p-2 sm:p-3 space-y-1.5">
               {flatRows.padTop > 0 && <div aria-hidden="true" style={{ height: flatRows.padTop }} />}
               {filteredDevices.slice(flatRows.from, flatRows.to).map((dev, i) => {
                 const index = flatRows.from + i;
