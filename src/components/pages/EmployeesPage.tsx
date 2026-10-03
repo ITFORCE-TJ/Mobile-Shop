@@ -11,6 +11,7 @@ import {
   Plus,
   Shield,
   Store,
+  Building,
   Edit2,
   Trash2,
   CheckCircle2,
