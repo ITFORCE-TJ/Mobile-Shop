@@ -598,28 +598,20 @@ export const EmployeesPage: React.FC = () => {
         </div>
 
         {/* Line 2: Details grid */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl bg-surface-raised/60 border border-border/50 text-[11px]">
-          <div className="min-w-0">
-            <span className="text-[10px] text-fg-subtle block">Логин</span>
-            <span className="font-mono font-semibold text-fg truncate block">{u.login}</span>
-          </div>
+        {u.role === 'SELLER' ? (
+          <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 p-2 rounded-xl bg-surface-raised/60 border border-border/50 text-[11px]">
+            <div className="min-w-0">
+              <span className="text-[10px] text-fg-subtle block">Логин</span>
+              <span className="font-mono font-semibold text-fg truncate block">{u.login}</span>
+            </div>
 
-          <div className="min-w-0">
-            <span className="text-[10px] text-fg-subtle block">
-              {u.role === 'SELLER' ? 'Оклад / Комиссия' : 'Авансы / Вычеты'}
-            </span>
-            {u.role === 'SELLER' ? (
+            <div className="min-w-0">
+              <span className="text-[10px] text-fg-subtle block">Оклад / Комиссия</span>
               <span className="font-mono font-semibold text-accent truncate block">
                 {baseSal > 0 ? `${baseSal.toLocaleString()} TJS` : 'Без оклада'} {commPct > 0 ? `(+${commPct}%)` : ''}
               </span>
-            ) : (
-              <span className={`font-mono font-bold block ${totalAdvances > 0 ? 'text-warning' : 'text-fg-subtle'}`}>
-                {totalAdvances.toLocaleString()} TJS
-              </span>
-            )}
-          </div>
+            </div>
 
-          {u.role === 'SELLER' ? (
             <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:block border-t sm:border-t-0 border-border/40 pt-1 sm:pt-0 min-w-0">
               <span className="text-[10px] text-fg-subtle block">Продажи (Авансы)</span>
               <div className="flex items-center gap-1 font-mono text-fg font-semibold truncate">
@@ -631,61 +623,70 @@ export const EmployeesPage: React.FC = () => {
                 </span>
               </div>
             </div>
-          ) : (
-            <div className="col-span-2 sm:col-span-1 flex items-center justify-between sm:block border-t sm:border-t-0 border-border/40 pt-1 sm:pt-0 min-w-0">
+          </div>
+        ) : (
+          <div className="grid grid-cols-2 gap-1.5 p-2 rounded-xl bg-surface-raised/60 border border-border/50 text-[11px]">
+            <div className="min-w-0">
+              <span className="text-[10px] text-fg-subtle block">Логин</span>
+              <span className="font-mono font-semibold text-fg truncate block">{u.login}</span>
+            </div>
+
+            <div className="min-w-0">
               <span className="text-[10px] text-fg-subtle block">Привязка филиала</span>
               <span className={`text-[11px] font-medium truncate block ${u.storeId ? 'text-accent' : 'text-fg-muted'}`}>
                 {resolvedStoreName}
               </span>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
-        {/* Line 3: Action Buttons */}
-        <div className="grid grid-cols-3 gap-1.5 pt-0.5">
-          <button
-            type="button"
-            onClick={() => {
-              setAdvanceIssueUser(u);
-              setAdvanceAmountInput('');
-              setAdvanceNoteInput('');
-            }}
-            className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-          >
-            <Plus className="w-3 h-3 text-fg-subtle" />
-            <span>Аванс</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
-              const thisMonth = selectedPayrollMonth;
-              const empSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
-              const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
-              const baseSal = u.baseSalaryTjs || 0;
-              const commPct = u.salesCommissionPercent || 0;
-              const commAmount = moneyNumber(decimal(salesRevTjs).mul(commPct).div(100));
-              const autoGross = baseSal + commAmount;
+        {/* Line 3: Action Buttons (Only for sellers) */}
+        {u.role === 'SELLER' && (
+          <div className="grid grid-cols-3 gap-1.5 pt-0.5">
+            <button
+              type="button"
+              onClick={() => {
+                setAdvanceIssueUser(u);
+                setAdvanceAmountInput('');
+                setAdvanceNoteInput('');
+              }}
+              className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            >
+              <Plus className="w-3 h-3 text-fg-subtle" />
+              <span>Аванс</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                const thisMonth = selectedPayrollMonth;
+                const empSales = sales.filter(s => s.sellerId === u.id && s.status !== 'REFUNDED' && getBusinessDateKey(new Date(s.date)).startsWith(thisMonth));
+                const salesRevTjs = empSales.reduce((sum, s) => sum + s.totalTjs, 0);
+                const baseSal = u.baseSalaryTjs || 0;
+                const commPct = u.salesCommissionPercent || 0;
+                const commAmount = moneyNumber(decimal(salesRevTjs).mul(commPct).div(100));
+                const autoGross = baseSal + commAmount;
 
-              setSalaryPayoutUser(u);
-              setGrossSalaryInput(autoGross > 0 ? autoGross.toString() : '');
-              setPayoutNote('');
-              setPayoutMonth(selectedPayrollMonth);
-            }}
-            className="h-7.5 px-2 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/25 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-          >
-            <DollarSign className="w-3 h-3" />
-            <span>Зарплата</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setFinancialHistoryUser(u)}
-            className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
-            title="Финансовая история выплат и авансов"
-          >
-            <Receipt className="w-3 h-3 text-fg-subtle" />
-            <span>История</span>
-          </button>
-        </div>
+                setSalaryPayoutUser(u);
+                setGrossSalaryInput(autoGross > 0 ? autoGross.toString() : '');
+                setPayoutNote('');
+                setPayoutMonth(selectedPayrollMonth);
+              }}
+              className="h-7.5 px-2 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent border border-accent/25 text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+            >
+              <DollarSign className="w-3 h-3" />
+              <span>Зарплата</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setFinancialHistoryUser(u)}
+              className="h-7.5 px-2 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center justify-center gap-1 transition-colors cursor-pointer"
+              title="Финансовая история выплат и авансов"
+            >
+              <Receipt className="w-3 h-3 text-fg-subtle" />
+              <span>История</span>
+            </button>
+          </div>
+        )}
       </div>
     );
   };
