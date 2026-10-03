@@ -311,7 +311,7 @@ export const SalesHistoryPage: React.FC = () => {
           onChange={setSearchQuery}
           onScan={handleScanFinder}
           onSubmit={(value) => { void openSaleByCode(value, 'enter'); }}
-          placeholder="Номер чека / IMEI / модель / продавец..."
+          placeholder="Чек, IMEI, модель, продавец..."
         />
 
         <div className="flex items-center justify-between gap-1.5 min-w-0 flex-wrap sm:flex-nowrap">
@@ -361,7 +361,6 @@ export const SalesHistoryPage: React.FC = () => {
                   setPeriodFilter('CUSTOM');
                 }
               }}
-              onResetMonth={resetToCurrentMonth}
               className="shrink-0"
             />
 
@@ -373,11 +372,11 @@ export const SalesHistoryPage: React.FC = () => {
                   resetToCurrentMonth();
                   if (!isStoreScoped) setSelectedStoreFilter('ALL');
                 }}
-                className="h-8 px-2 text-fg-subtle hover:text-danger hover:bg-danger/10 border border-transparent hover:border-danger/20 rounded-lg text-xs font-medium transition-colors cursor-pointer flex items-center gap-1"
-                title="Сбросить фильтры"
+                className="h-8 px-2.5 text-fg-subtle hover:text-danger hover:bg-danger/10 border border-border/70 hover:border-danger/25 rounded-xl text-xs font-medium transition-colors cursor-pointer flex items-center gap-1 shadow-2xs"
+                title="Сбросить все фильтры"
               >
-                <X className="w-3 h-3" />
-                <span className="text-[11px]">Сброс</span>
+                <X className="w-3.5 h-3.5 text-danger/80" />
+                <span className="text-[11px] font-semibold">Сброс</span>
               </button>
             )}
           </div>
@@ -493,6 +492,15 @@ export const SalesHistoryPage: React.FC = () => {
                   onClick={resetToCurrentMonth}
                 >
                   Показать продажи за месяц
+                </Button>
+              ) : (periodFilter === 'CUSTOM' || selectedMonth !== thisMonthStr) ? (
+                <Button
+                  variant="secondary"
+                  size="md"
+                  className="!h-9 !px-3 text-xs"
+                  onClick={resetToCurrentMonth}
+                >
+                  Сбросить фильтр дат
                 </Button>
               ) : undefined
             }

@@ -262,7 +262,7 @@ export const DateRangePicker: React.FC<DateRangePickerProps> = ({
       if (y1 === y2 && m1 === m2) {
         return `${d1} — ${d2} ${MONTH_NAMES_SHORT_RU[m1 - 1]}`;
       }
-      return `${d1}.${String(m1).padStart(2, '0')} — ${d2}.${String(m2).padStart(2, '0')}`;
+      return `${String(d1).padStart(2, '0')}.${String(m1).padStart(2, '0')} — ${String(d2).padStart(2, '0')}.${String(m2).padStart(2, '0')}`;
     }
 
     if (placeholder) return placeholder;

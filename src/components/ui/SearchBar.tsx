@@ -30,7 +30,7 @@ export const SearchBar: React.FC<SearchBarProps> = ({ value, onChange, onScan, o
         aria-label={placeholder}
         autoComplete="off"
         placeholder={placeholder}
-        className="w-full h-11 rounded-lg bg-surface border border-border pl-9 pr-9 text-sm text-fg-muted placeholder:text-fg-subtle focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
+        className="w-full h-11 rounded-lg bg-surface border border-border pl-9 pr-9 text-sm text-fg placeholder:text-fg-subtle placeholder:truncate focus:outline-none focus:border-accent focus:ring-1 focus:ring-accent [&::-webkit-search-cancel-button]:hidden"
       />
       {value && (
         <button

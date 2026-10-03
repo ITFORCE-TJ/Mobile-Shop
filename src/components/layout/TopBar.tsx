@@ -123,15 +123,15 @@ export const TopBar: React.FC = () => {
                 <ArrowRight className="w-3 h-3 opacity-60" />
               </button>
             ) : (
-              <div className="flex items-center gap-1.5">
+              <div className="flex items-center gap-1 sm:gap-1.5">
                 <button
                   type="button"
                   onClick={() => setStoreSwitchModalOpen(true)}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-warning/15 hover:bg-warning/25 text-warning border border-warning/30 text-xs font-bold transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
                   title="Сменить магазин"
                 >
-                  <Store className="w-3.5 h-3.5" />
-                  <span className="max-w-30 sm:max-w-none truncate">{formatStoreName(activeRetailStore?.name) || 'Магазин'}</span>
+                  <Store className="w-3.5 h-3.5 shrink-0" />
+                  <span className="max-w-[75px] sm:max-w-none truncate">{formatStoreName(activeRetailStore?.name) || 'Магазин'}</span>
                 </button>
                 <button
                   type="button"
@@ -145,12 +145,12 @@ export const TopBar: React.FC = () => {
                     setActivePage('FINANCE');
                     navigate('/finance');
                   }}
-                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95 cursor-pointer"
+                  className="inline-flex items-center gap-1 px-2 sm:px-2.5 py-1.5 rounded-xl bg-surface-raised hover:bg-accent hover:text-accent-fg border border-border text-xs font-semibold text-fg transition-all shadow-2xs active:scale-95 cursor-pointer shrink-0"
                   title="Вернуться в Центральную кассу"
                 >
-                  <Landmark className="w-3.5 h-3.5 text-accent" />
-                  <span className="hidden md:inline">В Центральную кассу</span>
-                  <span className="md:hidden">В центр</span>
+                  <Landmark className="w-3.5 h-3.5 text-accent shrink-0" />
+                  <span className="hidden sm:inline">В Центральную кассу</span>
+                  <span className="sm:hidden">В центр</span>
                 </button>
               </div>
             )}
