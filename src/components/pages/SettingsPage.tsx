@@ -525,31 +525,51 @@ export const SettingsPage: React.FC = () => {
                         setCheckFeedback(null);
                         const updateFound = await pwa.checkForUpdates(true);
                         setCheckUpdateLoading(false);
-                        setCheckFeedback(updateFound ? 'Найдена новая версия!' : 'Установлена последняя версия');
-                        setTimeout(() => setCheckFeedback(null), 4000);
+                        setCheckFeedback(updateFound ? 'Доступна новая версия!' : 'Установлена последняя версия');
+                        setTimeout(() => setCheckFeedback(null), 5000);
                       }}
                       disabled={checkUpdateLoading || pwa.isUpdating}
-                      className="px-2.5 py-1 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
+                      className="px-2.5 py-1.5 rounded-lg bg-surface-raised hover:bg-surface border border-border text-fg text-xs font-semibold flex items-center gap-1.5 transition-all disabled:opacity-50 cursor-pointer"
                     >
                       <RefreshCw className={`w-3 h-3 ${checkUpdateLoading ? 'animate-spin text-accent' : ''}`} />
-                      <span>{checkUpdateLoading ? 'Проверка…' : 'Обновления'}</span>
+                      <span>{checkUpdateLoading ? 'Проверка…' : 'Проверить обновления'}</span>
                     </button>
-
-                    {pwa.hasUpdate && (
-                      <button
-                        type="button"
-                        onClick={() => pwa.applyUpdate()}
-                        disabled={pwa.isUpdating}
-                        className="px-2.5 py-1 rounded-lg bg-accent hover:bg-accent-strong text-accent-fg text-xs font-bold flex items-center gap-1 shadow-2xs transition-all cursor-pointer animate-pulse"
-                      >
-                        <Download className="w-3 h-3" />
-                        <span>{pwa.isUpdating ? 'Обновление…' : 'Обновить'}</span>
-                      </button>
-                    )}
                   </div>
                 </div>
 
-                {checkFeedback && (
+                {pwa.hasUpdate && (
+                  <div className="p-3 rounded-xl bg-accent/10 border border-accent/30 flex items-center justify-between gap-2">
+                    <div className="flex items-center gap-2 min-w-0">
+                      <RefreshCw className={`w-4 h-4 text-accent shrink-0 ${pwa.isUpdating ? 'animate-spin' : ''}`} />
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-fg">Доступно обновление ПО</p>
+                        <p className="text-[10px] text-fg-subtle truncate">
+                          Новая сборка: {pwa.latestCommit ? pwa.latestCommit.slice(0, 7) : 'свежая версия'}
+                        </p>
+                      </div>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => pwa.applyUpdate()}
+                      disabled={pwa.isUpdating}
+                      className="px-3 py-1.5 rounded-lg bg-accent hover:bg-accent-strong active:scale-95 text-accent-fg text-xs font-bold flex items-center gap-1.5 shadow-xs transition-all disabled:opacity-50 cursor-pointer shrink-0"
+                    >
+                      {pwa.isUpdating ? (
+                        <>
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          <span>Обновление…</span>
+                        </>
+                      ) : (
+                        <>
+                          <Download className="w-3.5 h-3.5" />
+                          <span>Обновить сейчас</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {checkFeedback && !pwa.hasUpdate && (
                   <div className="p-2 rounded-xl bg-surface-raised border border-accent/30 text-accent text-xs flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 shrink-0" />
                     <span>{checkFeedback}</span>
@@ -577,7 +597,7 @@ export const SettingsPage: React.FC = () => {
                   <div className="flex items-center justify-between text-xs px-3 py-2 rounded-xl bg-surface-raised border border-border/60">
                     <span className="text-[11px] text-fg-subtle">Версия ПО:</span>
                     <span className="text-[11px] font-bold font-mono text-accent">
-                      Mobile Shop v1.3.0
+                      Mobile Shop v1.3.0 {pwa.currentCommit && pwa.currentCommit !== 'dev' ? `(${pwa.currentCommit.slice(0, 7)})` : ''}
                     </span>
                   </div>
                 </div>

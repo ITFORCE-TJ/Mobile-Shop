@@ -205,12 +205,16 @@ class PWAUpdateService {
       this.trySafeAutoUpdate();
     });
 
-    // E. Periodic Heartbeat (~60 seconds) while active
+    // E. Periodic Heartbeat (~30 seconds) while active
     this.checkIntervalId = setInterval(() => {
       if (typeof document !== 'undefined' && document.visibilityState === 'visible' && navigator.onLine) {
-        this.checkForUpdates();
+        if (this.state.hasUpdate && !this.state.isUpdating) {
+          this.trySafeAutoUpdate();
+        } else {
+          this.checkForUpdates();
+        }
       }
-    }, 60_000);
+    }, 30_000);
   }
 
   /**
@@ -331,18 +335,31 @@ class PWAUpdateService {
     }
   }
 
-  /**
-   * Applies the update: signals SKIP_WAITING to waiting worker, or performs safe reload.
-   */
   public applyUpdate() {
     if (this.state.isUpdating) return;
     this.state.isUpdating = true;
     this.notify();
 
+    // Fallback: If Service Worker does not trigger controllerchange/reload within 1500ms, force reload
+    const fallbackTimer = setTimeout(() => {
+      this.performSafeReload();
+    }, 1500);
+
     if (this.state.waitingWorker) {
+      try {
+        this.state.waitingWorker.addEventListener?.('statechange', (e: any) => {
+          if (e.target?.state === 'activated') {
+            clearTimeout(fallbackTimer);
+            this.performSafeReload();
+          }
+        });
+      } catch {
+        // Ignore if addEventListener not supported on mock/worker
+      }
       // Post message to waiting service worker to activate
       this.state.waitingWorker.postMessage({ type: 'SKIP_WAITING' });
     } else {
+      clearTimeout(fallbackTimer);
       // Direct safe reload
       this.performSafeReload();
     }

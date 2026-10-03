@@ -48,6 +48,16 @@ export function getUpdateSafetyAssessment(): UpdateSafetyAssessment {
     return { safe: false, reason: 'SSR environment' };
   }
 
+  // 0. If user is on the login screen or session is not authenticated, it is always safe to update
+  if (typeof window !== 'undefined') {
+    const isLogin = window.location?.pathname === '/login' ||
+                    Boolean(window.location?.hash?.includes('login')) ||
+                    (typeof document !== 'undefined' && Boolean(document.querySelector?.('[data-login-page="true"]')));
+    if (isLogin) {
+      return { safe: true };
+    }
+  }
+
   // 1. Check in-flight network mutations (financial transactions, receipts, sales)
   if (hasActiveMutations()) {
     return { safe: false, reason: 'Выполняется финансовая операция или отправка данных' };
